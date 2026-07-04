@@ -28,7 +28,7 @@ Date: 2026-07-04
 | Unrecognized documents | Exists in Intake with `status = unrecognized` |
 | Client portal upload | Backend path exists; local fallback now attaches files to the local case |
 | Gmail/email ingestion | Webhook exists at `/api/webhook/email`; Gmail IMAP adapter exists at `/api/gmail/poll` |
-| OCR/Mistral | Backend has `MISTRAL_API_KEY`, `/api/cases/{case_id}/parse`, document classification, field parsers, and `/api/ocr/evaluate` |
+| OCR | Backend tries free local OCR first (`pypdf` for text PDFs, Tesseract for scans/images), then can use Mistral only as fallback |
 | Delete files | Implemented for intake, case docs, client portal list, and invoice attachments |
 | Invoice email | Endpoint exists at `/api/invoices/{invoice_id}/send`; sends via SMTP when configured and returns `queued_demo` during local/test mode |
 | ML/evaluation | OCR extraction scores are stored in `ml_evaluations` and available through `/api/evaluations` |
@@ -76,6 +76,28 @@ The webhook payload shape already expected by backend:
 ## OCR evaluation
 
 The parser extracts document type, full name, passport number, date of birth, expiry date, nationality, email, phone, address, employer, invoice number, invoice total, and IBAN where present.
+
+OCR order:
+
+1. Text PDF extraction through `pypdf`. This is free and best for digitally generated PDFs.
+2. Scan/image OCR through local Tesseract. This is free, runs on Render when `Aptfile` packages are installed, and supports English/German by default.
+3. Mistral OCR only if `MISTRAL_API_KEY` exists and local OCR confidence is too low.
+
+Render/system packages:
+
+```text
+tesseract-ocr
+tesseract-ocr-eng
+tesseract-ocr-deu
+```
+
+OCR environment variables:
+
+```text
+OCR_PROVIDER=auto
+OCR_LANG=eng+deu
+MISTRAL_API_KEY=optional fallback only
+```
 
 Every OCR/evaluation run stores:
 

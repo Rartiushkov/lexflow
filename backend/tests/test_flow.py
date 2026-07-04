@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import main  # noqa: E402
+from local_ocr import run_local_ocr  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 
@@ -229,3 +230,25 @@ def test_gmail_attachment_extractor_builds_webhook_payload():
     assert len(attachments) == 1
     assert attachments[0].filename == "passport.pdf"
     assert base64.b64decode(attachments[0].content_base64) == b"pdf bytes"
+
+
+def test_free_local_ocr_extracts_text_from_pdf():
+    from io import BytesIO
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf.drawString(72, 760, "Passport")
+    pdf.drawString(72, 740, "Name: Anna Schmidt")
+    pdf.drawString(72, 720, "Passport number: C12345678")
+    pdf.drawString(72, 700, "Date of birth: 01.02.1990")
+    pdf.save()
+    content = buffer.getvalue()
+
+    ocr = run_local_ocr(content, "passport.pdf")
+
+    assert ocr["provider"] == "pypdf"
+    assert "Anna Schmidt" in ocr["raw_text"]
+    assert ocr["confidence"] >= 0.65

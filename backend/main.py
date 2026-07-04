@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from local_ocr import has_tesseract, run_local_ocr
 from ocr_parsers import evaluate_extraction, parse_document_text
 
 app = FastAPI(title="LexFlow Backend", version="0.2.0")
@@ -34,6 +35,8 @@ R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "lexflow-documents")
 R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "")
 MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "")
+OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "auto")
+OCR_LANG = os.environ.get("OCR_LANG", "eng+deu")
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", "")
@@ -48,6 +51,7 @@ GMAIL_POLL_LIMIT = int(os.environ.get("GMAIL_POLL_LIMIT", "10") or "10")
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
 USE_MISTRAL = bool(MISTRAL_API_KEY)
+USE_LOCAL_OCR = OCR_PROVIDER in {"auto", "local"}
 USE_SMTP = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 USE_GMAIL = bool(GMAIL_EMAIL and GMAIL_APP_PASSWORD)
 
@@ -358,10 +362,18 @@ def send_email_message(to_email: str, subject: str, body: str) -> dict:
 
 # ─── OCR helpers ────────────────────────────────────────
 async def run_ocr(content: bytes, filename: str) -> dict:
+    local_result = {"raw_text": "", "provider": "disabled", "confidence": 0, "pages": []}
+    if USE_LOCAL_OCR:
+        local_result = run_local_ocr(content, filename, lang=OCR_LANG)
+        if local_result.get("confidence", 0) >= 0.65 or OCR_PROVIDER == "local":
+            return local_result
     if not USE_MISTRAL:
-        return {
-            "raw_text": "DEMO OCR TEXT\nName: Anna Schmidt\nPassport: D1234567\nDOB: 1990-01-01\nEmployer: Demo GmbH",
+        return local_result if local_result.get("raw_text") else {
+            "raw_text": "",
+            "provider": "none",
+            "confidence": 0,
             "pages": [],
+            "attempts": local_result.get("attempts", []),
         }
     try:
         encoded = base64.b64encode(content).decode("utf-8")
@@ -380,10 +392,13 @@ async def run_ocr(content: bytes, filename: str) -> dict:
                 },
             )
             r.raise_for_status()
-            return r.json()
+            result = r.json()
+            result["provider"] = "mistral"
+            result["local_attempt"] = local_result
+            return result
     except Exception as e:
         print(f"Mistral OCR failed: {e}")
-        return {"raw_text": "", "pages": [], "error": str(e)}
+        return local_result if local_result.get("raw_text") else {"raw_text": "", "provider": "none", "pages": [], "error": str(e)}
 
 
 async def store_extraction_evaluation(case_id: str, document_id: str, fields: dict) -> dict:
@@ -432,6 +447,9 @@ def health():
         "supabase": USE_SUPABASE,
         "r2": USE_R2,
         "mistral": USE_MISTRAL,
+        "local_ocr": USE_LOCAL_OCR,
+        "tesseract": has_tesseract(),
+        "ocr_provider": OCR_PROVIDER,
         "smtp": USE_SMTP,
         "gmail": USE_GMAIL,
     }
