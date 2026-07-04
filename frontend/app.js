@@ -71,6 +71,21 @@ function get(path) { return api('GET', path); }
 function post(path, body) { return api('POST', path, body); }
 function patch(path, body) { return api('PATCH', path, body); }
 
+async function upload(path, file) {
+  const url = `${API_BASE}${path}`;
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getToken() || ''}` },
+    body: form,
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
+  return data;
+}
+
 // ─── UI helpers ──────────────────────────────────────────
 function showToast(message, type = 'info') {
   let toast = document.getElementById('toast');

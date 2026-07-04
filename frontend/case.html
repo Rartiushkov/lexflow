@@ -69,6 +69,10 @@
             <span class="badge badge-blue" id="doc-count">0</span>
           </div>
           <div class="card-body">
+            <div style="margin-bottom:16px;">
+              <input type="file" id="file-input" multiple accept=".pdf,image/*" style="display:none;" />
+              <button class="btn btn-outline btn-sm" id="btn-upload">+ Upload document</button>
+            </div>
             <div id="doc-list">
               <p style="color:var(--muted);">No documents uploaded yet.</p>
             </div>
@@ -169,12 +173,26 @@
     document.addEventListener('DOMContentLoaded', () => {
       requireAuth();
       loadCase();
+      const input = document.getElementById('file-input');
+      document.getElementById('btn-upload')?.addEventListener('click', () => input.click());
+      input?.addEventListener('change', async () => {
+        for (const file of input.files) {
+          try { await upload(`/api/cases/${caseId}/upload`, file); showToast(`${file.name} uploaded`, 'success'); }
+          catch { showToast(`${file.name} upload failed`, 'error'); }
+        }
+        loadCase();
+      });
       document.getElementById('btn-invoice')?.addEventListener('click', async () => {
         try { await post(`/api/cases/${caseId}/invoice`, {}); showToast('Invoice generated', 'success'); loadCase(); }
         catch { showToast('Invoice generated (demo)', 'success'); }
       });
-      document.getElementById('btn-run-ai')?.addEventListener('click', () => showToast('AI parser queued', 'info'));
-      document.getElementById('btn-download')?.addEventListener('click', () => showToast('PDF download started', 'info'));
+      document.getElementById('btn-run-ai')?.addEventListener('click', async () => {
+        try { await post(`/api/cases/${caseId}/parse`, {}); showToast('AI parser done', 'success'); loadCase(); }
+        catch { showToast('AI parser failed', 'error'); }
+      });
+      document.getElementById('btn-download')?.addEventListener('click', () => {
+        window.open(`${API_BASE}/api/cases/${caseId}/form`, '_blank');
+      });
       document.getElementById('btn-advance')?.addEventListener('click', async () => {
         try { await post(`/api/cases/${caseId}/advance`, {}); showToast('Stage advanced', 'success'); loadCase(); }
         catch { showToast('Stage advanced (demo)', 'success'); }

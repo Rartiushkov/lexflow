@@ -81,15 +81,23 @@
       }
     }
 
-    function handleFiles(files) {
+    async function handleFiles(files) {
       const list = document.getElementById('uploaded-list');
       for (const file of files) {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:var(--radius-sm);margin-bottom:8px;';
-        row.innerHTML = `<span>${file.name}</span><span class="badge badge-blue">uploaded</span>`;
+        row.innerHTML = `<span>${file.name}</span><span class="badge badge-blue">uploading</span>`;
         list.appendChild(row);
+        try {
+          await upload(`/api/cases/${caseId}/upload`, file);
+          row.querySelector('.badge').textContent = 'uploaded';
+          row.querySelector('.badge').className = 'badge badge-green';
+        } catch (err) {
+          row.querySelector('.badge').textContent = 'failed';
+          row.querySelector('.badge').className = 'badge badge-red';
+        }
       }
-      showToast('Files uploaded', 'success');
+      showToast('Uploads complete', 'success');
     }
 
     document.addEventListener('DOMContentLoaded', () => {

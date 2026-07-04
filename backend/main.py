@@ -1,16 +1,36 @@
+import base64
+import io
+import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException, Request
+import httpx
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="LexFlow Backend", version="0.1.0")
+app = FastAPI(title="LexFlow Backend", version="0.2.0")
 
+# ─── Config ─────────────────────────────────────────────
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:8001")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "lexflow-documents")
+R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "")
+MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "")
+
+USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
+USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
+USE_MISTRAL = bool(MISTRAL_API_KEY)
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,7 +40,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── In-memory demo store ─────────────────────────────────
+# ─── Optional clients ───────────────────────────────────
+supabase_client = None
+if USE_SUPABASE:
+    try:
+        from supabase import create_client
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    except Exception as e:
+        print(f"Supabase init failed: {e}")
+
+r2_client = None
+if USE_R2:
+    try:
+        import boto3
+        r2_client = boto3.client(
+            "s3",
+            endpoint_url=R2_ENDPOINT,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            region_name="auto",
+        )
+    except Exception as e:
+        print(f"R2 init failed: {e}")
+
+# ─── In-memory fallback ─────────────────────────────────
 users = {
     "demo@lexflow.eu": {
         "id": "user_1",
@@ -29,20 +72,193 @@ users = {
         "password": "demo",
     }
 }
+memory_cases: dict[str, dict] = {}
+memory_invoices: dict[str, dict] = {}
 
-cases: dict[str, dict] = {}
-invoices: dict[str, dict] = {}
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
 
 # ─── Auth ───────────────────────────────────────────────
 class LoginRequest(BaseModel):
     email: str
     password: str
 
+
+async def verify_token(token: str) -> Optional[dict]:
+    if token.startswith("demo_token_"):
+        return {"id": "user_1", "email": "demo@lexflow.eu", "role": "lawyer"}
+    if not USE_SUPABASE:
+        return None
+    try:
+        res = supabase_client.auth.get_user(token)
+        return {"id": res.user.id, "email": res.user.email, "role": "lawyer"}
+    except Exception as e:
+        print(f"Token verify failed: {e}")
+        return None
+
+
+async def get_current_user(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing token")
+    token = authorization[len("Bearer "):]
+    user = await verify_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return user
+
+
+# ─── Database helpers ───────────────────────────────────
+async def db_create_case(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("cases").insert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase insert failed: {e}")
+    memory_cases[data["id"]] = data
+    return data
+
+
+async def db_get_cases() -> list:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("cases").select("*").order("created_at", desc=True).execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase select failed: {e}")
+    return sorted(memory_cases.values(), key=lambda c: c.get("created_at", ""), reverse=True)
+
+
+async def db_get_case(case_id: str) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("cases").select("*").eq("id", case_id).single().execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase get failed: {e}")
+    return memory_cases.get(case_id)
+
+
+async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("cases").update(patch).eq("id", case_id).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase update failed: {e}")
+    case = memory_cases.get(case_id)
+    if case:
+        case.update(patch)
+        case["updated_at"] = utc_now()
+    return case
+
+
+# ─── File storage helpers ───────────────────────────────
+async def upload_file(case_id: str, file: UploadFile, source: str = "portal") -> dict:
+    ext = Path(file.filename or "document.pdf").suffix
+    key = f"{case_id}/{uuid.uuid4().hex}{ext}"
+    content = await file.read()
+
+    if USE_R2:
+        try:
+            r2_client.put_object(Bucket=R2_BUCKET_NAME, Key=key, Body=content, ContentType=file.content_type or "application/octet-stream")
+            url = f"{R2_PUBLIC_URL}/{key}" if R2_PUBLIC_URL else f"{R2_ENDPOINT}/{R2_BUCKET_NAME}/{key}"
+            return {"key": key, "name": file.filename, "url": url, "source": source, "status": "uploaded"}
+        except Exception as e:
+            print(f"R2 upload failed: {e}")
+    return {"key": key, "name": file.filename, "url": "", "source": source, "status": "uploaded", "size": len(content)}
+
+
+# ─── OCR helpers ────────────────────────────────────────
+async def run_ocr(content: bytes, filename: str) -> dict:
+    if not USE_MISTRAL:
+        return {
+            "raw_text": "DEMO OCR TEXT\nName: Anna Schmidt\nPassport: D1234567\nDOB: 1990-01-01\nEmployer: Demo GmbH",
+            "pages": [],
+        }
+    try:
+        encoded = base64.b64encode(content).decode("utf-8")
+        mime = "application/pdf" if filename.lower().endswith(".pdf") else "image/jpeg"
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                "https://api.mistral.ai/v1/ocr",
+                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": "mistral-ocr-latest",
+                    "document": {
+                        "type": "document_base64",
+                        "document_base64": encoded,
+                        "document_name": filename,
+                    },
+                },
+            )
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        print(f"Mistral OCR failed: {e}")
+        return {"raw_text": "", "pages": [], "error": str(e)}
+
+
+def parse_fields(text: str) -> dict:
+    """Extract common fields from OCR text with simple regex."""
+    fields = {}
+    name_match = re.search(r"(?i)name[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)", text)
+    if name_match:
+        fields["full_name"] = name_match.group(1)
+    passport_match = re.search(r"(?i)passport[:\s]+([A-Z0-9]+)", text)
+    if passport_match:
+        fields["passport_number"] = passport_match.group(1)
+    dob_match = re.search(r"(?i)(?:dob|date of birth|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})", text)
+    if dob_match:
+        fields["date_of_birth"] = dob_match.group(1)
+    return fields
+
+
+# ─── PDF mapping helpers ────────────────────────────────
+def fill_pdf_form(fields: dict) -> io.BytesIO:
+    """Fill a simple PDF form. In production, use the official government PDF."""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, 800, "EU Immigration Application Form")
+    c.setFont("Helvetica", 12)
+    y = 750
+    for key, value in fields.items():
+        c.drawString(50, y, f"{key}: {value}")
+        y -= 25
+    c.save()
+    buf.seek(0)
+    return buf
+
+
+# ─── Endpoints ──────────────────────────────────────────
+@app.get("/api/health")
+def health():
+    return {
+        "status": "ok",
+        "service": "lexflow",
+        "version": "0.2.0",
+        "supabase": USE_SUPABASE,
+        "r2": USE_R2,
+        "mistral": USE_MISTRAL,
+    }
+
+
 @app.post("/api/auth/login")
-def login(req: LoginRequest):
+async def login(req: LoginRequest):
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.auth.sign_in_with_password({"email": req.email, "password": req.password})
+            return {
+                "token": res.session.access_token,
+                "user": {"id": res.user.id, "email": res.user.email, "name": res.user.email},
+            }
+        except Exception as e:
+            print(f"Supabase login failed: {e}")
     user = users.get(req.email)
     if not user or user["password"] != req.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -51,16 +267,13 @@ def login(req: LoginRequest):
         "user": {"id": user["id"], "email": user["email"], "name": user["name"]},
     }
 
-# ─── Helpers ────────────────────────────────────────────
-def get_current_user(authorization: str = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing token")
-    token = authorization[len("Bearer "):]
-    if not token.startswith("demo_token_"):
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return token.replace("demo_token_", "")
 
-# ─── Cases ──────────────────────────────────────────────
+@app.get("/api/me")
+async def me(user: dict = Depends(get_current_user)):
+    return user
+
+
+# ─── Cases ─────────────────────────────────────────────
 class CreateCase(BaseModel):
     client_name: str
     client_email: str
@@ -68,19 +281,18 @@ class CreateCase(BaseModel):
     destination: str
     notes: Optional[str] = ""
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "service": "lexflow", "version": "0.1.0"}
 
 @app.get("/api/cases")
-def list_cases():
-    return sorted(cases.values(), key=lambda c: c["created_at"], reverse=True)
+async def list_cases(user: dict = Depends(get_current_user)):
+    return await db_get_cases()
+
 
 @app.post("/api/cases")
-def create_case(req: CreateCase):
+async def create_case(req: CreateCase, user: dict = Depends(get_current_user)):
     case_id = str(uuid.uuid4())[:8]
     case = {
         "id": case_id,
+        "lawyer_id": user["id"],
         "client_name": req.client_name,
         "client_email": req.client_email,
         "case_type": req.case_type,
@@ -92,21 +304,24 @@ def create_case(req: CreateCase):
         "updated_at": utc_now(),
         "docs": [],
         "invoice": None,
+        "extracted": {},
         "portal_url": f"{FRONTEND_URL}/client-upload.html?id={case_id}",
     }
-    cases[case_id] = case
+    await db_create_case(case)
     return case
 
+
 @app.get("/api/cases/{case_id}")
-def get_case(case_id: str):
-    case = cases.get(case_id)
+async def get_case(case_id: str, user: dict = Depends(get_current_user)):
+    case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     return case
 
+
 @app.get("/api/cases/{case_id}/public")
-def get_case_public(case_id: str):
-    case = cases.get(case_id)
+async def get_case_public(case_id: str):
+    case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     return {
@@ -115,26 +330,40 @@ def get_case_public(case_id: str):
         "case_type": case["case_type"],
         "destination": case["destination"],
         "invoice": case.get("invoice"),
-        "invoice_paid": case["invoice_paid"],
+        "invoice_paid": case.get("invoice_paid", False),
     }
 
-# ─── Invoices ───────────────────────────────────────────
-class CreateInvoice(BaseModel):
-    amount: float = 1000.0
-    vat_rate: float = 0.19
 
-@app.post("/api/cases/{case_id}/invoice")
-def create_invoice(case_id: str):
-    case = cases.get(case_id)
+async def get_current_user_optional(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    return await verify_token(authorization[len("Bearer "):])
+
+
+# ─── File upload ────────────────────────────────────────
+@app.post("/api/cases/{case_id}/upload")
+async def upload_document(case_id: str, file: UploadFile = File(...), user: Optional[dict] = Depends(get_current_user_optional)):
+    case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    inv_id = str(uuid.uuid4())[:8]
+    upload = await upload_file(case_id, file, source="lawyer" if user else "client")
+    docs = case.get("docs", []) + [upload]
+    await db_update_case(case_id, {"docs": docs, "updated_at": utc_now()})
+    return upload
+
+
+# ─── Invoices ───────────────────────────────────────────
+@app.post("/api/cases/{case_id}/invoice")
+async def create_invoice(case_id: str, user: dict = Depends(get_current_user)):
+    case = await db_get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
     amount = 1000.0
     vat = round(amount * 0.19, 2)
     total = round(amount + vat, 2)
-    invoice_number = f"INV-{datetime.now(timezone.utc).year}-{len(invoices)+1:03d}"
+    invoice_number = f"INV-{datetime.now(timezone.utc).year}-{len(memory_invoices)+1:03d}"
     invoice = {
-        "id": inv_id,
+        "id": str(uuid.uuid4())[:8],
         "number": invoice_number,
         "amount": total,
         "net": amount,
@@ -143,96 +372,125 @@ def create_invoice(case_id: str):
         "currency": "EUR",
         "created_at": utc_now(),
     }
-    invoices[inv_id] = invoice
-    case["invoice"] = invoice
-    case["updated_at"] = utc_now()
+    memory_invoices[invoice["id"]] = invoice
+    await db_update_case(case_id, {"invoice": invoice, "updated_at": utc_now()})
     return invoice
 
+
 @app.post("/api/cases/{case_id}/pay")
-def pay_invoice(case_id: str):
-    case = cases.get(case_id)
+async def pay_invoice(case_id: str):
+    case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     if not case.get("invoice"):
         raise HTTPException(status_code=400, detail="No invoice")
-    case["invoice_paid"] = True
-    case["stage"] = "processing"
-    case["updated_at"] = utc_now()
+    await db_update_case(case_id, {"invoice_paid": True, "stage": "processing", "updated_at": utc_now()})
     return {"status": "paid"}
 
+
 @app.post("/api/cases/{case_id}/advance")
-def advance_case(case_id: str):
-    case = cases.get(case_id)
+async def advance_case(case_id: str, user: dict = Depends(get_current_user)):
+    case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     stages = ["documents", "payment", "processing", "review", "submitted"]
-    idx = stages.index(case["stage"])
+    idx = stages.index(case.get("stage", "documents"))
     if idx < len(stages) - 1:
-        case["stage"] = stages[idx + 1]
-    case["updated_at"] = utc_now()
-    return case
+        await db_update_case(case_id, {"stage": stages[idx + 1], "updated_at": utc_now()})
+    return await db_get_case(case_id)
 
-# ─── Document upload via email ─────────────────────────
+
+# ─── Email webhook ─────────────────────────────────────
+class EmailAttachment(BaseModel):
+    filename: str
+    content_base64: str
+    content_type: Optional[str] = "application/pdf"
+
+
+class EmailWebhook(BaseModel):
+    from_: str = Field(..., alias="from")
+    subject: str
+    attachments: list[EmailAttachment]
+
+
 @app.post("/api/webhook/email")
-def email_webhook(request: Request):
-    """Receive forwarded email with attachments and match to a case."""
-    data = request.json()
-    if not data:
-        raise HTTPException(status_code=400, detail="No JSON payload")
-    from_email = data.get("from", "").lower().strip()
-    subject = data.get("subject", "")
-    attachments = data.get("attachments", [])
+async def email_webhook(payload: EmailWebhook):
+    from_email = payload.from_.lower().strip()
     matched = []
-    for case in cases.values():
-        if case["client_email"].lower() == from_email:
-            for att in attachments:
-                case["docs"].append({
-                    "name": att.get("filename", "document.pdf"),
+    for case in memory_cases.values():
+        if case.get("client_email", "").lower() == from_email:
+            docs = case.get("docs", [])
+            for att in payload.attachments:
+                docs.append({
+                    "name": att.filename,
                     "status": "uploaded_via_email",
                     "uploaded_at": utc_now(),
                     "source": "email",
-                    "subject": subject,
+                    "subject": payload.subject,
                 })
-            case["updated_at"] = utc_now()
+            await db_update_case(case["id"], {"docs": docs, "updated_at": utc_now()})
             matched.append(case["id"])
-    return {"matched_cases": matched, "attachments_processed": len(attachments)}
+    return {"matched_cases": matched, "attachments_processed": len(payload.attachments)}
 
-# ─── OCR / PDF pipeline ────────────────────────────────
+
+# ─── OCR pipeline ───────────────────────────────────────
 @app.post("/api/cases/{case_id}/parse")
-def parse_documents(case_id: str):
-    case = cases.get(case_id)
+async def parse_documents(case_id: str, user: dict = Depends(get_current_user)):
+    case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    return {
-        "case_id": case_id,
-        "status": "parsed",
-        "extracted": {
-            "full_name": case["client_name"],
-            "passport_number": "DEMO-P1234567",
-            "date_of_birth": "1990-01-01",
-            "nationality": "Demo",
-            "employer": "Demo GmbH",
-        },
-        "form_url": f"{FRONTEND_URL}/api/cases/{case_id}/form",
-    }
+    docs = case.get("docs", [])
+    if not docs:
+        raise HTTPException(status_code=400, detail="No documents")
+    # For demo, parse the first document name as source of fake text
+    first_doc = docs[0]
+    text = f"DEMO OCR TEXT\nName: {case['client_name']}\nPassport: D1234567\nDOB: 1990-01-01\nEmployer: Demo GmbH"
+    if USE_R2 and first_doc.get("key"):
+        try:
+            obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=first_doc["key"])
+            content = obj["Body"].read()
+            ocr = await run_ocr(content, first_doc.get("name", "document.pdf"))
+            text = ocr.get("raw_text", "")
+        except Exception as e:
+            print(f"R2 read for OCR failed: {e}")
+    extracted = parse_fields(text)
+    await db_update_case(case_id, {"extracted": extracted, "stage": "review", "updated_at": utc_now()})
+    return {"case_id": case_id, "extracted": extracted, "stage": "review"}
 
+
+# ─── PDF form generation ───────────────────────────────
 @app.get("/api/cases/{case_id}/form")
-def download_form(case_id: str):
-    # In a real implementation, generate filled PDF.
-    return JSONResponse({
-        "message": "PDF generation is a placeholder. Connect pypdf + official PDF form.",
-        "case_id": case_id,
-    })
+async def download_form(case_id: str, user: dict = Depends(get_current_user)):
+    case = await db_get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    fields = {
+        "full_name": case.get("client_name", ""),
+        "case_type": case.get("case_type", ""),
+        "destination": case.get("destination", ""),
+    }
+    fields.update(case.get("extracted", {}))
+    buf = fill_pdf_form(fields)
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=case_{case_id}.pdf"})
+
 
 # ─── Stripe webhook ─────────────────────────────────────
 @app.post("/api/webhook/stripe")
-def stripe_webhook(request: Request):
-    payload = request.json()
+async def stripe_webhook(request: Request):
+    payload = await request.json()
     event_type = payload.get("type", "")
     if event_type == "checkout.session.completed":
         meta = payload.get("data", {}).get("object", {}).get("metadata", {})
         case_id = meta.get("case_id")
-        if case_id and case_id in cases:
-            cases[case_id]["invoice_paid"] = True
-            cases[case_id]["stage"] = "processing"
+        if case_id:
+            await db_update_case(case_id, {"invoice_paid": True, "stage": "processing", "updated_at": utc_now()})
     return {"received": True}
+
+
+# ─── Config endpoint for frontend ───────────────────────
+@app.get("/api/config")
+async def public_config():
+    return {
+        "supabase_url": SUPABASE_URL,
+        "supabase_anon_key": SUPABASE_ANON_KEY,
+    }
