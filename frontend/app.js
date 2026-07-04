@@ -8,6 +8,7 @@ const SUPABASE_ANON = 'placeholder';
 
 const LS_TOKEN = 'lexflow_token';
 const LS_USER = 'lexflow_user';
+const LS_INVOICES = 'lexflow_invoices';
 
 // ─── Demo auth fallback ─────────────────────────────────
 function getToken() {
@@ -118,6 +119,117 @@ function formatDate(iso) {
 
 function formatCurrency(amount, currency = 'EUR') {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(amount);
+}
+
+function invoiceSeed() {
+  return [
+    {
+      id: 'inv-2026-001',
+      number: 'INV-2026-001',
+      client_name: 'Marco Rossi',
+      client_email: 'marco.rossi@example.com',
+      status: 'unpaid',
+      issue_date: '2026-07-04',
+      due_date: '2026-07-11',
+      currency: 'EUR',
+      notes: 'Transfer after payment confirmation.',
+      case_id: '2',
+      items: [
+        { id: 'line-1', description: 'ICT permit filing', quantity: 1, unit_price: 1190 },
+      ],
+    },
+    {
+      id: 'inv-2026-002',
+      number: 'INV-2026-002',
+      client_name: 'Elena Petrova',
+      client_email: 'elena.petrova@example.com',
+      status: 'paid',
+      issue_date: '2026-07-04',
+      due_date: '2026-07-10',
+      currency: 'EUR',
+      notes: 'Paid and archived.',
+      case_id: '3',
+      items: [
+        { id: 'line-1', description: 'Family reunion case package', quantity: 1, unit_price: 2380 },
+      ],
+    },
+  ];
+}
+
+function getInvoices() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_INVOICES));
+    if (Array.isArray(raw) && raw.length) return raw;
+  } catch {}
+  const seeded = invoiceSeed();
+  localStorage.setItem(LS_INVOICES, JSON.stringify(seeded));
+  return seeded;
+}
+
+function saveInvoices(invoices) {
+  localStorage.setItem(LS_INVOICES, JSON.stringify(invoices));
+}
+
+function uid(prefix = 'id') {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function calculateInvoiceTotal(invoice) {
+  return (invoice.items || []).reduce((sum, item) => {
+    const qty = Number(item.quantity || 0);
+    const unit = Number(item.unit_price || 0);
+    return sum + qty * unit;
+  }, 0);
+}
+
+function getInvoiceById(id) {
+  return getInvoices().find(invoice => invoice.id === id || invoice.number === id) || null;
+}
+
+function upsertInvoice(invoice) {
+  const invoices = getInvoices();
+  const normalized = {
+    ...invoice,
+    items: (invoice.items || []).map(item => ({
+      id: item.id || uid('line'),
+      description: item.description || '',
+      quantity: Number(item.quantity || 0),
+      unit_price: Number(item.unit_price || 0),
+    })),
+  };
+  const idx = invoices.findIndex(item => item.id === normalized.id);
+  if (idx >= 0) invoices[idx] = normalized;
+  else invoices.unshift(normalized);
+  saveInvoices(invoices);
+  return normalized;
+}
+
+function createInvoiceDraft(seed = {}) {
+  return {
+    id: seed.id || uid('inv'),
+    number: seed.number || `INV-${new Date().getFullYear()}-${String(getInvoices().length + 1).padStart(3, '0')}`,
+    client_name: seed.client_name || '',
+    client_email: seed.client_email || '',
+    status: seed.status || 'draft',
+    issue_date: seed.issue_date || new Date().toISOString().slice(0, 10),
+    due_date: seed.due_date || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    currency: seed.currency || 'EUR',
+    notes: seed.notes || '',
+    case_id: seed.case_id || '',
+    items: seed.items?.length
+      ? seed.items
+      : [{ id: uid('line'), description: 'Legal service', quantity: 1, unit_price: 0 }],
+  };
+}
+
+function invoiceStatusBadge(status) {
+  const map = {
+    draft: 'badge-gray',
+    unpaid: 'badge-yellow',
+    paid: 'badge-green',
+    overdue: 'badge-red',
+  };
+  return map[status] || 'badge-gray';
 }
 
 function renderUser() {

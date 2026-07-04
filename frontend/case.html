@@ -87,7 +87,7 @@
             <div class="card-body">
               <div id="invoice-block">
                 <p style="color:var(--muted);margin-bottom:12px;">Invoice not yet generated.</p>
-                <button class="btn btn-primary btn-sm" id="btn-invoice">Generate invoice</button>
+                <button class="btn btn-primary btn-sm" id="btn-invoice">Open builder</button>
               </div>
             </div>
           </div>
@@ -165,8 +165,23 @@
         document.getElementById('invoice-block').innerHTML = `
           <div style="font-size:24px;font-weight:700;margin-bottom:6px;">${formatCurrency(c.invoice.amount)}</div>
           <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${c.invoice.number}</div>
-          <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Awaiting payment'}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Awaiting payment'}</span>
+            <a class="btn btn-outline btn-sm" href="invoice.html?id=${c.invoice.id || c.invoice.number}">Open</a>
+          </div>
         `;
+      } else {
+        const localInvoice = getInvoices().find(invoice => invoice.case_id === c.id);
+        if (localInvoice) {
+          document.getElementById('invoice-block').innerHTML = `
+            <div style="font-size:24px;font-weight:700;margin-bottom:6px;">${formatCurrency(calculateInvoiceTotal(localInvoice), localInvoice.currency || 'EUR')}</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${localInvoice.number}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <span class="badge ${invoiceStatusBadge(localInvoice.status)}">${localInvoice.status}</span>
+              <a class="btn btn-outline btn-sm" href="invoice.html?id=${localInvoice.id}">Open</a>
+            </div>
+          `;
+        }
       }
     }
 
@@ -183,8 +198,7 @@
         loadCase();
       });
       document.getElementById('btn-invoice')?.addEventListener('click', async () => {
-        try { await post(`/api/cases/${caseId}/invoice`, {}); showToast('Invoice generated', 'success'); loadCase(); }
-        catch { showToast('Invoice generated (demo)', 'success'); }
+        window.location.href = `invoice.html?case=${caseId}`;
       });
       document.getElementById('btn-run-ai')?.addEventListener('click', async () => {
         try { await post(`/api/cases/${caseId}/parse`, {}); showToast('Fields extracted', 'success'); loadCase(); }

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Invoice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item">Dashboard</a>
+      <a href="cases.html" class="nav-item">Cases</a>
+      <a href="invoices.html" class="nav-item active">Invoices</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info"><div class="user-name" id="user-name">—</div><div class="user-role" id="user-email">—</div></div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb"><span>Invoices</span><span class="sep">/</span><strong id="invoice-crumb">Draft</strong></div>
+      <div class="topbar-actions">
+        <a href="invoices.html" class="btn btn-outline">Back</a>
+        <button class="btn btn-primary" id="btn-save-invoice">Save invoice</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div>
+          <div class="page-title" id="invoice-title">Invoice</div>
+          <div class="page-subtitle">Create, edit, and store invoice drafts.</div>
+        </div>
+      </div>
+
+      <div class="invoice-workspace">
+        <section class="card invoice-builder-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Builder</div>
+              <div class="panel-subtitle">Client data, dates, status, and line items.</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="invoice-number">Invoice number</label>
+                <input class="form-input" id="invoice-number" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="invoice-status">Status</label>
+                <select class="form-select" id="invoice-status">
+                  <option value="draft">Draft</option>
+                  <option value="unpaid">Unpaid</option>
+                  <option value="paid">Paid</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="client-name">Client name</label>
+                <input class="form-input" id="client-name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="client-email">Client email</label>
+                <input class="form-input" id="client-email" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="issue-date">Issue date</label>
+                <input class="form-input" type="date" id="issue-date" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="due-date">Due date</label>
+                <input class="form-input" type="date" id="due-date" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="invoice-notes">Notes</label>
+              <textarea class="form-textarea" id="invoice-notes"></textarea>
+            </div>
+
+            <div class="builder-section-head">
+              <div>
+                <div class="card-title">Line items</div>
+                <div class="panel-subtitle">Add services and amounts.</div>
+              </div>
+              <button class="btn btn-outline btn-sm" type="button" id="btn-add-line">+ Add line</button>
+            </div>
+
+            <div class="line-items-head">
+              <span>Description</span>
+              <span>Qty</span>
+              <span>Unit price</span>
+              <span>Total</span>
+              <span></span>
+            </div>
+            <div id="line-items"></div>
+          </div>
+        </section>
+
+        <aside class="card invoice-preview-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Preview</div>
+              <div class="panel-subtitle">Strict customer-facing document.</div>
+            </div>
+          </div>
+          <div class="invoice-preview" id="invoice-preview"></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const invoiceId = params.get('id');
+    const caseId = params.get('case');
+    const formState = {
+      invoice: null,
+    };
+
+    function getFieldValue(id) {
+      return document.getElementById(id).value;
+    }
+
+    function setFieldValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value ?? '';
+    }
+
+    function collectInvoice() {
+      return {
+        ...formState.invoice,
+        number: getFieldValue('invoice-number'),
+        status: getFieldValue('invoice-status'),
+        client_name: getFieldValue('client-name'),
+        client_email: getFieldValue('client-email'),
+        issue_date: getFieldValue('issue-date'),
+        due_date: getFieldValue('due-date'),
+        notes: getFieldValue('invoice-notes'),
+        items: Array.from(document.querySelectorAll('.line-item-row')).map(row => ({
+          id: row.dataset.lineId,
+          description: row.querySelector('[data-field="description"]').value,
+          quantity: Number(row.querySelector('[data-field="quantity"]').value || 0),
+          unit_price: Number(row.querySelector('[data-field="unit_price"]').value || 0),
+        })),
+      };
+    }
+
+    function renderLineItems(items) {
+      const host = document.getElementById('line-items');
+      host.innerHTML = items.map(item => `
+        <div class="line-item-row" data-line-id="${item.id}">
+          <input class="form-input" data-field="description" value="${item.description || ''}" placeholder="Service description" />
+          <input class="form-input" data-field="quantity" type="number" min="0" step="1" value="${item.quantity || 0}" />
+          <input class="form-input" data-field="unit_price" type="number" min="0" step="0.01" value="${item.unit_price || 0}" />
+          <div class="line-total">${formatCurrency((Number(item.quantity || 0) * Number(item.unit_price || 0)))}</div>
+          <button class="line-remove" type="button">Remove</button>
+        </div>
+      `).join('');
+
+      host.querySelectorAll('.form-input').forEach(input => input.addEventListener('input', handleLineInput));
+      host.querySelectorAll('.line-remove').forEach(button => {
+        button.addEventListener('click', (event) => {
+          event.target.closest('.line-item-row').remove();
+          syncPreview();
+        });
+      });
+    }
+
+    function renderPreview(invoice) {
+      const preview = document.getElementById('invoice-preview');
+      const total = calculateInvoiceTotal(invoice);
+      preview.innerHTML = `
+        <div class="invoice-preview-head">
+          <div>
+            <div class="invoice-preview-eyebrow">Invoice</div>
+            <h2>${invoice.number}</h2>
+          </div>
+          <span class="badge ${invoiceStatusBadge(invoice.status)}">${invoice.status}</span>
+        </div>
+        <div class="invoice-preview-meta">
+          <div><span>Client</span><strong>${invoice.client_name || 'Client name'}</strong></div>
+          <div><span>Email</span><strong>${invoice.client_email || 'client@email.com'}</strong></div>
+          <div><span>Issue</span><strong>${formatDate(invoice.issue_date)}</strong></div>
+          <div><span>Due</span><strong>${formatDate(invoice.due_date)}</strong></div>
+        </div>
+        <div class="invoice-preview-lines">
+          ${(invoice.items || []).map(item => `
+            <div class="invoice-preview-line">
+              <span>${item.description || 'Service line'}</span>
+              <span>${item.quantity || 0} x ${formatCurrency(item.unit_price || 0, invoice.currency || 'EUR')}</span>
+              <strong>${formatCurrency((item.quantity || 0) * (item.unit_price || 0), invoice.currency || 'EUR')}</strong>
+            </div>
+          `).join('')}
+        </div>
+        <div class="invoice-preview-total">
+          <span>Total</span>
+          <strong>${formatCurrency(total, invoice.currency || 'EUR')}</strong>
+        </div>
+        <div class="invoice-preview-notes">
+          <span>Notes</span>
+          <p>${invoice.notes || 'Add payment or delivery notes here.'}</p>
+        </div>
+      `;
+    }
+
+    function syncPreview() {
+      formState.invoice = collectInvoice();
+      document.querySelectorAll('.line-item-row').forEach(row => {
+        const qty = Number(row.querySelector('[data-field="quantity"]').value || 0);
+        const price = Number(row.querySelector('[data-field="unit_price"]').value || 0);
+        row.querySelector('.line-total').textContent = formatCurrency(qty * price);
+      });
+      renderPreview(formState.invoice);
+    }
+
+    function handleLineInput() {
+      syncPreview();
+    }
+
+    function populateForm(invoice) {
+      formState.invoice = createInvoiceDraft(invoice);
+      setFieldValue('invoice-number', formState.invoice.number);
+      setFieldValue('invoice-status', formState.invoice.status);
+      setFieldValue('client-name', formState.invoice.client_name);
+      setFieldValue('client-email', formState.invoice.client_email);
+      setFieldValue('issue-date', formState.invoice.issue_date);
+      setFieldValue('due-date', formState.invoice.due_date);
+      setFieldValue('invoice-notes', formState.invoice.notes);
+      document.getElementById('invoice-title').textContent = formState.invoice.number;
+      document.getElementById('invoice-crumb').textContent = formState.invoice.number;
+      renderLineItems(formState.invoice.items);
+      syncPreview();
+    }
+
+    function bindForm() {
+      ['invoice-number', 'invoice-status', 'client-name', 'client-email', 'issue-date', 'due-date', 'invoice-notes'].forEach(id => {
+        document.getElementById(id).addEventListener('input', syncPreview);
+      });
+      document.getElementById('btn-add-line').addEventListener('click', () => {
+        const invoice = collectInvoice();
+        invoice.items.push({ id: uid('line'), description: '', quantity: 1, unit_price: 0 });
+        populateForm(invoice);
+      });
+      document.getElementById('btn-save-invoice').addEventListener('click', () => {
+        const saved = upsertInvoice(collectInvoice());
+        showToast('Invoice saved', 'success');
+        window.location.href = `invoice.html?id=${saved.id}`;
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      requireAuth();
+      bindForm();
+
+      let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
+      if (!invoice && caseId) {
+        try {
+          const c = await get(`/api/cases/${caseId}`);
+          invoice = createInvoiceDraft({
+            case_id: c.id,
+            client_name: c.client_name,
+            client_email: c.client_email,
+            notes: `${c.case_type} · ${c.destination}`,
+            items: [{ id: uid('line'), description: `${c.case_type} legal service`, quantity: 1, unit_price: 1190 }],
+          });
+        } catch {
+          invoice = createInvoiceDraft({ case_id: caseId });
+        }
+      }
+      populateForm(invoice || createInvoiceDraft());
+    });
+  </script>
+</body>
+</html>

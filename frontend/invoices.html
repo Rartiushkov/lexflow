@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LexFlow — Invoices</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -29,17 +32,53 @@
   <div class="dashboard-main">
     <div class="dashboard-topbar">
       <div class="topbar-breadcrumb"><span>Workspace</span><span class="sep">/</span><strong>Invoices</strong></div>
+      <div class="topbar-actions">
+        <a href="invoice.html?action=new" class="btn btn-primary">+ New invoice</a>
+      </div>
     </div>
     <div class="page-content">
-      <div class="page-header"><div><div class="page-title">Invoices</div><div class="page-subtitle">Billing records and payment status.</div></div></div>
-      <div class="card">
-        <div class="table-row header"><span>Number</span><span>Client</span><span>Amount</span><span>Status</span><span>Date</span></div>
-        <div class="table-row"><span>INV-2026-001</span><span>Marco Rossi</span><span>€1,190.00</span><span class="badge badge-yellow">Unpaid</span><span>04.07.2026</span></div>
-        <div class="table-row"><span>INV-2026-002</span><span>Elena Petrova</span><span>€2,380.00</span><span class="badge badge-green">Paid</span><span>04.07.2026</span></div>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Invoices</div>
+          <div class="page-subtitle">Strict billing workspace with editable drafts and opened records.</div>
+        </div>
+      </div>
+
+      <div class="card invoices-list-card">
+        <div class="invoice-table invoice-table-head">
+          <span>Number</span>
+          <span>Client</span>
+          <span>Status</span>
+          <span>Total</span>
+          <span>Issue</span>
+          <span>Due</span>
+        </div>
+        <div id="invoice-list"></div>
       </div>
     </div>
   </div>
+
   <script src="./app.js"></script>
-  <script>document.addEventListener('DOMContentLoaded', requireAuth);</script>
+  <script>
+    function renderInvoices() {
+      const list = document.getElementById('invoice-list');
+      const invoices = getInvoices();
+      list.innerHTML = invoices.map(invoice => `
+        <a class="invoice-table invoice-row-link" href="invoice.html?id=${invoice.id}">
+          <span><strong>${invoice.number}</strong></span>
+          <span>${invoice.client_name}</span>
+          <span><span class="badge ${invoiceStatusBadge(invoice.status)}">${invoice.status}</span></span>
+          <span>${formatCurrency(calculateInvoiceTotal(invoice), invoice.currency || 'EUR')}</span>
+          <span>${formatDate(invoice.issue_date)}</span>
+          <span>${formatDate(invoice.due_date)}</span>
+        </a>
+      `).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      requireAuth();
+      renderInvoices();
+    });
+  </script>
 </body>
 </html>
