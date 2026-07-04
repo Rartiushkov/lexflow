@@ -31,6 +31,7 @@ def reset_state():
     main.memory_documents.clear()
     main.memory_invoices.clear()
     main.memory_invoice_templates.clear()
+    main.memory_evaluations.clear()
 
 
 def create_case(name="Anna Schmidt", email="anna@example.com"):
@@ -182,3 +183,49 @@ def test_email_webhook_routes_documents_by_sender():
     docs_response = client.get(f"/api/documents?case_id={case['id']}", headers=AUTH)
     assert docs_response.status_code == 200
     assert docs_response.json()[0]["source"] == "email"
+
+
+def test_ocr_evaluation_extracts_fields_and_stores_score():
+    reset_state()
+    case = create_case()
+    text = """
+    Passport
+    Name: Anna Schmidt
+    Passport number: C12345678
+    Date of birth: 01.02.1990
+    Nationality: German
+    Employer: Demo GmbH
+    """
+
+    response = client.post(
+        "/api/ocr/evaluate",
+        headers=AUTH,
+        json={"text": text, "filename": "passport-anna-schmidt.pdf", "case_id": case["id"], "document_id": "doc-1"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["fields"]["document_type"] == "passport"
+    assert payload["fields"]["full_name"] == "Anna Schmidt"
+    assert payload["fields"]["passport_number"] == "C12345678"
+    assert payload["fields"]["date_of_birth"] == "1990-02-01"
+    assert payload["evaluation"]["score"] >= 0.65
+
+    evaluations = client.get(f"/api/evaluations?case_id={case['id']}", headers=AUTH)
+    assert evaluations.status_code == 200
+    assert evaluations.json()[0]["document_id"] == "doc-1"
+
+
+def test_gmail_attachment_extractor_builds_webhook_payload():
+    reset_state()
+    message = main.EmailMessage()
+    message["From"] = "Client <client@example.com>"
+    message["Subject"] = "Documents"
+    message.set_content("Attached.")
+    message.add_attachment(b"pdf bytes", maintype="application", subtype="pdf", filename="passport.pdf")
+
+    attachments = main.extract_gmail_attachments(message)
+
+    assert len(attachments) == 1
+    assert attachments[0].filename == "passport.pdf"
+    assert base64.b64decode(attachments[0].content_base64) == b"pdf bytes"

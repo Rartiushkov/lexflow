@@ -97,6 +97,19 @@ CREATE TABLE IF NOT EXISTS public.audit_events (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ML/OCR evaluation table
+CREATE TABLE IF NOT EXISTS public.ml_evaluations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    case_id TEXT REFERENCES public.cases(id) ON DELETE SET NULL,
+    document_id TEXT,
+    model TEXT NOT NULL,
+    score NUMERIC DEFAULT 0,
+    passed BOOLEAN DEFAULT FALSE,
+    suggestions JSONB DEFAULT '[]'::jsonb,
+    payload JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cases ENABLE ROW LEVEL SECURITY;
@@ -104,6 +117,7 @@ ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoice_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ml_evaluations ENABLE ROW LEVEL SECURITY;
 
 -- Policies for cases
 CREATE POLICY "Users can manage their own cases"
@@ -140,3 +154,11 @@ CREATE POLICY "Users can view their own audit events"
     ON public.audit_events
     FOR SELECT
     USING (lawyer_id = auth.uid());
+
+-- Policies for ML/OCR evaluations
+CREATE POLICY "Users can view evaluations for their cases"
+    ON public.ml_evaluations
+    FOR SELECT
+    USING (EXISTS (
+        SELECT 1 FROM public.cases WHERE cases.id = ml_evaluations.case_id AND cases.lawyer_id = auth.uid()
+    ));

@@ -1,4 +1,6 @@
 import base64
+import email
+import imaplib
 import io
 import json
 import os
@@ -6,7 +8,8 @@ import re
 import smtplib
 import uuid
 from datetime import datetime, timezone
-from email.message import EmailMessage
+from email.message import EmailMessage, Message
+from email.utils import parseaddr
 from typing import Optional
 from pathlib import Path
 
@@ -15,6 +18,8 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+
+from ocr_parsers import evaluate_extraction, parse_document_text
 
 app = FastAPI(title="LexFlow Backend", version="0.2.0")
 
@@ -34,11 +39,17 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "billing@lexflow.eu")
+GMAIL_IMAP_HOST = os.environ.get("GMAIL_IMAP_HOST", "imap.gmail.com")
+GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+GMAIL_MAILBOX = os.environ.get("GMAIL_MAILBOX", "INBOX")
+GMAIL_POLL_LIMIT = int(os.environ.get("GMAIL_POLL_LIMIT", "10") or "10")
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
 USE_MISTRAL = bool(MISTRAL_API_KEY)
 USE_SMTP = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+USE_GMAIL = bool(GMAIL_EMAIL and GMAIL_APP_PASSWORD)
 
 app.add_middleware(
     CORSMiddleware,
@@ -84,6 +95,7 @@ memory_cases: dict[str, dict] = {}
 memory_invoices: dict[str, dict] = {}
 memory_documents: dict[str, dict] = {}
 memory_invoice_templates: dict[str, dict] = {}
+memory_evaluations: dict[str, dict] = {}
 
 
 def utc_now():
@@ -270,6 +282,33 @@ async def db_get_invoice(invoice_id: str) -> Optional[dict]:
     return memory_invoices.get(invoice_id)
 
 
+async def db_create_evaluation(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("ml_evaluations").insert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase evaluation insert failed: {e}")
+    memory_evaluations[data["id"]] = data
+    return data
+
+
+async def db_get_evaluations(case_id: Optional[str] = None) -> list:
+    if USE_SUPABASE:
+        try:
+            query = supabase_client.table("ml_evaluations").select("*").order("created_at", desc=True)
+            if case_id:
+                query = query.eq("case_id", case_id)
+            res = query.execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase evaluation select failed: {e}")
+    rows = list(memory_evaluations.values())
+    if case_id:
+        rows = [item for item in rows if item.get("case_id") == case_id]
+    return sorted(rows, key=lambda item: item.get("created_at", ""), reverse=True)
+
+
 # ─── File storage helpers ───────────────────────────────
 async def upload_file(case_id: str, file: UploadFile, source: str = "portal") -> dict:
     ext = Path(file.filename or "document.pdf").suffix
@@ -347,19 +386,21 @@ async def run_ocr(content: bytes, filename: str) -> dict:
         return {"raw_text": "", "pages": [], "error": str(e)}
 
 
-def parse_fields(text: str) -> dict:
-    """Extract common fields from OCR text with simple regex."""
-    fields = {}
-    name_match = re.search(r"(?i)name[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)", text)
-    if name_match:
-        fields["full_name"] = name_match.group(1)
-    passport_match = re.search(r"(?i)passport[:\s]+([A-Z0-9]+)", text)
-    if passport_match:
-        fields["passport_number"] = passport_match.group(1)
-    dob_match = re.search(r"(?i)(?:dob|date of birth|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})", text)
-    if dob_match:
-        fields["date_of_birth"] = dob_match.group(1)
-    return fields
+async def store_extraction_evaluation(case_id: str, document_id: str, fields: dict) -> dict:
+    evaluation = evaluate_extraction(fields)
+    row = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "document_id": document_id,
+        "model": "rules+mistral-ocr",
+        "score": evaluation["score"],
+        "passed": evaluation["passed"],
+        "suggestions": evaluation["suggestions"],
+        "payload": {"fields": fields, "evaluation": evaluation},
+        "created_at": utc_now(),
+    }
+    await db_create_evaluation(row)
+    return row
 
 
 # ─── PDF mapping helpers ────────────────────────────────
@@ -392,6 +433,7 @@ def health():
         "r2": USE_R2,
         "mistral": USE_MISTRAL,
         "smtp": USE_SMTP,
+        "gmail": USE_GMAIL,
     }
 
 
@@ -810,8 +852,7 @@ class EmailWebhook(BaseModel):
     attachments: list[EmailAttachment]
 
 
-@app.post("/api/webhook/email")
-async def email_webhook(payload: EmailWebhook):
+async def process_email_payload(payload: EmailWebhook) -> dict:
     from_email = payload.from_.lower().strip()
     matched = []
     cases = await db_get_cases()
@@ -843,6 +884,69 @@ async def email_webhook(payload: EmailWebhook):
     return {"matched_cases": matched, "attachments_processed": len(payload.attachments)}
 
 
+@app.post("/api/webhook/email")
+async def email_webhook(payload: EmailWebhook):
+    return await process_email_payload(payload)
+
+
+def extract_gmail_attachments(message: Message) -> list[EmailAttachment]:
+    attachments = []
+    for part in message.walk():
+        filename = part.get_filename()
+        if not filename:
+            continue
+        content = part.get_payload(decode=True) or b""
+        attachments.append(EmailAttachment(
+            filename=filename,
+            content_base64=base64.b64encode(content).decode("utf-8"),
+            content_type=part.get_content_type() or "application/octet-stream",
+        ))
+    return attachments
+
+
+@app.post("/api/gmail/poll")
+async def poll_gmail(user: dict = Depends(get_current_user)):
+    if not USE_GMAIL:
+        raise HTTPException(status_code=400, detail="Gmail IMAP is not configured")
+    processed = []
+    try:
+        with imaplib.IMAP4_SSL(GMAIL_IMAP_HOST) as mailbox:
+            mailbox.login(GMAIL_EMAIL, GMAIL_APP_PASSWORD)
+            mailbox.select(GMAIL_MAILBOX)
+            status, data = mailbox.search(None, "UNSEEN")
+            if status != "OK":
+                raise HTTPException(status_code=502, detail="Gmail search failed")
+            message_ids = data[0].split()[:GMAIL_POLL_LIMIT]
+            for message_id in message_ids:
+                fetch_status, fetch_data = mailbox.fetch(message_id, "(RFC822)")
+                if fetch_status != "OK" or not fetch_data:
+                    continue
+                raw = fetch_data[0][1]
+                message = email.message_from_bytes(raw)
+                attachments = extract_gmail_attachments(message)
+                if not attachments:
+                    mailbox.store(message_id, "+FLAGS", "\\Seen")
+                    continue
+                sender = parseaddr(message.get("From", ""))[1]
+                subject = message.get("Subject", "")
+                result = await process_email_payload(EmailWebhook(
+                    **{"from": sender, "subject": subject, "attachments": attachments}
+                ))
+                mailbox.store(message_id, "+FLAGS", "\\Seen")
+                processed.append({
+                    "message_id": message_id.decode("utf-8", errors="ignore"),
+                    "from": sender,
+                    "subject": subject,
+                    **result,
+                })
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Gmail poll failed: {e}")
+        raise HTTPException(status_code=502, detail="Gmail poll failed")
+    return {"processed": processed, "count": len(processed)}
+
+
 # ─── OCR pipeline ───────────────────────────────────────
 @app.post("/api/cases/{case_id}/parse")
 async def parse_documents(case_id: str, user: dict = Depends(get_current_user)):
@@ -863,9 +967,29 @@ async def parse_documents(case_id: str, user: dict = Depends(get_current_user)):
             text = ocr.get("raw_text", "")
         except Exception as e:
             print(f"R2 read for OCR failed: {e}")
-    extracted = parse_fields(text)
+    extracted = parse_document_text(text, first_doc.get("name", "document.pdf"))
+    await store_extraction_evaluation(case_id, first_doc.get("document_id", ""), extracted)
     await db_update_case(case_id, {"extracted": extracted, "stage": "review", "updated_at": utc_now()})
     return {"case_id": case_id, "extracted": extracted, "stage": "review"}
+
+
+class OcrEvaluationRequest(BaseModel):
+    text: str
+    filename: Optional[str] = ""
+    case_id: Optional[str] = ""
+    document_id: Optional[str] = ""
+
+
+@app.post("/api/ocr/evaluate")
+async def evaluate_ocr(req: OcrEvaluationRequest, user: dict = Depends(get_current_user)):
+    fields = parse_document_text(req.text, req.filename or "")
+    evaluation = await store_extraction_evaluation(req.case_id or "", req.document_id or "", fields)
+    return {"fields": fields, "evaluation": evaluation}
+
+
+@app.get("/api/evaluations")
+async def list_evaluations(case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    return await db_get_evaluations(case_id=case_id)
 
 
 # ─── PDF form generation ───────────────────────────────

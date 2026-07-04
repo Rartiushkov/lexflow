@@ -27,17 +27,28 @@ Date: 2026-07-04
 | Drag-drop intake | Backend intake upload exists with filename matching; local fallback exists |
 | Unrecognized documents | Exists in Intake with `status = unrecognized` |
 | Client portal upload | Backend path exists; local fallback now attaches files to the local case |
-| Gmail/email ingestion | Webhook exists at `/api/webhook/email`; needs Gmail adapter/forwarder |
-| OCR/Mistral | Backend has `MISTRAL_API_KEY` and `/api/cases/{case_id}/parse`; currently simple field parser after OCR |
+| Gmail/email ingestion | Webhook exists at `/api/webhook/email`; Gmail IMAP adapter exists at `/api/gmail/poll` |
+| OCR/Mistral | Backend has `MISTRAL_API_KEY`, `/api/cases/{case_id}/parse`, document classification, field parsers, and `/api/ocr/evaluate` |
 | Delete files | Implemented for intake, case docs, client portal list, and invoice attachments |
 | Invoice email | Endpoint exists at `/api/invoices/{invoice_id}/send`; sends via SMTP when configured and returns `queued_demo` during local/test mode |
+| ML/evaluation | OCR extraction scores are stored in `ml_evaluations` and available through `/api/evaluations` |
 
 ## Gmail test setup
 
 For a test Gmail flow, use one of these:
 
-1. Gmail API poller: a small scheduled worker reads unread messages with attachments, posts them to `/api/webhook/email`, then marks them processed.
+1. Gmail IMAP adapter: configure `GMAIL_EMAIL` and `GMAIL_APP_PASSWORD`, then call `POST /api/gmail/poll`; unread messages with attachments are converted into the same payload used by `/api/webhook/email`.
 2. Gmail forwarding: Gmail forwards to an ingestion mailbox/provider, and that provider posts webhook payloads to `/api/webhook/email`.
+
+Render environment variables for the IMAP adapter:
+
+```text
+GMAIL_EMAIL=your-ingestion@gmail.com
+GMAIL_APP_PASSWORD=google-app-password
+GMAIL_IMAP_HOST=imap.gmail.com
+GMAIL_MAILBOX=INBOX
+GMAIL_POLL_LIMIT=10
+```
 
 The webhook payload shape already expected by backend:
 
@@ -59,5 +70,22 @@ The webhook payload shape already expected by backend:
 
 1. Match by client email for email ingestion.
 2. Match by full client name in filename for Intake.
-3. Later: run OCR with Mistral and match by name, passport number, email, or case reference.
+3. Run OCR with Mistral and match by name, passport number, email, or case reference.
 4. If confidence is low, keep in Unrecognized.
+
+## OCR evaluation
+
+The parser extracts document type, full name, passport number, date of birth, expiry date, nationality, email, phone, address, employer, invoice number, invoice total, and IBAN where present.
+
+Every OCR/evaluation run stores:
+
+```text
+case_id
+document_id
+model
+score
+passed
+suggestions
+payload
+created_at
+```
