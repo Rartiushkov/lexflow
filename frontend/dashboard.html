@@ -66,14 +66,14 @@
     <div class="page-content">
       <div class="page-header">
         <div>
-          <div class="page-title">Case board</div>
-          <div class="page-subtitle">Cases, files, payment, and release in one board.</div>
+          <div class="page-title">Operations</div>
+          <div class="page-subtitle">Active matters, billing, and review in one operational view.</div>
         </div>
       </div>
 
       <div class="stats-row">
         <div class="stat-card">
-          <div class="stat-label">Open cases</div>
+          <div class="stat-label">Open matters</div>
           <div class="stat-value" id="stat-open">0</div>
         </div>
         <div class="stat-card">
@@ -85,13 +85,54 @@
           <div class="stat-value" id="stat-processing">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Ready to submit</div>
+          <div class="stat-label">Ready for review</div>
           <div class="stat-value" id="stat-ready">0</div>
         </div>
       </div>
 
-      <div class="kanban-board" id="kanban">
-        <!-- Columns injected by JS -->
+      <div class="dashboard-shell">
+        <section class="card queue-panel">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Active queue</div>
+              <div class="panel-subtitle">Priority work across all stages.</div>
+            </div>
+            <a href="cases.html" class="btn btn-outline btn-sm">View all</a>
+          </div>
+          <div class="queue-table">
+            <div class="queue-row queue-head">
+              <span>Client</span>
+              <span>Type</span>
+              <span>Stage</span>
+              <span>Billing</span>
+              <span>Files</span>
+              <span>Date</span>
+            </div>
+            <div id="queue-list"></div>
+          </div>
+        </section>
+
+        <aside class="dashboard-rail">
+          <section class="card stage-panel">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Stage load</div>
+                <div class="panel-subtitle">Current distribution by workflow state.</div>
+              </div>
+            </div>
+            <div class="stage-stack" id="stage-stack"></div>
+          </section>
+
+          <section class="card spotlight-panel">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Current focus</div>
+                <div class="panel-subtitle">Immediate operational priorities.</div>
+              </div>
+            </div>
+            <div class="spotlight-list" id="spotlight-list"></div>
+          </section>
+        </aside>
       </div>
     </div>
   </div>
@@ -106,38 +147,77 @@
       { id: 'submitted', label: 'Submitted' },
     ];
 
-    function renderKanban(cases) {
-      const board = document.getElementById('kanban');
-      board.innerHTML = '';
+    function stageBadge(stageId) {
+      const map = {
+        documents: 'badge-gray',
+        payment: 'badge-yellow',
+        processing: 'badge-blue',
+        review: 'badge-green',
+        submitted: 'badge-gray',
+      };
+      return map[stageId] || 'badge-gray';
+    }
+
+    function renderDashboard(cases) {
+      const queue = document.getElementById('queue-list');
+      const stack = document.getElementById('stage-stack');
+      const spotlight = document.getElementById('spotlight-list');
+      queue.innerHTML = '';
+      stack.innerHTML = '';
+      spotlight.innerHTML = '';
+
+      const sortedCases = [...cases].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      sortedCases.slice(0, 8).forEach(c => {
+        const row = document.createElement('a');
+        row.className = 'queue-row';
+        row.href = `case.html?id=${c.id}`;
+        row.innerHTML = `
+          <span class="queue-client">
+            <strong>${c.client_name}</strong>
+            <em>${c.country || 'EU route'}</em>
+          </span>
+          <span>${c.type || 'Work permit'}</span>
+          <span><span class="badge ${stageBadge(c.stage)}">${STAGES.find(s => s.id === c.stage)?.label || c.stage}</span></span>
+          <span>${c.invoice_paid ? 'Paid' : 'Open'}</span>
+          <span>${c.doc_count || 0}</span>
+          <span>${formatDate(c.created_at)}</span>
+        `;
+        queue.appendChild(row);
+      });
+
       STAGES.forEach(stage => {
         const stageCases = cases.filter(c => c.stage === stage.id);
-        const col = document.createElement('div');
-        col.className = 'kanban-column';
-        col.innerHTML = `
-          <div class="kanban-header">
-            <span>${stage.label}</span>
-            <span class="kanban-count">${stageCases.length}</span>
+        const item = document.createElement('div');
+        item.className = 'stage-row';
+        item.innerHTML = `
+          <div class="stage-row-copy">
+            <strong>${stage.label}</strong>
+            <span>${stageCases.length} case${stageCases.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="stage-row-bar"><span style="width:${cases.length ? Math.max((stageCases.length / cases.length) * 100, stageCases.length ? 8 : 0) : 0}%"></span></div>
+        `;
+        stack.appendChild(item);
+      });
+
+      const paymentCount = cases.filter(c => c.stage === 'payment').length;
+      const reviewCount = cases.filter(c => c.stage === 'review').length;
+      const processingCount = cases.filter(c => c.stage === 'processing').length;
+      const focusItems = [
+        { label: 'Billing follow-up', value: paymentCount, note: 'Cases waiting for payment confirmation.' },
+        { label: 'Document review', value: reviewCount, note: 'Files are ready for final legal check.' },
+        { label: 'Field processing', value: processingCount, note: 'Records currently being prepared.' },
+      ];
+      focusItems.forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'spotlight-item';
+        el.innerHTML = `
+          <div class="spotlight-value">${item.value}</div>
+          <div class="spotlight-copy">
+            <strong>${item.label}</strong>
+            <span>${item.note}</span>
           </div>
         `;
-        stageCases.forEach(c => {
-          const card = document.createElement('div');
-          card.className = 'kanban-card';
-          card.onclick = () => window.location = `case.html?id=${c.id}`;
-          card.innerHTML = `
-            <div class="kanban-card-title">${c.client_name}</div>
-            <div class="kanban-card-meta">
-              <span>${c.type || 'Work permit'}</span>
-              <span>•</span>
-              <span>${formatDate(c.created_at)}</span>
-            </div>
-            <div class="kanban-card-tags">
-              ${c.invoice_paid ? '<span class="tag">paid</span>' : '<span class="tag">unpaid</span>'}
-              ${c.doc_count ? `<span class="tag">${c.doc_count} docs</span>` : ''}
-            </div>
-          `;
-          col.appendChild(card);
-        });
-        board.appendChild(col);
+        spotlight.appendChild(el);
       });
 
       document.getElementById('stat-open').textContent = cases.length;
@@ -150,13 +230,14 @@
       requireAuth();
       try {
         const cases = await get('/api/cases');
-        renderKanban(cases);
+        renderDashboard(cases);
       } catch (err) {
         // fallback demo data
-        renderKanban([
-          { id: '1', client_name: 'Anna Schmidt', type: 'Blue Card', stage: 'documents', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 1 },
-          { id: '2', client_name: 'Marco Rossi', type: 'ICT permit', stage: 'payment', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 3 },
-          { id: '3', client_name: 'Elena Petrova', type: 'Family reunion', stage: 'processing', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 4 },
+        renderDashboard([
+          { id: '1', client_name: 'Anna Schmidt', type: 'Blue Card', country: 'Germany', stage: 'documents', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 1 },
+          { id: '2', client_name: 'Marco Rossi', type: 'ICT permit', country: 'Netherlands', stage: 'payment', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 3 },
+          { id: '3', client_name: 'Elena Petrova', type: 'Family reunion', country: 'France', stage: 'processing', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 4 },
+          { id: '4', client_name: 'Nora Becker', type: 'Work permit', country: 'Austria', stage: 'review', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 6 },
         ]);
       }
     });
