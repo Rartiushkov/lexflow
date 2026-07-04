@@ -170,7 +170,7 @@ body.landing::before {
   background:
     radial-gradient(circle at 20% 20%, rgba(245, 242, 231, 0.22) 0%, rgba(245, 242, 231, 0) 34%),
     linear-gradient(180deg, rgba(16, 20, 31, 0.38) 0%, rgba(16, 20, 31, 0.68) 100%),
-    url("./assets/dashboard-bg.png") center center / cover no-repeat;
+    url("./assets/eu-hero-bg.png") center center / cover no-repeat;
   transform: scale(1.01);
 }
 
