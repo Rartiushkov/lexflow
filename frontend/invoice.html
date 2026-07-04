@@ -136,6 +136,13 @@
             </div>
             <input type="file" id="invoice-attachment" style="display:none;" />
             <div id="invoice-attachments"></div>
+            <div class="builder-section-head" style="margin-top:22px;">
+              <div>
+                <div class="card-title">File preview</div>
+                <div class="panel-subtitle">View generated PDFs and attached images directly here.</div>
+              </div>
+            </div>
+            <div id="invoice-file-preview" class="file-preview-card"></div>
           </div>
         </section>
 
@@ -264,6 +271,7 @@
     const formState = {
       invoice: null,
       template: null,
+      previewAttachmentId: '',
     };
 
     function getFieldValue(id) {
@@ -299,6 +307,7 @@
       const host = document.getElementById('invoice-attachments');
       if (!attachments.length) {
         host.innerHTML = `<div class="empty-attachments">No files attached yet.</div>`;
+        renderAttachmentPreview(null);
         return;
       }
       host.innerHTML = attachments.map(file => `
@@ -308,19 +317,71 @@
             <span>${file.type || 'file'} · ${Math.round((file.size || 0) / 1024)} KB</span>
           </div>
           <div class="attachment-actions">
+            ${isPreviewableAttachment(file) ? `<button class="btn btn-outline btn-sm" type="button" data-preview-id="${file.id}">Preview</button>` : ''}
             <a class="btn btn-outline btn-sm" href="${file.data_url}" download="${file.name}">Download</a>
             <button class="line-remove" type="button">Remove</button>
           </div>
         </div>
       `).join('');
+      host.querySelectorAll('[data-preview-id]').forEach(button => {
+        button.addEventListener('click', () => {
+          formState.previewAttachmentId = button.dataset.previewId;
+          const file = (formState.invoice.attachments || []).find(item => item.id === formState.previewAttachmentId) || null;
+          renderAttachmentPreview(file);
+        });
+      });
       host.querySelectorAll('.line-remove').forEach(button => {
         button.addEventListener('click', (event) => {
           const row = event.target.closest('.attachment-row');
-          formState.invoice.attachments = (formState.invoice.attachments || []).filter(item => item.id !== row.dataset.attachmentId);
+          const removedId = row.dataset.attachmentId;
+          formState.invoice.attachments = (formState.invoice.attachments || []).filter(item => item.id !== removedId);
+          if (formState.previewAttachmentId === removedId) {
+            formState.previewAttachmentId = '';
+          }
           renderAttachments(formState.invoice.attachments);
           syncPreview();
         });
       });
+      const selected = attachments.find(item => item.id === formState.previewAttachmentId)
+        || attachments.find(item => item.generated && isPreviewableAttachment(item))
+        || attachments.find(item => isPreviewableAttachment(item))
+        || null;
+      if (selected) {
+        formState.previewAttachmentId = selected.id;
+      }
+      renderAttachmentPreview(selected);
+    }
+
+    function isPreviewableAttachment(file) {
+      const type = file?.type || '';
+      const name = (file?.name || '').toLowerCase();
+      return type.includes('pdf')
+        || type.startsWith('image/')
+        || name.endsWith('.pdf')
+        || name.endsWith('.png')
+        || name.endsWith('.jpg')
+        || name.endsWith('.jpeg')
+        || name.endsWith('.webp');
+    }
+
+    function renderAttachmentPreview(file) {
+      const host = document.getElementById('invoice-file-preview');
+      if (!host) return;
+      if (!file) {
+        host.innerHTML = `<div class="empty-attachments">Select an attached file to preview it here.</div>`;
+        return;
+      }
+      const type = file.type || '';
+      const name = (file.name || '').toLowerCase();
+      if (type.includes('pdf') || name.endsWith('.pdf')) {
+        host.innerHTML = `<div class="file-preview-stage"><iframe class="file-preview-frame" src="${file.data_url}" title="${file.name}"></iframe></div>`;
+        return;
+      }
+      if (type.startsWith('image/') || /\.(png|jpg|jpeg|webp)$/i.test(name)) {
+        host.innerHTML = `<div class="file-preview-stage"><img class="file-preview-image" src="${file.data_url}" alt="${file.name}" /></div>`;
+        return;
+      }
+      host.innerHTML = `<div class="empty-attachments">This file type cannot be previewed yet.</div>`;
     }
 
     function collectTemplate() {
@@ -609,6 +670,7 @@
         ];
         const saved = upsertInvoice({ ...invoice, attachments: nextAttachments });
         formState.invoice = saved;
+        formState.previewAttachmentId = nextAttachments[0]?.id || '';
         renderAttachments(saved.attachments || []);
         renderPreview(saved);
         showToast('Invoice PDF attached', 'success');
