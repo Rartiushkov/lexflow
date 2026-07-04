@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Invoices</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item">Dashboard</a>
+      <a href="cases.html" class="nav-item">Cases</a>
+      <a href="invoices.html" class="nav-item active">Invoices</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info"><div class="user-name" id="user-name">—</div><div class="user-role" id="user-email">—</div></div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb"><span>Workspace</span><span class="sep">/</span><strong>Invoices</strong></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header"><div><div class="page-title">Invoices</div><div class="page-subtitle">EU-compliant billing history.</div></div></div>
+      <div class="card">
+        <div class="table-row header"><span>Number</span><span>Client</span><span>Amount</span><span>Status</span><span>Date</span></div>
+        <div class="table-row"><span>INV-2026-001</span><span>Marco Rossi</span><span>€1,190.00</span><span class="badge badge-yellow">Unpaid</span><span>04.07.2026</span></div>
+        <div class="table-row"><span>INV-2026-002</span><span>Elena Petrova</span><span>€2,380.00</span><span class="badge badge-green">Paid</span><span>04.07.2026</span></div>
+      </div>
+    </div>
+  </div>
+  <script src="./app.js"></script>
+  <script>document.addEventListener('DOMContentLoaded', requireAuth);</script>
+</body>
+</html>

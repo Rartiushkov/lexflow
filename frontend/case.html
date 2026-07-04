@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Case detail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand">
+      <span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span>
+      <span class="brand-name">LexFlow</span>
+    </a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item">Dashboard</a>
+      <a href="cases.html" class="nav-item">Cases</a>
+      <a href="invoices.html" class="nav-item">Invoices</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-email">—</div>
+        </div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb">
+        <span>Workspace</span>
+        <span class="sep">/</span>
+        <a href="cases.html" style="color:var(--muted);">Cases</a>
+        <span class="sep">/</span>
+        <strong id="breadcrumb-name">Case</strong>
+      </div>
+      <div class="topbar-actions">
+        <a href="dashboard.html" class="btn btn-outline">Back to board</a>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div>
+          <div class="page-title" id="case-title">Case</div>
+          <div class="page-subtitle" id="case-meta">Loading…</div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <span class="badge badge-gray" id="case-status">Unknown</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Documents</span>
+            <span class="badge badge-blue" id="doc-count">0</span>
+          </div>
+          <div class="card-body">
+            <div id="doc-list">
+              <p style="color:var(--muted);">No documents uploaded yet.</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:24px;">
+            <div class="card-header">
+              <span class="card-title">Invoice</span>
+            </div>
+            <div class="card-body">
+              <div id="invoice-block">
+                <p style="color:var(--muted);margin-bottom:12px;">Invoice not yet generated.</p>
+                <button class="btn btn-primary btn-sm" id="btn-invoice">Generate invoice</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Actions</span>
+            </div>
+            <div class="card-body">
+              <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-run-ai">Run AI parser</button>
+              <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-download">Download PDF form</button>
+              <button class="btn btn-primary btn-sm" style="width:100%;" id="btn-advance">Advance stage</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const caseId = params.get('id') || '1';
+
+    async function loadCase() {
+      try {
+        const c = await get(`/api/cases/${caseId}`);
+        render(c);
+      } catch (err) {
+        // demo fallback
+        render({
+          id: caseId,
+          client_name: 'Anna Schmidt',
+          client_email: 'anna@example.com',
+          case_type: 'Blue Card',
+          destination: 'Germany',
+          stage: 'documents',
+          created_at: new Date().toISOString(),
+          invoice_paid: false,
+          docs: [
+            { name: 'passport.pdf', status: 'uploaded', uploaded_at: new Date().toISOString() },
+          ],
+        });
+      }
+    }
+
+    function render(c) {
+      document.getElementById('case-title').textContent = c.client_name;
+      document.getElementById('breadcrumb-name').textContent = c.client_name;
+      document.getElementById('case-meta').textContent = `${c.case_type} · ${c.destination} · created ${formatDate(c.created_at)}`;
+      const statusMap = {
+        documents: 'badge-gray',
+        payment: 'badge-yellow',
+        processing: 'badge-blue',
+        review: 'badge-yellow',
+        submitted: 'badge-green',
+      };
+      const statusEl = document.getElementById('case-status');
+      statusEl.className = `badge ${statusMap[c.stage] || 'badge-gray'}`;
+      statusEl.textContent = c.stage;
+
+      document.getElementById('doc-count').textContent = (c.docs || []).length;
+      const list = document.getElementById('doc-list');
+      if (c.docs && c.docs.length) {
+        list.innerHTML = c.docs.map(d => `
+          <div class="table-row">
+            <div><strong>${d.name}</strong></div>
+            <div>${formatDate(d.uploaded_at)}</div>
+            <div><span class="badge badge-green">${d.status}</span></div>
+          </div>
+        `).join('');
+      }
+
+      if (c.invoice) {
+        document.getElementById('invoice-block').innerHTML = `
+          <div style="font-size:24px;font-weight:700;margin-bottom:6px;">${formatCurrency(c.invoice.amount)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${c.invoice.number}</div>
+          <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Awaiting payment'}</span>
+        `;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      requireAuth();
+      loadCase();
+      document.getElementById('btn-invoice')?.addEventListener('click', async () => {
+        try { await post(`/api/cases/${caseId}/invoice`, {}); showToast('Invoice generated', 'success'); loadCase(); }
+        catch { showToast('Invoice generated (demo)', 'success'); }
+      });
+      document.getElementById('btn-run-ai')?.addEventListener('click', () => showToast('AI parser queued', 'info'));
+      document.getElementById('btn-download')?.addEventListener('click', () => showToast('PDF download started', 'info'));
+      document.getElementById('btn-advance')?.addEventListener('click', async () => {
+        try { await post(`/api/cases/${caseId}/advance`, {}); showToast('Stage advanced', 'success'); loadCase(); }
+        catch { showToast('Stage advanced (demo)', 'success'); }
+      });
+    });
+  </script>
+</body>
+</html>

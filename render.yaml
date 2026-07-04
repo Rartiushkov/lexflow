@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: lexflow-backend
+    runtime: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: FRONTEND_URL
+        value: https://lexflow.pages.dev

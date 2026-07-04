@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="auth" data-api-base="https://lexflow-backend.onrender.com">
+  <div class="auth-card">
+    <div style="text-align:center;margin-bottom:20px;">
+      <span class="brand-mark" style="margin:0 auto 12px;display:inline-flex;">Lf</span>
+      <h1 class="auth-title">Lawyer workspace</h1>
+      <p class="auth-subtitle">Sign in to manage immigration cases.</p>
+    </div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="email">Email</label>
+        <input class="form-input" id="email" type="email" value="demo@lexflow.eu" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input class="form-input" id="password" type="password" value="demo" required />
+      </div>
+      <button class="btn btn-primary" style="width:100%;" type="submit">Sign in</button>
+    </form>
+
+    <p class="auth-footer">
+      Pilot mode — demo credentials are pre-filled.<br>
+      <a href="index.html" style="color:var(--navy);">Back to landing</a>
+    </p>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      requireGuest();
+      document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        try {
+          const data = await post('/api/auth/login', { email, password });
+          setSession(data.token, data.user);
+          showToast('Welcome back', 'success');
+          window.location.href = 'dashboard.html';
+        } catch (err) {
+          // toast already shown
+        }
+      });
+    });
+  </script>
+</body>
+</html>

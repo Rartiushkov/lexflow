@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand">
+      <span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span>
+      <span class="brand-name">LexFlow</span>
+    </a>
+
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item active">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        Dashboard
+      </a>
+      <a href="cases.html" class="nav-item">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+        Cases
+      </a>
+      <a href="invoices.html" class="nav-item">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M6 1v2M10 1v2"/></svg>
+        Invoices
+      </a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-email">—</div>
+        </div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb">
+        <span>Workspace</span>
+        <span class="sep">/</span>
+        <strong>Dashboard</strong>
+      </div>
+      <div class="topbar-actions">
+        <a href="new-case.html" class="btn btn-primary">+ New case</a>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Immigration board</div>
+          <div class="page-subtitle">Track every case from documents to submission.</div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Open cases</div>
+          <div class="stat-value" id="stat-open">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Awaiting payment</div>
+          <div class="stat-value" id="stat-payment">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">AI processing</div>
+          <div class="stat-value" id="stat-processing">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Ready to submit</div>
+          <div class="stat-value" id="stat-ready">0</div>
+        </div>
+      </div>
+
+      <div class="kanban-board" id="kanban">
+        <!-- Columns injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    const STAGES = [
+      { id: 'documents', label: 'Documents' },
+      { id: 'payment', label: 'Payment' },
+      { id: 'processing', label: 'AI processing' },
+      { id: 'review', label: 'Ready for review' },
+      { id: 'submitted', label: 'Submitted' },
+    ];
+
+    function renderKanban(cases) {
+      const board = document.getElementById('kanban');
+      board.innerHTML = '';
+      STAGES.forEach(stage => {
+        const stageCases = cases.filter(c => c.stage === stage.id);
+        const col = document.createElement('div');
+        col.className = 'kanban-column';
+        col.innerHTML = `
+          <div class="kanban-header">
+            <span>${stage.label}</span>
+            <span class="kanban-count">${stageCases.length}</span>
+          </div>
+        `;
+        stageCases.forEach(c => {
+          const card = document.createElement('div');
+          card.className = 'kanban-card';
+          card.onclick = () => window.location = `case.html?id=${c.id}`;
+          card.innerHTML = `
+            <div class="kanban-card-title">${c.client_name}</div>
+            <div class="kanban-card-meta">
+              <span>${c.type || 'Work permit'}</span>
+              <span>•</span>
+              <span>${formatDate(c.created_at)}</span>
+            </div>
+            <div class="kanban-card-tags">
+              ${c.invoice_paid ? '<span class="tag">paid</span>' : '<span class="tag">unpaid</span>'}
+              ${c.doc_count ? `<span class="tag">${c.doc_count} docs</span>` : ''}
+            </div>
+          `;
+          col.appendChild(card);
+        });
+        board.appendChild(col);
+      });
+
+      document.getElementById('stat-open').textContent = cases.length;
+      document.getElementById('stat-payment').textContent = cases.filter(c => c.stage === 'payment').length;
+      document.getElementById('stat-processing').textContent = cases.filter(c => c.stage === 'processing').length;
+      document.getElementById('stat-ready').textContent = cases.filter(c => c.stage === 'review').length;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      requireAuth();
+      try {
+        const cases = await get('/api/cases');
+        renderKanban(cases);
+      } catch (err) {
+        // fallback demo data
+        renderKanban([
+          { id: '1', client_name: 'Anna Schmidt', type: 'Blue Card', stage: 'documents', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 1 },
+          { id: '2', client_name: 'Marco Rossi', type: 'ICT permit', stage: 'payment', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 3 },
+          { id: '3', client_name: 'Elena Petrova', type: 'Family reunion', stage: 'processing', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 4 },
+        ]);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — EU Immigration Case Automation</title>
+  <meta name="description" content="Micro-CRM and document automation pipeline for European immigration lawyers and HR relocation teams." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="landing" data-api-base="https://lexflow-backend.onrender.com">
+  <header class="topbar">
+    <a class="brand" href="/index.html">
+      <span class="brand-mark">Lf</span>
+      <span class="brand-name">LexFlow</span>
+    </a>
+    <nav class="topnav">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="login.html">For lawyers</a>
+    </nav>
+    <div class="topbar-cta">
+      <a href="login.html" class="btn btn-primary">Lawyer login</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-section">
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Built for EU immigration practice
+      </div>
+      <h1 class="hero-title">
+        Client documents, invoices &<br>
+        <em>government forms — one flow.</em>
+      </h1>
+      <p class="hero-sub">
+        LexFlow is a micro-CRM and document pipeline for European immigration lawyers and HR relocation teams.
+        Create a case, invite the client, collect documents, and generate ready-to-submit PDF applications.
+      </p>
+      <div class="hero-actions">
+        <a href="login.html" class="btn btn-primary btn-lg">Start a case →</a>
+        <a href="#how" class="btn btn-outline btn-lg">See the workflow</a>
+      </div>
+      <div class="hero-metrics">
+        <div class="hero-metric-item">
+          <span class="hero-metric-num">5</span>
+          <span class="hero-metric-label">kanban stages</span>
+        </div>
+        <span class="hero-metric-sep"></span>
+        <div class="hero-metric-item">
+          <span class="hero-metric-num">EU</span>
+          <span class="hero-metric-label">data jurisdiction</span>
+        </div>
+        <span class="hero-metric-sep"></span>
+        <div class="hero-metric-item">
+          <span class="hero-metric-num">24h</span>
+          <span class="hero-metric-label">auto data cleanup</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section how-section" id="how">
+      <div class="section-inner">
+        <h2 class="section-title">The core loop, in minutes.</h2>
+        <p class="section-desc">A protected workflow designed around how immigration cases actually move.</p>
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-number">01</div>
+            <div class="step-title">Create a case</div>
+            <p class="step-desc">The lawyer opens the dashboard and creates a case. LexFlow generates a secure, client-specific link.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-number">02</div>
+            <div class="step-title">Client uploads & pays</div>
+            <p class="step-desc">The client follows the checklist, pays the invoice via Stripe, and uploads passport scans and contracts.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-number">03</div>
+            <div class="step-title">AI parses & fills</div>
+            <p class="step-desc">The backend reads the documents, validates the data with Pydantic, and injects it into the official government PDF.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-number">04</div>
+            <div class="step-title">Lawyer submits</div>
+            <p class="step-desc">The final form is downloaded and submitted to the authority. Source files are purged automatically after the retention window.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features-section" id="features">
+      <div class="section-inner">
+        <h2 class="section-title">Built for European compliance.</h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🇪🇺</div>
+            <h3>EU-only infrastructure</h3>
+            <p>Cloudflare Pages + R2 and Supabase EU Central keep data within European boundaries.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📄</div>
+            <h3>Official PDF mapping</h3>
+            <p>We fill original interactive government forms (AcroForms) instead of printing overlays.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧾</div>
+            <h3>EU-compliant invoicing</h3>
+            <p>Sequential invoice numbers, VAT handling, and a clear path to ZUGFeRD/XRechnung.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">✉️</div>
+            <h3>Email-to-case matching</h3>
+            <p>Documents sent by email are matched to the right client and case automatically.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <span class="brand-mark">Lf</span>
+        <span>LexFlow · EU LegalTech pilot</span>
+      </div>
+    </footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

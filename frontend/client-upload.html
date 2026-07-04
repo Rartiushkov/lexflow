@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Client portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="portal" data-api-base="https://lexflow-backend.onrender.com">
+  <div class="portal-card">
+    <div class="portal-header">
+      <span class="brand-mark" style="margin:0 auto 12px;display:inline-flex;background:#fff;color:var(--navy);">Lf</span>
+      <h1>Client portal</h1>
+      <p>Secure document upload for your immigration case</p>
+    </div>
+
+    <div class="portal-body">
+      <div style="margin-bottom:24px;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Case</div>
+        <div style="font-weight:600;" id="case-title">Loading…</div>
+      </div>
+
+      <div class="checklist" id="checklist">
+        <div class="checklist-item" data-doc="passport">
+          <div class="checklist-icon">✓</div>
+          <div class="checklist-text">Passport scan</div>
+        </div>
+        <div class="checklist-item" data-doc="contract">
+          <div class="checklist-icon">✓</div>
+          <div class="checklist-text">Employment contract</div>
+        </div>
+        <div class="checklist-item" data-doc="degree">
+          <div class="checklist-icon">✓</div>
+          <div class="checklist-text">Degree certificate</div>
+        </div>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-title">Drop files here or click to upload</div>
+        <div class="dropzone-hint">Accepted: PDF, JPG, PNG — max 10 MB per file</div>
+        <input type="file" id="file-input" multiple accept=".pdf,image/*" style="display:none;" />
+      </div>
+
+      <div id="uploaded-list" style="margin-top:16px;"></div>
+
+      <div id="payment-block" style="display:none;margin-top:24px;padding-top:24px;border-top:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <div style="font-weight:600;">Invoice</div>
+            <div style="font-size:12px;color:var(--muted);">Pay securely to proceed</div>
+          </div>
+          <div style="font-size:20px;font-weight:700;" id="invoice-amount">€0,00</div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" id="btn-pay">Pay with card</button>
+      </div>
+    </div>
+
+    <div class="portal-footer">
+      This portal is protected by LexFlow. Documents are processed within the EU.
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const caseId = params.get('id');
+
+    async function loadPortal() {
+      try {
+        const c = await get(`/api/cases/${caseId}/public`);
+        document.getElementById('case-title').textContent = `${c.client_name} · ${c.case_type}`;
+        if (c.invoice && !c.invoice_paid) {
+          document.getElementById('payment-block').style.display = 'block';
+          document.getElementById('invoice-amount').textContent = formatCurrency(c.invoice.amount);
+        }
+      } catch (err) {
+        document.getElementById('case-title').textContent = 'Demo case · Blue Card';
+      }
+    }
+
+    function handleFiles(files) {
+      const list = document.getElementById('uploaded-list');
+      for (const file of files) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:var(--radius-sm);margin-bottom:8px;';
+        row.innerHTML = `<span>${file.name}</span><span class="badge badge-blue">uploaded</span>`;
+        list.appendChild(row);
+      }
+      showToast('Files uploaded', 'success');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (caseId) loadPortal();
+      const dz = document.getElementById('dropzone');
+      const input = document.getElementById('file-input');
+      dz.addEventListener('click', () => input.click());
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dz.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+      });
+      input.addEventListener('change', () => handleFiles(input.files));
+      document.getElementById('btn-pay')?.addEventListener('click', () => showToast('Redirecting to Stripe (demo)', 'info'));
+    });
+  </script>
+</body>
+</html>

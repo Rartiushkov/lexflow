@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Cases</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item">Dashboard</a>
+      <a href="cases.html" class="nav-item active">Cases</a>
+      <a href="invoices.html" class="nav-item">Invoices</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info"><div class="user-name" id="user-name">—</div><div class="user-role" id="user-email">—</div></div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb"><span>Workspace</span><span class="sep">/</span><strong>Cases</strong></div>
+      <div class="topbar-actions"><a href="new-case.html" class="btn btn-primary">+ New case</a></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header"><div><div class="page-title">All cases</div><div class="page-subtitle">Search and filter client cases.</div></div></div>
+      <div class="card">
+        <div class="table-row header"><span>Client</span><span>Type</span><span>Country</span><span>Status</span><span>Date</span></div>
+        <div id="cases-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      requireAuth();
+      const list = document.getElementById('cases-list');
+      try {
+        const cases = await get('/api/cases');
+        list.innerHTML = cases.map(c => `
+          <div class="table-row clickable" onclick="window.location='case.html?id=${c.id}'">
+            <span><strong>${c.client_name}</strong></span>
+            <span>${c.case_type}</span>
+            <span>${c.destination}</span>
+            <span><span class="badge badge-${c.stage === 'submitted' ? 'green' : c.stage === 'payment' ? 'yellow' : 'blue'}">${c.stage}</span></span>
+            <span>${formatDate(c.created_at)}</span>
+          </div>
+        `).join('');
+      } catch (err) {
+        list.innerHTML = '<div class="table-row"><span colspan="5">Failed to load cases.</span></div>';
+      }
+    });
+  </script>
+</body>
+</html>

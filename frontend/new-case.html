@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — New case</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand">
+      <span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span>
+      <span class="brand-name">LexFlow</span>
+    </a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item">Dashboard</a>
+      <a href="cases.html" class="nav-item">Cases</a>
+      <a href="invoices.html" class="nav-item">Invoices</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-email">—</div>
+        </div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb">
+        <span>Workspace</span>
+        <span class="sep">/</span>
+        <strong>New case</strong>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Create a new case</div>
+          <div class="page-subtitle">We will generate a secure client portal link.</div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:720px;">
+        <div class="card-body">
+          <form id="case-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="client-name">Client full name</label>
+                <input class="form-input" id="client-name" type="text" placeholder="Anna Schmidt" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="client-email">Client email</label>
+                <input class="form-input" id="client-email" type="email" placeholder="anna@example.com" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="case-type">Case type</label>
+                <select class="form-select" id="case-type" required>
+                  <option value="">Select type</option>
+                  <option value="Blue Card">EU Blue Card</option>
+                  <option value="Work permit">Work permit</option>
+                  <option value="ICT permit">ICT permit</option>
+                  <option value="Family reunion">Family reunion</option>
+                  <option value="Self-employment">Self-employment</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="destination">Destination country</label>
+                <select class="form-select" id="destination" required>
+                  <option value="">Select country</option>
+                  <option value="Germany">Germany</option>
+                  <option value="France">France</option>
+                  <option value="Netherlands">Netherlands</option>
+                  <option value="Spain">Spain</option>
+                  <option value="Poland">Poland</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="notes">Internal notes</label>
+              <textarea class="form-textarea" id="notes" placeholder="Special circumstances, deadlines, etc."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Required documents</label>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                <label class="tag" style="cursor:pointer;"><input type="checkbox" checked /> Passport</label>
+                <label class="tag" style="cursor:pointer;"><input type="checkbox" checked /> Contract</label>
+                <label class="tag" style="cursor:pointer;"><input type="checkbox" /> Degree certificate</label>
+                <label class="tag" style="cursor:pointer;"><input type="checkbox" /> Health insurance</label>
+                <label class="tag" style="cursor:pointer;"><input type="checkbox" /> Housing proof</label>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Create case & generate link</button>
+          </form>
+
+          <div id="result" style="display:none;margin-top:24px;padding:16px;background:var(--navy-light);border-radius:var(--radius-sm);">
+            <div class="form-label">Client portal link</div>
+            <div class="form-input" id="portal-link" style="margin-bottom:8px;word-break:break-all;"></div>
+            <button class="btn btn-sm btn-outline" onclick="copyLink()">Copy link</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      requireAuth();
+      document.getElementById('case-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const body = {
+          client_name: document.getElementById('client-name').value,
+          client_email: document.getElementById('client-email').value,
+          case_type: document.getElementById('case-type').value,
+          destination: document.getElementById('destination').value,
+          notes: document.getElementById('notes').value,
+        };
+        try {
+          const data = await post('/api/cases', body);
+          document.getElementById('portal-link').textContent = data.portal_url;
+          document.getElementById('result').style.display = 'block';
+          showToast('Case created', 'success');
+        } catch (err) {
+          // demo fallback
+          const id = Math.random().toString(36).slice(2, 8);
+          const url = `${window.location.origin}/client-upload.html?id=${id}`;
+          document.getElementById('portal-link').textContent = url;
+          document.getElementById('result').style.display = 'block';
+        }
+      });
+    });
+    function copyLink() {
+      const text = document.getElementById('portal-link').textContent;
+      navigator.clipboard.writeText(text).then(() => showToast('Copied', 'success'));
+    }
+  </script>
+</body>
+</html>
