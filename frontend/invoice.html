@@ -332,15 +332,18 @@
         });
       });
       host.querySelectorAll('.line-remove').forEach(button => {
-        button.addEventListener('click', (event) => {
+        button.addEventListener('click', async (event) => {
           const row = event.target.closest('.attachment-row');
           const removedId = row.dataset.attachmentId;
+          await deleteInvoiceAttachmentRemote(formState.invoice.id, removedId);
           formState.invoice.attachments = (formState.invoice.attachments || []).filter(item => item.id !== removedId);
           if (formState.previewAttachmentId === removedId) {
             formState.previewAttachmentId = '';
           }
+          upsertInvoice({ ...collectInvoice(), attachments: formState.invoice.attachments });
           renderAttachments(formState.invoice.attachments);
           syncPreview();
+          showToast('Attachment deleted', 'success');
         });
       });
       renderAttachmentPreview(null);

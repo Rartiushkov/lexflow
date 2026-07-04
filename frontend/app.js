@@ -245,6 +245,25 @@ function saveIncomingDocuments(documents) {
   localStorage.setItem(LS_INCOMING_DOCUMENTS, JSON.stringify(documents));
 }
 
+function deleteIncomingDocumentLocal(documentId) {
+  saveIncomingDocuments(getIncomingDocuments().filter(item => item.id !== documentId));
+}
+
+async function deleteDocumentRemote(documentId) {
+  if (!documentId || documentId.startsWith('doc-')) {
+    deleteIncomingDocumentLocal(documentId);
+    return false;
+  }
+  try {
+    await api('DELETE', `/api/documents/${documentId}`);
+    deleteIncomingDocumentLocal(documentId);
+    return true;
+  } catch {
+    deleteIncomingDocumentLocal(documentId);
+    return false;
+  }
+}
+
 function normalizeLookup(value) {
   return (value || '')
     .toLowerCase()
@@ -437,6 +456,18 @@ async function uploadInvoiceAttachmentRemote(invoiceId, name, blob) {
     return await upload(`/api/invoices/${invoiceId}/attachments`, file);
   } catch {
     return null;
+  }
+}
+
+async function deleteInvoiceAttachmentRemote(invoiceId, attachmentId) {
+  if (!invoiceId || !attachmentId || attachmentId.startsWith('att-')) {
+    return false;
+  }
+  try {
+    await api('DELETE', `/api/invoices/${invoiceId}/attachments/${attachmentId}`);
+    return true;
+  } catch {
+    return false;
   }
 }
 

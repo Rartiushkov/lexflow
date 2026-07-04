@@ -153,20 +153,41 @@
       const list = document.getElementById('doc-list');
       const incomingDocs = getDocumentsForCase(c.id);
       const mergedDocs = [...(c.docs || []), ...incomingDocs.map(d => ({
+        id: d.id,
+        document_id: d.id,
+        key: d.key || '',
         name: d.name,
         status: 'attached',
         uploaded_at: d.uploaded_at,
-        data_url: d.data_url,
+        data_url: d.data_url || d.url,
       }))];
       document.getElementById('doc-count').textContent = mergedDocs.length;
       if (mergedDocs.length) {
         list.innerHTML = mergedDocs.map(d => `
-          <div class="table-row">
-            <div>${d.data_url ? `<a href="${d.data_url}" download="${d.name}"><strong>${d.name}</strong></a>` : `<strong>${d.name}</strong>`}</div>
+          <div class="table-row case-doc-row">
+            <div>${d.data_url || d.url ? `<a href="${d.data_url || d.url}" download="${d.name}"><strong>${d.name}</strong></a>` : `<strong>${d.name}</strong>`}</div>
             <div>${formatDate(d.uploaded_at)}</div>
             <div><span class="badge badge-green">${d.status}</span></div>
+            <div><button class="btn btn-outline btn-sm" type="button" data-delete-case-doc="${d.document_id || d.key || d.id || d.name}">Delete</button></div>
           </div>
         `).join('');
+        list.querySelectorAll('[data-delete-case-doc]').forEach(button => {
+          button.addEventListener('click', async () => {
+            const ref = button.dataset.deleteCaseDoc;
+            try {
+              if (ref.startsWith('doc-')) {
+                await deleteDocumentRemote(ref);
+              } else {
+                await api('DELETE', `/api/cases/${caseId}/documents/${encodeURIComponent(ref)}`);
+              }
+              showToast('Document deleted', 'success');
+            } catch {
+              deleteIncomingDocumentLocal(ref);
+              showToast('Document deleted locally', 'success');
+            }
+            loadCase();
+          });
+        });
       } else {
         list.innerHTML = `<p style="color:var(--muted);">No documents uploaded yet.</p>`;
       }

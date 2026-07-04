@@ -89,12 +89,33 @@
         row.innerHTML = `<span>${file.name}</span><span class="badge badge-blue">uploading</span>`;
         list.appendChild(row);
         try {
-          await upload(`/api/cases/${caseId}/upload`, file);
-          row.querySelector('.badge').textContent = 'uploaded';
-          row.querySelector('.badge').className = 'badge badge-green';
+          const uploaded = await upload(`/api/cases/${caseId}/upload`, file);
+          row.dataset.documentRef = uploaded.document_id || uploaded.key || '';
+          row.innerHTML = `
+            <span>${file.name}</span>
+            <span class="table-actions">
+              <span class="badge badge-green">uploaded</span>
+              <button class="btn btn-outline btn-sm" type="button" data-delete-upload>Delete</button>
+            </span>
+          `;
+          row.querySelector('[data-delete-upload]').addEventListener('click', async () => {
+            const ref = row.dataset.documentRef;
+            if (ref) {
+              try { await api('DELETE', `/api/cases/${caseId}/documents/${encodeURIComponent(ref)}`); }
+              catch {}
+            }
+            row.remove();
+            showToast(`${file.name} deleted`, 'success');
+          });
         } catch (err) {
           row.querySelector('.badge').textContent = 'failed';
           row.querySelector('.badge').className = 'badge badge-red';
+          const deleteButton = document.createElement('button');
+          deleteButton.className = 'btn btn-outline btn-sm';
+          deleteButton.type = 'button';
+          deleteButton.textContent = 'Delete';
+          deleteButton.addEventListener('click', () => row.remove());
+          row.appendChild(deleteButton);
         }
       }
       showToast('Uploads complete', 'success');

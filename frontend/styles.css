@@ -752,6 +752,18 @@ body.dashboard::after {
 .table-row.clickable { cursor: pointer; }
 .table-row.clickable:hover { background: rgba(255, 255, 255, 0.03); }
 
+.case-doc-row {
+  grid-template-columns: minmax(0, 1.4fr) 130px 120px 100px;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -1911,9 +1923,14 @@ body.landing .footer .brand-mark {
   .page-content { padding-left: 16px; padding-right: 16px; }
   .invoice-table,
   .intake-table,
+  .case-doc-row,
   .queue-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .table-actions {
+    justify-content: flex-start;
   }
   .invoice-table-head,
   .intake-table-head { display: none; }

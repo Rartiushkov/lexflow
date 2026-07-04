@@ -139,12 +139,23 @@
             <span>${doc.case_id ? `<a href="case.html?id=${doc.case_id}">${doc.case_name}</a>` : '—'}</span>
             <span><span class="badge ${doc.status === 'assigned' ? 'badge-green' : 'badge-yellow'}">${doc.status}</span></span>
             <span>${formatDate(doc.uploaded_at)}</span>
-            <span>${doc.data_url || doc.url ? `<a class="btn btn-outline btn-sm" href="${doc.data_url || doc.url}" download="${doc.name}">Open</a>` : '—'}</span>
+            <span class="table-actions">
+              ${doc.data_url || doc.url ? `<a class="btn btn-outline btn-sm" href="${doc.data_url || doc.url}" download="${doc.name}">Open</a>` : ''}
+              <button class="btn btn-outline btn-sm" type="button" data-delete-doc="${doc.id}">Delete</button>
+            </span>
           </div>
         `).join('');
       };
       assignedHost.innerHTML = renderRows(assigned);
       unrecognizedHost.innerHTML = renderRows(unrecognized, true);
+      document.querySelectorAll('[data-delete-doc]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const docId = button.dataset.deleteDoc;
+          await deleteDocumentRemote(docId);
+          await renderIntakeLists();
+          showToast('Document deleted', 'success');
+        });
+      });
     }
 
     async function handleIntakeFiles(fileList) {

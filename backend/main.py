@@ -202,6 +202,29 @@ async def db_update_document(document_id: str, patch: dict) -> Optional[dict]:
     return doc
 
 
+async def db_get_document(document_id: str) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("documents").select("*").eq("id", document_id).single().execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase document get failed: {e}")
+    return memory_documents.get(document_id)
+
+
+async def db_delete_document(document_id: str) -> Optional[dict]:
+    doc = await db_get_document(document_id)
+    if not doc:
+        return None
+    if USE_SUPABASE:
+        try:
+            supabase_client.table("documents").delete().eq("id", document_id).execute()
+        except Exception as e:
+            print(f"Supabase document delete failed: {e}")
+    memory_documents.pop(document_id, None)
+    return doc
+
+
 async def db_upsert_invoice(data: dict) -> dict:
     if USE_SUPABASE:
         try:
@@ -253,6 +276,14 @@ async def upload_file(case_id: str, file: UploadFile, source: str = "portal") ->
         except Exception as e:
             print(f"R2 upload failed: {e}")
     return {"key": key, "name": file.filename, "url": "", "source": source, "status": "uploaded", "size": len(content), "content_type": file.content_type or "application/octet-stream"}
+
+
+def delete_r2_object(key: str):
+    if USE_R2 and key:
+        try:
+            r2_client.delete_object(Bucket=R2_BUCKET_NAME, Key=key)
+        except Exception as e:
+            print(f"R2 delete failed: {e}")
 
 
 # ─── OCR helpers ────────────────────────────────────────
@@ -382,8 +413,8 @@ class UpsertInvoiceRequest(BaseModel):
     currency: Optional[str] = "EUR"
     notes: Optional[str] = ""
     template_id: Optional[str] = ""
-    items: list[dict] = []
-    attachments: list[dict] = []
+    items: list[dict] = Field(default_factory=list)
+    attachments: list[dict] = Field(default_factory=list)
 
 
 @app.get("/api/cases")
@@ -451,9 +482,26 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     upload = await upload_file(case_id, file, source="lawyer" if user else "client")
-    docs = case.get("docs", []) + [upload]
+    document_id = str(uuid.uuid4())
+    document = {
+        "id": document_id,
+        "lawyer_id": user["id"] if user else case.get("lawyer_id"),
+        "case_id": case_id,
+        "case_name": case.get("client_name", ""),
+        "name": upload["name"],
+        "key": upload["key"],
+        "url": upload.get("url", ""),
+        "source": "lawyer" if user else "client",
+        "status": "assigned",
+        "content_type": upload.get("content_type", file.content_type or "application/octet-stream"),
+        "size": upload.get("size", 0),
+        "uploaded_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    saved_doc = await db_create_document(document)
+    docs = case.get("docs", []) + [{**upload, "document_id": saved_doc["id"], "uploaded_at": saved_doc["uploaded_at"]}]
     await db_update_case(case_id, {"docs": docs, "updated_at": utc_now()})
-    return upload
+    return {**upload, "document_id": saved_doc["id"]}
 
 
 @app.get("/api/documents")
@@ -522,6 +570,45 @@ async def assign_document(document_id: str, req: AssignDocumentRequest, user: di
     return doc
 
 
+@app.delete("/api/documents/{document_id}")
+async def delete_document(document_id: str, user: dict = Depends(get_current_user)):
+    doc = await db_delete_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    delete_r2_object(doc.get("key", ""))
+    case_id = doc.get("case_id")
+    if case_id:
+        case = await db_get_case(case_id)
+        if case:
+            docs = [
+                item for item in case.get("docs", [])
+                if item.get("document_id") != document_id and item.get("key") != doc.get("key")
+            ]
+            await db_update_case(case_id, {"docs": docs, "updated_at": utc_now()})
+    return {"deleted": True, "id": document_id}
+
+
+@app.delete("/api/cases/{case_id}/documents/{document_ref:path}")
+async def delete_case_document(case_id: str, document_ref: str, user: Optional[dict] = Depends(get_current_user_optional)):
+    case = await db_get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    removed = None
+    kept = []
+    for item in case.get("docs", []):
+        if item.get("document_id") == document_ref or item.get("key") == document_ref:
+            removed = item
+        else:
+            kept.append(item)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if removed.get("document_id"):
+        await db_delete_document(removed["document_id"])
+    delete_r2_object(removed.get("key", ""))
+    await db_update_case(case_id, {"docs": kept, "updated_at": utc_now()})
+    return {"deleted": True, "id": document_ref}
+
+
 # ─── Invoices ───────────────────────────────────────────
 @app.get("/api/invoices")
 async def list_invoices(case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
@@ -573,6 +660,27 @@ async def upload_invoice_attachment(invoice_id: str, file: UploadFile = File(...
     invoice["updated_at"] = utc_now()
     await db_upsert_invoice(invoice)
     return attachment
+
+
+@app.delete("/api/invoices/{invoice_id}/attachments/{attachment_id}")
+async def delete_invoice_attachment(invoice_id: str, attachment_id: str, user: dict = Depends(get_current_user)):
+    invoice = await db_get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    removed = None
+    next_attachments = []
+    for attachment in invoice.get("attachments", []):
+        if attachment.get("id") == attachment_id:
+            removed = attachment
+        else:
+            next_attachments.append(attachment)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    delete_r2_object(removed.get("key", ""))
+    invoice["attachments"] = next_attachments
+    invoice["updated_at"] = utc_now()
+    await db_upsert_invoice(invoice)
+    return {"deleted": True, "id": attachment_id}
 
 
 @app.post("/api/cases/{case_id}/invoice")
