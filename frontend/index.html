@@ -28,64 +28,61 @@
 
   <main>
     <section class="hero-section">
-      <div class="hero-badge">
-        <span class="hero-badge-dot"></span>
-        Built for EU immigration practice
-      </div>
+      <div class="hero-badge">EU immigration workflow</div>
       <h1 class="hero-title">
-        Client documents, invoices &<br>
-        <em>government forms — one flow.</em>
+        Immigration cases,<br>
+        <em>without scattered files.</em>
       </h1>
       <p class="hero-sub">
-        LexFlow is a micro-CRM and document pipeline for European immigration lawyers and HR relocation teams.
-        Create a case, invite the client, collect documents, and generate ready-to-submit PDF applications.
+        LexFlow keeps client uploads, invoices, document parsing, and case progress in one place.
+        Open a case, send one link, collect files, and prepare the submission faster.
       </p>
       <div class="hero-actions">
-        <a href="login.html" class="btn btn-primary btn-lg">Start a case →</a>
-        <a href="#how" class="btn btn-outline btn-lg">See the workflow</a>
+        <a href="login.html" class="btn btn-primary btn-lg">Open dashboard</a>
+        <a href="#how" class="btn btn-outline btn-lg">How it works</a>
       </div>
       <div class="hero-metrics">
         <div class="hero-metric-item">
-          <span class="hero-metric-num">5</span>
-          <span class="hero-metric-label">kanban stages</span>
+          <span class="hero-metric-num">1</span>
+          <span class="hero-metric-label">workspace for each case</span>
         </div>
         <span class="hero-metric-sep"></span>
         <div class="hero-metric-item">
           <span class="hero-metric-num">EU</span>
-          <span class="hero-metric-label">data jurisdiction</span>
+          <span class="hero-metric-label">hosting path ready</span>
         </div>
         <span class="hero-metric-sep"></span>
         <div class="hero-metric-item">
-          <span class="hero-metric-num">24h</span>
-          <span class="hero-metric-label">auto data cleanup</span>
+          <span class="hero-metric-num">PDF</span>
+          <span class="hero-metric-label">form output</span>
         </div>
       </div>
     </section>
 
     <section class="section how-section" id="how">
       <div class="section-inner">
-        <h2 class="section-title">The core loop, in minutes.</h2>
-        <p class="section-desc">A protected workflow designed around how immigration cases actually move.</p>
+        <h2 class="section-title">How the flow works</h2>
+        <p class="section-desc">Straight workflow for a small immigration team.</p>
         <div class="steps-grid">
           <div class="step-card">
             <div class="step-number">01</div>
             <div class="step-title">Create a case</div>
-            <p class="step-desc">The lawyer opens the dashboard and creates a case. LexFlow generates a secure, client-specific link.</p>
+            <p class="step-desc">The lawyer opens the board, adds the client, and gets a private upload link.</p>
           </div>
           <div class="step-card">
             <div class="step-number">02</div>
-            <div class="step-title">Client uploads & pays</div>
-            <p class="step-desc">The client follows the checklist, pays the invoice via Stripe, and uploads passport scans and contracts.</p>
+            <div class="step-title">Client sends documents</div>
+            <p class="step-desc">The client uploads scans and supporting files into the same case.</p>
           </div>
           <div class="step-card">
             <div class="step-number">03</div>
-            <div class="step-title">AI parses & fills</div>
-            <p class="step-desc">The backend reads the documents, validates the data with Pydantic, and injects it into the official government PDF.</p>
+            <div class="step-title">Parser extracts data</div>
+            <p class="step-desc">The backend reads key fields from the documents and prepares form data.</p>
           </div>
           <div class="step-card">
             <div class="step-number">04</div>
-            <div class="step-title">Lawyer submits</div>
-            <p class="step-desc">The final form is downloaded and submitted to the authority. Source files are purged automatically after the retention window.</p>
+            <div class="step-title">Review and submit</div>
+            <p class="step-desc">The lawyer checks the result, downloads the PDF, and moves the case forward.</p>
           </div>
         </div>
       </div>
@@ -93,27 +90,23 @@
 
     <section class="section features-section" id="features">
       <div class="section-inner">
-        <h2 class="section-title">Built for European compliance.</h2>
+        <h2 class="section-title">What is inside</h2>
         <div class="features-grid">
           <div class="feature-card">
-            <div class="feature-icon">🇪🇺</div>
-            <h3>EU-only infrastructure</h3>
-            <p>Cloudflare Pages + R2 and Supabase EU Central keep data within European boundaries.</p>
+            <h3>Case board</h3>
+            <p>One board for document collection, payment status, review, and submission.</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">📄</div>
-            <h3>Official PDF mapping</h3>
-            <p>We fill original interactive government forms (AcroForms) instead of printing overlays.</p>
+            <h3>Client upload link</h3>
+            <p>Each case gets its own upload page, so the client does not send files across chats and email threads.</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🧾</div>
-            <h3>EU-compliant invoicing</h3>
-            <p>Sequential invoice numbers, VAT handling, and a clear path to ZUGFeRD/XRechnung.</p>
+            <h3>Document parsing</h3>
+            <p>Uploaded files can be parsed and turned into structured case data for the next step.</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">✉️</div>
-            <h3>Email-to-case matching</h3>
-            <p>Documents sent by email are matched to the right client and case automatically.</p>
+            <h3>PDF output</h3>
+            <p>The workflow ends with a downloadable form instead of another manual copy-paste round.</p>
           </div>
         </div>
       </div>
