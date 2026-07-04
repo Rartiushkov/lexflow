@@ -977,6 +977,31 @@ a.queue-row:hover {
   align-items: start;
 }
 
+.builder-tabs {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: rgba(10, 14, 22, 0.42);
+}
+
+.builder-tab {
+  min-width: 120px;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.builder-tab.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
 .builder-section-head {
   display: flex;
   align-items: flex-start;
@@ -1035,6 +1060,17 @@ a.queue-row:hover {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.template-logo-preview {
+  margin-bottom: 18px;
+}
+
+.template-logo-preview img {
+  display: block;
+  max-width: 180px;
+  max-height: 80px;
+  object-fit: contain;
 }
 
 .invoice-preview-eyebrow {
@@ -1106,6 +1142,27 @@ a.queue-row:hover {
   align-items: center;
   justify-content: space-between;
   padding: 18px 0 12px;
+}
+
+.invoice-preview-vat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+}
+
+.invoice-preview-vat span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.invoice-preview-vat strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .invoice-preview-total span {

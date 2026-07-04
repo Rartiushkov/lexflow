@@ -45,7 +45,12 @@
         </div>
       </div>
 
-      <div class="invoice-workspace">
+      <div class="builder-tabs">
+        <button class="builder-tab active" type="button" data-tab="invoice">Invoice</button>
+        <button class="builder-tab" type="button" data-tab="template">Template</button>
+      </div>
+
+      <div class="invoice-workspace" data-panel="invoice">
         <section class="card invoice-builder-card">
           <div class="card-header">
             <div>
@@ -68,6 +73,11 @@
                   <option value="overdue">Overdue</option>
                 </select>
               </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="invoice-template">Template</label>
+              <select class="form-select" id="invoice-template"></select>
             </div>
 
             <div class="form-row">
@@ -126,6 +136,110 @@
           <div class="invoice-preview" id="invoice-preview"></div>
         </aside>
       </div>
+
+      <div class="invoice-workspace" data-panel="template" style="display:none;">
+        <section class="card invoice-builder-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Template</div>
+              <div class="panel-subtitle">Seller identity, tax fields, payment terms, and logo.</div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btn-save-template">Save template</button>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="template-select">Saved template</label>
+                <select class="form-select" id="template-select"></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="template-name">Template name</label>
+                <input class="form-input" id="template-name" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="issuer-name">Seller legal name</label>
+                <input class="form-input" id="issuer-name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="issuer-address">Seller address</label>
+                <input class="form-input" id="issuer-address" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="issuer-email">Seller email</label>
+                <input class="form-input" id="issuer-email" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="issuer-phone">Seller phone</label>
+                <input class="form-input" id="issuer-phone" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="issuer-vat-id">VAT ID</label>
+                <input class="form-input" id="issuer-vat-id" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="issuer-tax-number">Tax number</label>
+                <input class="form-input" id="issuer-tax-number" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="issuer-iban">IBAN</label>
+                <input class="form-input" id="issuer-iban" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="issuer-bic">BIC</label>
+                <input class="form-input" id="issuer-bic" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="default-vat-rate">Default VAT %</label>
+                <input class="form-input" type="number" id="default-vat-rate" min="0" step="0.01" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="template-accent">Accent color</label>
+                <input class="form-input" type="color" id="template-accent" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="payment-terms">Payment terms</label>
+              <input class="form-input" id="payment-terms" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="footer-note">Footer note</label>
+              <textarea class="form-textarea" id="footer-note"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="template-logo">Logo / image</label>
+              <input class="form-input" type="file" id="template-logo" accept="image/*" />
+            </div>
+          </div>
+        </section>
+
+        <aside class="card invoice-preview-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Template preview</div>
+              <div class="panel-subtitle">Saved branding and mandatory seller fields.</div>
+            </div>
+          </div>
+          <div class="invoice-preview" id="template-preview"></div>
+        </aside>
+      </div>
     </div>
   </div>
 
@@ -136,6 +250,7 @@
     const caseId = params.get('case');
     const formState = {
       invoice: null,
+      template: null,
     };
 
     function getFieldValue(id) {
@@ -152,6 +267,7 @@
         ...formState.invoice,
         number: getFieldValue('invoice-number'),
         status: getFieldValue('invoice-status'),
+        template_id: getFieldValue('invoice-template'),
         client_name: getFieldValue('client-name'),
         client_email: getFieldValue('client-email'),
         issue_date: getFieldValue('issue-date'),
@@ -164,6 +280,35 @@
           unit_price: Number(row.querySelector('[data-field="unit_price"]').value || 0),
         })),
       };
+    }
+
+    function collectTemplate() {
+      return {
+        ...formState.template,
+        name: getFieldValue('template-name'),
+        issuer_name: getFieldValue('issuer-name'),
+        issuer_address: getFieldValue('issuer-address'),
+        issuer_email: getFieldValue('issuer-email'),
+        issuer_phone: getFieldValue('issuer-phone'),
+        issuer_vat_id: getFieldValue('issuer-vat-id'),
+        issuer_tax_number: getFieldValue('issuer-tax-number'),
+        iban: getFieldValue('issuer-iban'),
+        bic: getFieldValue('issuer-bic'),
+        default_vat_rate: Number(getFieldValue('default-vat-rate') || 0),
+        payment_terms: getFieldValue('payment-terms'),
+        footer_note: getFieldValue('footer-note'),
+        accent: getFieldValue('template-accent'),
+      };
+    }
+
+    function renderTemplateSelects(selectedId) {
+      const options = getInvoiceTemplates().map(template => `<option value="${template.id}">${template.name}</option>`).join('');
+      document.getElementById('invoice-template').innerHTML = options;
+      document.getElementById('template-select').innerHTML = options;
+      if (selectedId) {
+        setFieldValue('invoice-template', selectedId);
+        setFieldValue('template-select', selectedId);
+      }
     }
 
     function renderLineItems(items) {
@@ -189,7 +334,10 @@
 
     function renderPreview(invoice) {
       const preview = document.getElementById('invoice-preview');
+      const template = getInvoiceTemplateById(invoice.template_id) || getInvoiceTemplates()[0];
       const total = calculateInvoiceTotal(invoice);
+      const vatRate = Number(template?.default_vat_rate || 0);
+      const vatAmount = total * (vatRate / 100);
       preview.innerHTML = `
         <div class="invoice-preview-head">
           <div>
@@ -198,11 +346,16 @@
           </div>
           <span class="badge ${invoiceStatusBadge(invoice.status)}">${invoice.status}</span>
         </div>
+        ${template?.logo_data_url ? `<div class="template-logo-preview"><img src="${template.logo_data_url}" alt="Template logo" /></div>` : ''}
         <div class="invoice-preview-meta">
+          <div><span>Seller</span><strong>${template?.issuer_name || 'Seller legal name'}</strong></div>
+          <div><span>Seller address</span><strong>${template?.issuer_address || 'Seller address'}</strong></div>
           <div><span>Client</span><strong>${invoice.client_name || 'Client name'}</strong></div>
           <div><span>Email</span><strong>${invoice.client_email || 'client@email.com'}</strong></div>
           <div><span>Issue</span><strong>${formatDate(invoice.issue_date)}</strong></div>
           <div><span>Due</span><strong>${formatDate(invoice.due_date)}</strong></div>
+          <div><span>VAT ID</span><strong>${template?.issuer_vat_id || 'VAT ID'}</strong></div>
+          <div><span>Tax number</span><strong>${template?.issuer_tax_number || 'Tax number'}</strong></div>
         </div>
         <div class="invoice-preview-lines">
           ${(invoice.items || []).map(item => `
@@ -213,15 +366,51 @@
             </div>
           `).join('')}
         </div>
+        <div class="invoice-preview-vat">
+          <span>VAT ${vatRate}%</span>
+          <strong>${formatCurrency(vatAmount, invoice.currency || 'EUR')}</strong>
+        </div>
         <div class="invoice-preview-total">
           <span>Total</span>
-          <strong>${formatCurrency(total, invoice.currency || 'EUR')}</strong>
+          <strong>${formatCurrency(total + vatAmount, invoice.currency || 'EUR')}</strong>
         </div>
         <div class="invoice-preview-notes">
           <span>Notes</span>
           <p>${invoice.notes || 'Add payment or delivery notes here.'}</p>
+          <p>${template?.payment_terms || ''}</p>
+          <p>${template?.footer_note || ''}</p>
         </div>
       `;
+    }
+
+    function renderTemplatePreview(template) {
+      const preview = document.getElementById('template-preview');
+      preview.innerHTML = `
+        ${template.logo_data_url ? `<div class="template-logo-preview"><img src="${template.logo_data_url}" alt="Template logo" /></div>` : ''}
+        <div class="invoice-preview-head">
+          <div>
+            <div class="invoice-preview-eyebrow">Template</div>
+            <h2>${template.name}</h2>
+          </div>
+          <span class="badge badge-gray">${template.default_vat_rate}% VAT</span>
+        </div>
+        <div class="invoice-preview-meta">
+          <div><span>Seller</span><strong>${template.issuer_name || 'Seller legal name'}</strong></div>
+          <div><span>Address</span><strong>${template.issuer_address || 'Seller address'}</strong></div>
+          <div><span>Email</span><strong>${template.issuer_email || 'Seller email'}</strong></div>
+          <div><span>Phone</span><strong>${template.issuer_phone || 'Seller phone'}</strong></div>
+          <div><span>VAT ID</span><strong>${template.issuer_vat_id || 'VAT ID'}</strong></div>
+          <div><span>Tax number</span><strong>${template.issuer_tax_number || 'Tax number'}</strong></div>
+          <div><span>IBAN</span><strong>${template.iban || 'IBAN'}</strong></div>
+          <div><span>BIC</span><strong>${template.bic || 'BIC'}</strong></div>
+        </div>
+        <div class="invoice-preview-notes">
+          <span>Payment terms</span>
+          <p>${template.payment_terms || 'Payment terms'}</p>
+          <p>${template.footer_note || ''}</p>
+        </div>
+      `;
+      preview.style.setProperty('--template-accent', template.accent || '#d8bf8b');
     }
 
     function syncPreview() {
@@ -234,14 +423,21 @@
       renderPreview(formState.invoice);
     }
 
+    function syncTemplatePreview() {
+      formState.template = collectTemplate();
+      renderTemplatePreview(formState.template);
+    }
+
     function handleLineInput() {
       syncPreview();
     }
 
     function populateForm(invoice) {
       formState.invoice = createInvoiceDraft(invoice);
+      renderTemplateSelects(formState.invoice.template_id);
       setFieldValue('invoice-number', formState.invoice.number);
       setFieldValue('invoice-status', formState.invoice.status);
+      setFieldValue('invoice-template', formState.invoice.template_id);
       setFieldValue('client-name', formState.invoice.client_name);
       setFieldValue('client-email', formState.invoice.client_email);
       setFieldValue('issue-date', formState.invoice.issue_date);
@@ -253,9 +449,48 @@
       syncPreview();
     }
 
+    function populateTemplateForm(template) {
+      formState.template = createInvoiceTemplate(template);
+      renderTemplateSelects(formState.template.id);
+      setFieldValue('template-select', formState.template.id);
+      setFieldValue('template-name', formState.template.name);
+      setFieldValue('issuer-name', formState.template.issuer_name);
+      setFieldValue('issuer-address', formState.template.issuer_address);
+      setFieldValue('issuer-email', formState.template.issuer_email);
+      setFieldValue('issuer-phone', formState.template.issuer_phone);
+      setFieldValue('issuer-vat-id', formState.template.issuer_vat_id);
+      setFieldValue('issuer-tax-number', formState.template.issuer_tax_number);
+      setFieldValue('issuer-iban', formState.template.iban);
+      setFieldValue('issuer-bic', formState.template.bic);
+      setFieldValue('default-vat-rate', formState.template.default_vat_rate);
+      setFieldValue('payment-terms', formState.template.payment_terms);
+      setFieldValue('footer-note', formState.template.footer_note);
+      setFieldValue('template-accent', formState.template.accent);
+      syncTemplatePreview();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.builder-tab').forEach(button => {
+        button.classList.toggle('active', button.dataset.tab === tab);
+      });
+      document.querySelectorAll('[data-panel]').forEach(panel => {
+        panel.style.display = panel.dataset.panel === tab ? '' : 'none';
+      });
+    }
+
     function bindForm() {
-      ['invoice-number', 'invoice-status', 'client-name', 'client-email', 'issue-date', 'due-date', 'invoice-notes'].forEach(id => {
+      ['invoice-number', 'invoice-status', 'invoice-template', 'client-name', 'client-email', 'issue-date', 'due-date', 'invoice-notes'].forEach(id => {
         document.getElementById(id).addEventListener('input', syncPreview);
+      });
+      document.getElementById('template-select').addEventListener('change', (event) => {
+        const template = getInvoiceTemplateById(event.target.value);
+        if (template) populateTemplateForm(template);
+      });
+      ['template-name', 'issuer-name', 'issuer-address', 'issuer-email', 'issuer-phone', 'issuer-vat-id', 'issuer-tax-number', 'issuer-iban', 'issuer-bic', 'default-vat-rate', 'payment-terms', 'footer-note', 'template-accent'].forEach(id => {
+        document.getElementById(id).addEventListener('input', syncTemplatePreview);
+      });
+      document.querySelectorAll('.builder-tab').forEach(button => {
+        button.addEventListener('click', () => switchTab(button.dataset.tab));
       });
       document.getElementById('btn-add-line').addEventListener('click', () => {
         const invoice = collectInvoice();
@@ -266,6 +501,22 @@
         const saved = upsertInvoice(collectInvoice());
         showToast('Invoice saved', 'success');
         window.location.href = `invoice.html?id=${saved.id}`;
+      });
+      document.getElementById('btn-save-template').addEventListener('click', () => {
+        const saved = upsertInvoiceTemplate(collectTemplate());
+        renderTemplateSelects(saved.id);
+        showToast('Template saved', 'success');
+        populateTemplateForm(saved);
+      });
+      document.getElementById('template-logo').addEventListener('change', (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          formState.template = { ...collectTemplate(), logo_data_url: reader.result };
+          renderTemplatePreview(formState.template);
+        };
+        reader.readAsDataURL(file);
       });
     }
 
@@ -288,7 +539,9 @@
           invoice = createInvoiceDraft({ case_id: caseId });
         }
       }
-      populateForm(invoice || createInvoiceDraft());
+      const defaultTemplate = getInvoiceTemplates()[0];
+      populateTemplateForm(defaultTemplate);
+      populateForm(invoice || createInvoiceDraft({ template_id: defaultTemplate?.id || '' }));
     });
   </script>
 </body>

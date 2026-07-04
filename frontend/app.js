@@ -9,6 +9,7 @@ const SUPABASE_ANON = 'placeholder';
 const LS_TOKEN = 'lexflow_token';
 const LS_USER = 'lexflow_user';
 const LS_INVOICES = 'lexflow_invoices';
+const LS_INVOICE_TEMPLATES = 'lexflow_invoice_templates';
 
 // ─── Demo auth fallback ─────────────────────────────────
 function getToken() {
@@ -134,6 +135,7 @@ function invoiceSeed() {
       currency: 'EUR',
       notes: 'Transfer after payment confirmation.',
       case_id: '2',
+      template_id: 'tpl-default',
       items: [
         { id: 'line-1', description: 'ICT permit filing', quantity: 1, unit_price: 1190 },
       ],
@@ -149,6 +151,7 @@ function invoiceSeed() {
       currency: 'EUR',
       notes: 'Paid and archived.',
       case_id: '3',
+      template_id: 'tpl-default',
       items: [
         { id: 'line-1', description: 'Family reunion case package', quantity: 1, unit_price: 2380 },
       ],
@@ -168,6 +171,76 @@ function getInvoices() {
 
 function saveInvoices(invoices) {
   localStorage.setItem(LS_INVOICES, JSON.stringify(invoices));
+}
+
+function templateSeed() {
+  return [
+    {
+      id: 'tpl-default',
+      name: 'Standard DE/EU',
+      issuer_name: 'LexFlow Legal GmbH',
+      issuer_address: 'Musterstrasse 12, 10115 Berlin, Germany',
+      issuer_email: 'billing@lexflow.eu',
+      issuer_phone: '+49 30 0000 0000',
+      issuer_vat_id: 'DE123456789',
+      issuer_tax_number: '30/123/45678',
+      iban: 'DE89370400440532013000',
+      bic: 'COBADEFFXXX',
+      payment_terms: 'Pay within 7 days.',
+      footer_note: 'Please include the invoice number in the transfer reference.',
+      default_vat_rate: 19,
+      accent: '#d8bf8b',
+      logo_data_url: '',
+    },
+  ];
+}
+
+function getInvoiceTemplates() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_INVOICE_TEMPLATES));
+    if (Array.isArray(raw) && raw.length) return raw;
+  } catch {}
+  const seeded = templateSeed();
+  localStorage.setItem(LS_INVOICE_TEMPLATES, JSON.stringify(seeded));
+  return seeded;
+}
+
+function saveInvoiceTemplates(templates) {
+  localStorage.setItem(LS_INVOICE_TEMPLATES, JSON.stringify(templates));
+}
+
+function getInvoiceTemplateById(id) {
+  return getInvoiceTemplates().find(template => template.id === id) || null;
+}
+
+function createInvoiceTemplate(seed = {}) {
+  return {
+    id: seed.id || uid('tpl'),
+    name: seed.name || 'New template',
+    issuer_name: seed.issuer_name || '',
+    issuer_address: seed.issuer_address || '',
+    issuer_email: seed.issuer_email || '',
+    issuer_phone: seed.issuer_phone || '',
+    issuer_vat_id: seed.issuer_vat_id || '',
+    issuer_tax_number: seed.issuer_tax_number || '',
+    iban: seed.iban || '',
+    bic: seed.bic || '',
+    payment_terms: seed.payment_terms || 'Pay within 7 days.',
+    footer_note: seed.footer_note || '',
+    default_vat_rate: Number(seed.default_vat_rate ?? 19),
+    accent: seed.accent || '#d8bf8b',
+    logo_data_url: seed.logo_data_url || '',
+  };
+}
+
+function upsertInvoiceTemplate(template) {
+  const templates = getInvoiceTemplates();
+  const normalized = createInvoiceTemplate(template);
+  const idx = templates.findIndex(item => item.id === normalized.id);
+  if (idx >= 0) templates[idx] = normalized;
+  else templates.unshift(normalized);
+  saveInvoiceTemplates(templates);
+  return normalized;
 }
 
 function uid(prefix = 'id') {
@@ -216,6 +289,7 @@ function createInvoiceDraft(seed = {}) {
     currency: seed.currency || 'EUR',
     notes: seed.notes || '',
     case_id: seed.case_id || '',
+    template_id: seed.template_id || getInvoiceTemplates()[0]?.id || '',
     items: seed.items?.length
       ? seed.items
       : [{ id: uid('line'), description: 'Legal service', quantity: 1, unit_price: 0 }],
