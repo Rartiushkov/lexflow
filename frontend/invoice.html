@@ -17,6 +17,7 @@
       <span class="nav-section-label">Workspace</span>
       <a href="dashboard.html" class="nav-item">Dashboard</a>
       <a href="cases.html" class="nav-item">Cases</a>
+      <a href="documents.html" class="nav-item">Intake</a>
       <a href="invoices.html" class="nav-item active">Invoices</a>
       <span class="nav-section-label">Account</span>
       <a href="settings.html" class="nav-item">Settings</a>
@@ -342,14 +343,7 @@
           syncPreview();
         });
       });
-      const selected = attachments.find(item => item.id === formState.previewAttachmentId)
-        || attachments.find(item => item.generated && isPreviewableAttachment(item))
-        || attachments.find(item => isPreviewableAttachment(item))
-        || null;
-      if (selected) {
-        formState.previewAttachmentId = selected.id;
-      }
-      renderAttachmentPreview(selected);
+      renderAttachmentPreview(null);
     }
 
     function isPreviewableAttachment(file) {
@@ -670,7 +664,7 @@
         ];
         const saved = upsertInvoice({ ...invoice, attachments: nextAttachments });
         formState.invoice = saved;
-        formState.previewAttachmentId = nextAttachments[0]?.id || '';
+        formState.previewAttachmentId = '';
         renderAttachments(saved.attachments || []);
         renderPreview(saved);
         showToast('Invoice PDF attached', 'success');
