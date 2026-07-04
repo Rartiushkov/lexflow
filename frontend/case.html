@@ -6,7 +6,7 @@
   <title>LexFlow — Case detail</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -40,14 +40,14 @@
   <div class="dashboard-main">
     <div class="dashboard-topbar">
       <div class="topbar-breadcrumb">
-        <span>Workspace</span>
+        <span>Cases</span>
         <span class="sep">/</span>
         <a href="cases.html" style="color:var(--muted);">Cases</a>
         <span class="sep">/</span>
         <strong id="breadcrumb-name">Case</strong>
       </div>
       <div class="topbar-actions">
-        <a href="dashboard.html" class="btn btn-outline">Back to board</a>
+        <a href="dashboard.html" class="btn btn-outline">Back</a>
       </div>
     </div>
 
@@ -97,7 +97,7 @@
               <span class="card-title">Actions</span>
             </div>
             <div class="card-body">
-              <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-run-ai">Run AI parser</button>
+              <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-run-ai">Extract fields</button>
               <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-download">Download PDF form</button>
               <button class="btn btn-primary btn-sm" style="width:100%;" id="btn-advance">Advance stage</button>
             </div>
@@ -187,8 +187,8 @@
         catch { showToast('Invoice generated (demo)', 'success'); }
       });
       document.getElementById('btn-run-ai')?.addEventListener('click', async () => {
-        try { await post(`/api/cases/${caseId}/parse`, {}); showToast('AI parser done', 'success'); loadCase(); }
-        catch { showToast('AI parser failed', 'error'); }
+        try { await post(`/api/cases/${caseId}/parse`, {}); showToast('Fields extracted', 'success'); loadCase(); }
+        catch { showToast('Extraction failed', 'error'); }
       });
       document.getElementById('btn-download')?.addEventListener('click', () => {
         window.open(`${API_BASE}/api/cases/${caseId}/form`, '_blank');

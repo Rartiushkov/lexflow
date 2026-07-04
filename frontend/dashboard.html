@@ -6,7 +6,7 @@
   <title>LexFlow — Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -67,7 +67,7 @@
       <div class="page-header">
         <div>
           <div class="page-title">Case board</div>
-          <div class="page-subtitle">Documents, payment, review, and submission in one view.</div>
+          <div class="page-subtitle">Cases, files, payment, and release in one board.</div>
         </div>
       </div>
 
@@ -81,7 +81,7 @@
           <div class="stat-value" id="stat-payment">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">AI processing</div>
+          <div class="stat-label">Processing</div>
           <div class="stat-value" id="stat-processing">0</div>
         </div>
         <div class="stat-card">
@@ -101,7 +101,7 @@
     const STAGES = [
       { id: 'documents', label: 'Documents' },
       { id: 'payment', label: 'Payment' },
-      { id: 'processing', label: 'AI processing' },
+      { id: 'processing', label: 'Processing' },
       { id: 'review', label: 'Ready for review' },
       { id: 'submitted', label: 'Submitted' },
     ];
