@@ -116,10 +116,10 @@
       });
     }
 
-    function renderIntakeLists() {
+    async function renderIntakeLists() {
       const assignedHost = document.getElementById('assigned-list');
       const unrecognizedHost = document.getElementById('unrecognized-list');
-      const docs = getIncomingDocuments();
+      const docs = await fetchIncomingDocuments();
       const assigned = docs.filter(item => item.status === 'assigned');
       const unrecognized = docs.filter(item => item.status === 'unrecognized');
 
@@ -139,7 +139,7 @@
             <span>${doc.case_id ? `<a href="case.html?id=${doc.case_id}">${doc.case_name}</a>` : '—'}</span>
             <span><span class="badge ${doc.status === 'assigned' ? 'badge-green' : 'badge-yellow'}">${doc.status}</span></span>
             <span>${formatDate(doc.uploaded_at)}</span>
-            <span><a class="btn btn-outline btn-sm" href="${doc.data_url}" download="${doc.name}">Open</a></span>
+            <span>${doc.data_url || doc.url ? `<a class="btn btn-outline btn-sm" href="${doc.data_url || doc.url}" download="${doc.name}">Open</a>` : '—'}</span>
           </div>
         `).join('');
       };
@@ -151,14 +151,14 @@
       const created = await intakeDocuments(Array.from(fileList), getCaseDirectory());
       const assignedCount = created.filter(item => item.status === 'assigned').length;
       const unknownCount = created.filter(item => item.status === 'unrecognized').length;
-      renderIntakeLists();
+      await renderIntakeLists();
       showToast(`Uploaded ${created.length}. Assigned: ${assignedCount}. Unrecognized: ${unknownCount}.`, 'success');
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
       requireAuth();
       await loadCasesForMatching();
-      renderIntakeLists();
+      await renderIntakeLists();
 
       document.querySelectorAll('[data-doc-tab]').forEach(button => {
         button.addEventListener('click', () => switchDocTab(button.dataset.docTab));

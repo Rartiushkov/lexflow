@@ -319,7 +319,7 @@
           </div>
           <div class="attachment-actions">
             ${isPreviewableAttachment(file) ? `<button class="btn btn-outline btn-sm" type="button" data-preview-id="${file.id}">Preview</button>` : ''}
-            <a class="btn btn-outline btn-sm" href="${file.data_url}" download="${file.name}">Download</a>
+            <a class="btn btn-outline btn-sm" href="${file.data_url || file.url}" download="${file.name}">Download</a>
             <button class="line-remove" type="button">Remove</button>
           </div>
         </div>
@@ -368,11 +368,31 @@
       const type = file.type || '';
       const name = (file.name || '').toLowerCase();
       if (type.includes('pdf') || name.endsWith('.pdf')) {
-        host.innerHTML = `<div class="file-preview-stage"><iframe class="file-preview-frame" src="${file.data_url}" title="${file.name}"></iframe></div>`;
+        host.innerHTML = `
+          <div class="file-preview-toolbar">
+            <strong>${file.name}</strong>
+            <button class="btn btn-outline btn-sm" type="button" id="btn-close-file-preview">Close preview</button>
+          </div>
+          <div class="file-preview-stage"><iframe class="file-preview-frame" src="${file.data_url || file.url}" title="${file.name}"></iframe></div>
+        `;
+        document.getElementById('btn-close-file-preview')?.addEventListener('click', () => {
+          formState.previewAttachmentId = '';
+          renderAttachmentPreview(null);
+        });
         return;
       }
       if (type.startsWith('image/') || /\.(png|jpg|jpeg|webp)$/i.test(name)) {
-        host.innerHTML = `<div class="file-preview-stage"><img class="file-preview-image" src="${file.data_url}" alt="${file.name}" /></div>`;
+        host.innerHTML = `
+          <div class="file-preview-toolbar">
+            <strong>${file.name}</strong>
+            <button class="btn btn-outline btn-sm" type="button" id="btn-close-file-preview">Close preview</button>
+          </div>
+          <div class="file-preview-stage"><img class="file-preview-image" src="${file.data_url || file.url}" alt="${file.name}" /></div>
+        `;
+        document.getElementById('btn-close-file-preview')?.addEventListener('click', () => {
+          formState.previewAttachmentId = '';
+          renderAttachmentPreview(null);
+        });
         return;
       }
       host.innerHTML = `<div class="empty-attachments">This file type cannot be previewed yet.</div>`;
@@ -651,14 +671,18 @@
         const blob = await generateInvoicePdfBlob(invoice);
         const dataUrl = await blobToDataUrl(blob);
         const generatedName = `${invoice.number || 'invoice'}.pdf`;
+        await persistInvoiceRemote(invoice);
+        const remoteAttachment = await uploadInvoiceAttachmentRemote(invoice.id, generatedName, blob);
         const nextAttachments = [
           ...(invoice.attachments || []).filter(item => item.name !== generatedName),
           {
-            id: uid('att'),
+            id: remoteAttachment?.id || uid('att'),
             name: generatedName,
-            type: 'application/pdf',
-            size: blob.size,
+            type: remoteAttachment?.type || 'application/pdf',
+            size: remoteAttachment?.size || blob.size,
             data_url: dataUrl,
+            url: remoteAttachment?.url || '',
+            key: remoteAttachment?.key || '',
             generated: true,
           },
         ];

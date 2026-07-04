@@ -569,7 +569,10 @@ body.dashboard::after {
 }
 
 .nav-item svg {
-  display: none;
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
 }
 
 .sidebar-footer {
@@ -1015,7 +1018,9 @@ a.queue-row:hover {
 .intake-tabs .builder-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .intake-tabs .builder-tab span {
@@ -1190,6 +1195,23 @@ a.queue-row:hover {
   margin-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 16px;
+}
+
+.file-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.file-preview-toolbar strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text);
 }
 
 .file-preview-stage {
@@ -1719,6 +1741,99 @@ body.auth {
 .invoice-table,
 .intake-table {
   min-height: 48px;
+}
+
+body.landing {
+  --text: #171816;
+  --text-2: #4c5049;
+  --muted: #73786f;
+  background: #f4f1e8;
+  color: var(--text);
+}
+
+body.landing::before {
+  background:
+    linear-gradient(90deg, rgba(244, 241, 232, 0.96) 0%, rgba(244, 241, 232, 0.86) 44%, rgba(244, 241, 232, 0.44) 100%),
+    url("./assets/eu-hero-bg.png") center center / cover no-repeat;
+}
+
+body.landing::after {
+  background:
+    linear-gradient(180deg, rgba(244, 241, 232, 0.1) 0%, rgba(244, 241, 232, 0.7) 68%, #f4f1e8 100%);
+}
+
+body.landing .topbar {
+  background: rgba(244, 241, 232, 0.86);
+  border-bottom-color: rgba(20, 22, 19, 0.12);
+}
+
+body.landing .brand-mark {
+  background: #141511;
+  color: #f4f1e8;
+}
+
+body.landing .brand-name,
+body.landing .topnav a {
+  color: #2f332d;
+}
+
+body.landing .btn-outline {
+  color: #171816;
+  border-color: rgba(20, 22, 19, 0.22);
+  background: rgba(255, 255, 255, 0.24);
+}
+
+body.landing .hero-badge,
+body.landing .hero-panel,
+body.landing .workflow-step,
+body.landing .system-card {
+  background: rgba(255, 255, 255, 0.46);
+  border-color: rgba(20, 22, 19, 0.12);
+  backdrop-filter: blur(18px);
+}
+
+body.landing .hero-title em {
+  color: #5b6057;
+}
+
+body.landing .hero-sub,
+body.landing .section-desc,
+body.landing .workflow-step p,
+body.landing .system-card p {
+  color: #4c5049;
+}
+
+body.landing .workflow-strip,
+body.landing .system-grid,
+body.landing .section-band,
+body.landing .billing-band,
+body.landing .billing-aside,
+body.landing .billing-metric,
+body.landing .footer {
+  border-color: rgba(20, 22, 19, 0.12);
+}
+
+body.landing .footer {
+  background: rgba(244, 241, 232, 0.88);
+}
+
+body.landing .footer .brand-mark {
+  color: #f4f1e8;
+}
+
+@media (max-width: 1100px) {
+  .intake-table {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .intake-table-head {
+    display: none;
+  }
+
+  .intake-list-card {
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 1024px) {

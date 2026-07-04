@@ -74,6 +74,8 @@ users = {
 }
 memory_cases: dict[str, dict] = {}
 memory_invoices: dict[str, dict] = {}
+memory_documents: dict[str, dict] = {}
+memory_invoice_templates: dict[str, dict] = {}
 
 
 def utc_now():
@@ -155,6 +157,88 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
     return case
 
 
+async def db_create_document(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("documents").insert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase document insert failed: {e}")
+    memory_documents[data["id"]] = data
+    return data
+
+
+async def db_get_documents(status: Optional[str] = None, case_id: Optional[str] = None) -> list:
+    if USE_SUPABASE:
+        try:
+            query = supabase_client.table("documents").select("*").order("uploaded_at", desc=True)
+            if status:
+                query = query.eq("status", status)
+            if case_id:
+                query = query.eq("case_id", case_id)
+            res = query.execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase document select failed: {e}")
+    docs = list(memory_documents.values())
+    if status:
+        docs = [item for item in docs if item.get("status") == status]
+    if case_id:
+        docs = [item for item in docs if item.get("case_id") == case_id]
+    return sorted(docs, key=lambda item: item.get("uploaded_at", ""), reverse=True)
+
+
+async def db_update_document(document_id: str, patch: dict) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("documents").update(patch).eq("id", document_id).execute()
+            return res.data[0] if res.data else None
+        except Exception as e:
+            print(f"Supabase document update failed: {e}")
+    doc = memory_documents.get(document_id)
+    if doc:
+        doc.update(patch)
+        doc["updated_at"] = utc_now()
+    return doc
+
+
+async def db_upsert_invoice(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("invoices").upsert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase invoice upsert failed: {e}")
+    memory_invoices[data["id"]] = data
+    return data
+
+
+async def db_get_invoices(case_id: Optional[str] = None) -> list:
+    if USE_SUPABASE:
+        try:
+            query = supabase_client.table("invoices").select("*").order("updated_at", desc=True)
+            if case_id:
+                query = query.eq("case_id", case_id)
+            res = query.execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase invoice select failed: {e}")
+    invoices = list(memory_invoices.values())
+    if case_id:
+        invoices = [item for item in invoices if item.get("case_id") == case_id]
+    return sorted(invoices, key=lambda item: item.get("updated_at", item.get("created_at", "")), reverse=True)
+
+
+async def db_get_invoice(invoice_id: str) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("invoices").select("*").eq("id", invoice_id).single().execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase invoice get failed: {e}")
+    return memory_invoices.get(invoice_id)
+
+
 # ─── File storage helpers ───────────────────────────────
 async def upload_file(case_id: str, file: UploadFile, source: str = "portal") -> dict:
     ext = Path(file.filename or "document.pdf").suffix
@@ -165,10 +249,10 @@ async def upload_file(case_id: str, file: UploadFile, source: str = "portal") ->
         try:
             r2_client.put_object(Bucket=R2_BUCKET_NAME, Key=key, Body=content, ContentType=file.content_type or "application/octet-stream")
             url = f"{R2_PUBLIC_URL}/{key}" if R2_PUBLIC_URL else f"{R2_ENDPOINT}/{R2_BUCKET_NAME}/{key}"
-            return {"key": key, "name": file.filename, "url": url, "source": source, "status": "uploaded"}
+            return {"key": key, "name": file.filename, "url": url, "source": source, "status": "uploaded", "size": len(content), "content_type": file.content_type or "application/octet-stream"}
         except Exception as e:
             print(f"R2 upload failed: {e}")
-    return {"key": key, "name": file.filename, "url": "", "source": source, "status": "uploaded", "size": len(content)}
+    return {"key": key, "name": file.filename, "url": "", "source": source, "status": "uploaded", "size": len(content), "content_type": file.content_type or "application/octet-stream"}
 
 
 # ─── OCR helpers ────────────────────────────────────────
@@ -282,6 +366,26 @@ class CreateCase(BaseModel):
     notes: Optional[str] = ""
 
 
+class AssignDocumentRequest(BaseModel):
+    case_id: str
+
+
+class UpsertInvoiceRequest(BaseModel):
+    id: str
+    case_id: Optional[str] = ""
+    number: str
+    status: Optional[str] = "draft"
+    client_name: Optional[str] = ""
+    client_email: Optional[str] = ""
+    issue_date: Optional[str] = ""
+    due_date: Optional[str] = ""
+    currency: Optional[str] = "EUR"
+    notes: Optional[str] = ""
+    template_id: Optional[str] = ""
+    items: list[dict] = []
+    attachments: list[dict] = []
+
+
 @app.get("/api/cases")
 async def list_cases(user: dict = Depends(get_current_user)):
     return await db_get_cases()
@@ -352,7 +456,125 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     return upload
 
 
+@app.get("/api/documents")
+async def list_documents(status: Optional[str] = None, case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    return await db_get_documents(status=status, case_id=case_id)
+
+
+@app.post("/api/documents/intake")
+async def intake_document(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    cases = await db_get_cases()
+    filename_lookup = re.sub(r"[^a-z0-9]+", " ", (file.filename or "").lower()).strip()
+    matched_case = None
+    for case in cases:
+        parts = re.sub(r"[^a-z0-9]+", " ", case.get("client_name", "").lower()).split()
+        if parts and all(part in filename_lookup for part in parts):
+            matched_case = case
+            break
+
+    case_id = matched_case["id"] if matched_case else "unrecognized"
+    uploaded = await upload_file(case_id, file, source="intake")
+    document = {
+        "id": str(uuid.uuid4()),
+        "lawyer_id": user["id"],
+        "case_id": matched_case["id"] if matched_case else None,
+        "case_name": matched_case.get("client_name") if matched_case else "",
+        "name": uploaded["name"],
+        "key": uploaded["key"],
+        "url": uploaded.get("url", ""),
+        "source": "intake",
+        "status": "assigned" if matched_case else "unrecognized",
+        "content_type": uploaded.get("content_type", file.content_type or "application/octet-stream"),
+        "size": uploaded.get("size", 0),
+        "uploaded_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    saved = await db_create_document(document)
+    if matched_case:
+        docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"]}]
+        await db_update_case(matched_case["id"], {"docs": docs, "updated_at": utc_now()})
+    return saved
+
+
+@app.post("/api/documents/{document_id}/assign")
+async def assign_document(document_id: str, req: AssignDocumentRequest, user: dict = Depends(get_current_user)):
+    case = await db_get_case(req.case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    doc = await db_update_document(document_id, {
+        "case_id": case["id"],
+        "case_name": case["client_name"],
+        "status": "assigned",
+        "updated_at": utc_now(),
+    })
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    docs = case.get("docs", []) + [{
+        "document_id": doc["id"],
+        "key": doc.get("key", ""),
+        "name": doc.get("name", ""),
+        "url": doc.get("url", ""),
+        "source": doc.get("source", "intake"),
+        "status": "uploaded",
+        "uploaded_at": doc.get("uploaded_at", utc_now()),
+    }]
+    await db_update_case(case["id"], {"docs": docs, "updated_at": utc_now()})
+    return doc
+
+
 # ─── Invoices ───────────────────────────────────────────
+@app.get("/api/invoices")
+async def list_invoices(case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    return await db_get_invoices(case_id=case_id)
+
+
+@app.get("/api/invoices/{invoice_id}")
+async def get_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
+    invoice = await db_get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
+
+
+@app.post("/api/invoices")
+async def upsert_invoice(req: UpsertInvoiceRequest, user: dict = Depends(get_current_user)):
+    total = sum(float(item.get("quantity", 0) or 0) * float(item.get("unit_price", 0) or 0) for item in req.items)
+    invoice = req.model_dump()
+    invoice.update({
+        "lawyer_id": user["id"],
+        "amount": total,
+        "net": total,
+        "vat": 0,
+        "vat_rate": 0,
+        "updated_at": utc_now(),
+        "created_at": invoice.get("created_at") or utc_now(),
+    })
+    return await db_upsert_invoice(invoice)
+
+
+@app.post("/api/invoices/{invoice_id}/attachments")
+async def upload_invoice_attachment(invoice_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    invoice = await db_get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    case_id = invoice.get("case_id") or "invoices"
+    uploaded = await upload_file(f"{case_id}/invoices/{invoice_id}", file, source="invoice")
+    attachment = {
+        "id": str(uuid.uuid4()),
+        "name": uploaded["name"],
+        "key": uploaded["key"],
+        "url": uploaded.get("url", ""),
+        "type": uploaded.get("content_type", file.content_type or "application/octet-stream"),
+        "size": uploaded.get("size", 0),
+        "uploaded_at": utc_now(),
+    }
+    attachments = invoice.get("attachments", []) + [attachment]
+    invoice["attachments"] = attachments
+    invoice["updated_at"] = utc_now()
+    await db_upsert_invoice(invoice)
+    return attachment
+
+
 @app.post("/api/cases/{case_id}/invoice")
 async def create_invoice(case_id: str, user: dict = Depends(get_current_user)):
     case = await db_get_case(case_id)
@@ -372,7 +594,7 @@ async def create_invoice(case_id: str, user: dict = Depends(get_current_user)):
         "currency": "EUR",
         "created_at": utc_now(),
     }
-    memory_invoices[invoice["id"]] = invoice
+    await db_upsert_invoice({**invoice, "case_id": case_id, "lawyer_id": user["id"], "status": "draft", "updated_at": utc_now()})
     await db_update_case(case_id, {"invoice": invoice, "updated_at": utc_now()})
     return invoice
 

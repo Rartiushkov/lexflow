@@ -35,12 +35,63 @@ CREATE TABLE IF NOT EXISTS public.cases (
 CREATE TABLE IF NOT EXISTS public.invoices (
     id TEXT PRIMARY KEY,
     case_id TEXT REFERENCES public.cases(id) ON DELETE CASCADE,
+    lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     number TEXT NOT NULL,
-    amount NUMERIC NOT NULL,
-    net NUMERIC NOT NULL,
-    vat NUMERIC NOT NULL,
-    vat_rate NUMERIC NOT NULL,
+    status TEXT DEFAULT 'draft',
+    client_name TEXT,
+    client_email TEXT,
+    issue_date TEXT,
+    due_date TEXT,
+    notes TEXT,
+    template_id TEXT,
+    items JSONB DEFAULT '[]'::jsonb,
+    attachments JSONB DEFAULT '[]'::jsonb,
+    amount NUMERIC DEFAULT 0,
+    net NUMERIC DEFAULT 0,
+    vat NUMERIC DEFAULT 0,
+    vat_rate NUMERIC DEFAULT 0,
     currency TEXT DEFAULT 'EUR',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Documents table
+CREATE TABLE IF NOT EXISTS public.documents (
+    id TEXT PRIMARY KEY,
+    lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    case_id TEXT REFERENCES public.cases(id) ON DELETE SET NULL,
+    case_name TEXT,
+    invoice_id TEXT,
+    name TEXT NOT NULL,
+    key TEXT NOT NULL,
+    url TEXT,
+    source TEXT DEFAULT 'intake',
+    status TEXT DEFAULT 'unrecognized',
+    content_type TEXT,
+    size BIGINT DEFAULT 0,
+    uploaded_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Invoice templates table
+CREATE TABLE IF NOT EXISTS public.invoice_templates (
+    id TEXT PRIMARY KEY,
+    lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Audit events table
+CREATE TABLE IF NOT EXISTS public.audit_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    lawyer_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    case_id TEXT REFERENCES public.cases(id) ON DELETE SET NULL,
+    document_id TEXT,
+    invoice_id TEXT,
+    action TEXT NOT NULL,
+    payload JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -48,6 +99,9 @@ CREATE TABLE IF NOT EXISTS public.invoices (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoice_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 
 -- Policies for cases
 CREATE POLICY "Users can manage their own cases"
@@ -59,7 +113,28 @@ CREATE POLICY "Users can manage their own cases"
 -- Policies for invoices
 CREATE POLICY "Users can view invoices for their cases"
     ON public.invoices
-    FOR SELECT
-    USING (EXISTS (
+    FOR ALL
+    USING (lawyer_id = auth.uid() OR EXISTS (
         SELECT 1 FROM public.cases WHERE cases.id = invoices.case_id AND cases.lawyer_id = auth.uid()
-    ));
+    ))
+    WITH CHECK (lawyer_id = auth.uid());
+
+-- Policies for documents
+CREATE POLICY "Users can manage their own documents"
+    ON public.documents
+    FOR ALL
+    USING (lawyer_id = auth.uid())
+    WITH CHECK (lawyer_id = auth.uid());
+
+-- Policies for invoice templates
+CREATE POLICY "Users can manage their own invoice templates"
+    ON public.invoice_templates
+    FOR ALL
+    USING (lawyer_id = auth.uid())
+    WITH CHECK (lawyer_id = auth.uid());
+
+-- Policies for audit events
+CREATE POLICY "Users can view their own audit events"
+    ON public.audit_events
+    FOR SELECT
+    USING (lawyer_id = auth.uid());

@@ -229,6 +229,18 @@ function getIncomingDocuments() {
   }
 }
 
+async function fetchIncomingDocuments(filters = {}) {
+  const query = new URLSearchParams();
+  if (filters.status) query.set('status', filters.status);
+  if (filters.case_id) query.set('case_id', filters.case_id);
+  try {
+    const docs = await get(`/api/documents${query.toString() ? `?${query}` : ''}`);
+    return Array.isArray(docs) ? docs : [];
+  } catch {
+    return getIncomingDocuments();
+  }
+}
+
 function saveIncomingDocuments(documents) {
   localStorage.setItem(LS_INCOMING_DOCUMENTS, JSON.stringify(documents));
 }
@@ -267,19 +279,28 @@ async function intakeDocuments(files, cases = getCaseDirectory()) {
   const existing = getIncomingDocuments();
   const created = [];
   for (const file of files) {
-    const dataUrl = await fileToDataUrl(file);
-    const match = matchDocumentToCase(file.name, cases);
-    created.push({
-      id: uid('doc'),
-      name: file.name,
-      type: file.type || 'file',
-      size: file.size || 0,
-      uploaded_at: new Date().toISOString(),
-      data_url: dataUrl,
-      status: match ? 'assigned' : 'unrecognized',
-      case_id: match?.id || '',
-      case_name: match?.client_name || '',
-    });
+    try {
+      const remote = await upload('/api/documents/intake', file);
+      created.push({
+        ...remote,
+        type: remote.content_type || file.type || 'file',
+        data_url: remote.url || '',
+      });
+    } catch {
+      const dataUrl = await fileToDataUrl(file);
+      const match = matchDocumentToCase(file.name, cases);
+      created.push({
+        id: uid('doc'),
+        name: file.name,
+        type: file.type || 'file',
+        size: file.size || 0,
+        uploaded_at: new Date().toISOString(),
+        data_url: dataUrl,
+        status: match ? 'assigned' : 'unrecognized',
+        case_id: match?.id || '',
+        case_name: match?.client_name || '',
+      });
+    }
   }
   saveIncomingDocuments([...created, ...existing]);
   return created;
@@ -400,7 +421,23 @@ function upsertInvoice(invoice) {
   if (idx >= 0) invoices[idx] = normalized;
   else invoices.unshift(normalized);
   saveInvoices(invoices);
+  persistInvoiceRemote(normalized);
   return normalized;
+}
+
+async function persistInvoiceRemote(invoice) {
+  try {
+    await post('/api/invoices', invoice);
+  } catch {}
+}
+
+async function uploadInvoiceAttachmentRemote(invoiceId, name, blob) {
+  try {
+    const file = new File([blob], name, { type: blob.type || 'application/pdf' });
+    return await upload(`/api/invoices/${invoiceId}/attachments`, file);
+  } catch {
+    return null;
+  }
 }
 
 function createInvoiceDraft(seed = {}) {
