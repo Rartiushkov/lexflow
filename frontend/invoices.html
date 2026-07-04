@@ -53,6 +53,7 @@
           <span>Total</span>
           <span>Issue</span>
           <span>Due</span>
+          <span>Due risk</span>
         </div>
         <div id="invoice-list"></div>
       </div>
@@ -72,6 +73,7 @@
           <span>${formatCurrency(calculateInvoiceTotal(invoice), invoice.currency || 'EUR')}</span>
           <span>${formatDate(invoice.issue_date)}</span>
           <span>${formatDate(invoice.due_date)}</span>
+          <span><span class="badge ${invoiceDueState(invoice).className}">${invoiceDueState(invoice).label}</span></span>
         </a>
       `).join('');
     }

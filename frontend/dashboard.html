@@ -94,6 +94,17 @@
         </div>
       </div>
 
+      <section class="card automation-panel">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Automation watch</div>
+            <div class="panel-subtitle">Invoices, intake exceptions, and review work that need attention.</div>
+          </div>
+          <a href="documents.html" class="btn btn-outline btn-sm">Resolve intake</a>
+        </div>
+        <div class="automation-list" id="automation-list"></div>
+      </section>
+
       <section class="card kanban-panel">
         <div class="card-header">
           <div>
@@ -284,12 +295,34 @@
       document.getElementById('stat-ready').textContent = normalizedCases.filter(c => c.stage === 'review').length;
     }
 
+    function renderWorkflowSummary(summary) {
+      const host = document.getElementById('automation-list');
+      if (!summary?.actions?.length) {
+        host.innerHTML = `<div class="kanban-empty">No urgent automation items.</div>`;
+        return;
+      }
+      host.innerHTML = summary.actions.map(item => `
+        <div class="automation-item automation-${item.priority}">
+          <div>
+            <strong>${item.label}</strong>
+            <span>${item.action}</span>
+          </div>
+          <span class="badge ${item.priority === 'high' ? 'badge-red' : 'badge-yellow'}">${item.count}</span>
+        </div>
+      `).join('');
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       requireAuth();
       try {
         const cases = await get('/api/cases');
         setCaseDirectory(cases);
         renderDashboard(cases);
+        try {
+          renderWorkflowSummary(await get('/api/workflow/summary'));
+        } catch {
+          renderWorkflowSummary({ actions: [] });
+        }
       } catch (err) {
         const localCases = getCaseDirectory();
         const fallbackCases = [
@@ -299,6 +332,18 @@
           { id: '4', client_name: 'Nora Becker', type: 'Work permit', country: 'Austria', stage: 'review', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 6 },
         ];
         renderDashboard(localCases.length ? localCases : fallbackCases);
+        const invoices = getInvoices();
+        const overdue = invoices.filter(invoice => invoiceDueState(invoice).daysLeft < 0 && invoice.status !== 'paid');
+        const dueSoon = invoices.filter(invoice => {
+          const state = invoiceDueState(invoice);
+          return state.daysLeft !== null && state.daysLeft >= 0 && state.daysLeft <= 3 && invoice.status !== 'paid';
+        });
+        renderWorkflowSummary({
+          actions: [
+            ...(overdue.length ? [{ priority: 'high', label: 'Overdue invoices', count: overdue.length, action: 'Send reminder or mark paid' }] : []),
+            ...(dueSoon.length ? [{ priority: 'medium', label: 'Invoices due soon', count: dueSoon.length, action: 'Follow up before due date' }] : []),
+          ],
+        });
       }
     });
   </script>

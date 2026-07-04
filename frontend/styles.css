@@ -991,9 +991,50 @@ a.queue-row:hover {
   color: var(--muted);
 }
 
+.automation-panel {
+  margin-bottom: 16px;
+}
+
+.automation-list {
+  display: grid;
+  gap: 0;
+}
+
+.automation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.automation-item:first-child {
+  border-top: 0;
+}
+
+.automation-item strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.automation-item span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.automation-high {
+  box-shadow: inset 3px 0 0 rgba(255, 125, 125, 0.8);
+}
+
+.automation-medium {
+  box-shadow: inset 3px 0 0 rgba(216, 191, 139, 0.8);
+}
+
 .invoice-table {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 120px 120px 100px 100px;
+  grid-template-columns: 1.1fr 1fr 120px 120px 100px 100px 120px;
   gap: 12px;
   align-items: center;
   padding: 14px 20px;

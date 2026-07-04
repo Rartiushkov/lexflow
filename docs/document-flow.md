@@ -17,6 +17,9 @@ Date: 2026-07-04
 11. Email ingestion receives attachments from Gmail and routes them the same way as Intake.
 12. Mistral OCR runs on stored files and writes extracted fields back to the case.
 13. Lawyer sends generated invoices to the case client email from the invoice page.
+14. Incoming documents are deduplicated by file hash and checked by document type inside the case.
+15. If email/OCR confidently identifies a new person and no case exists, the backend auto-creates a case.
+16. Workflow summary highlights overdue invoices, due-soon invoices, unrecognized documents, duplicate document types, and duplicates.
 
 ## Current implementation status
 
@@ -32,6 +35,7 @@ Date: 2026-07-04
 | Delete files | Implemented for intake, case docs, client portal list, and invoice attachments |
 | Invoice email | Endpoint exists at `/api/invoices/{invoice_id}/send`; sends via SMTP when configured and returns `queued_demo` during local/test mode |
 | ML/evaluation | OCR extraction scores are stored in `ml_evaluations` and available through `/api/evaluations` |
+| Workflow summary | Endpoint exists at `/api/workflow/summary`; dashboard uses it for automation alerts |
 
 ## Gmail test setup
 
@@ -48,6 +52,7 @@ GMAIL_APP_PASSWORD=google-app-password
 GMAIL_IMAP_HOST=imap.gmail.com
 GMAIL_MAILBOX=INBOX
 GMAIL_POLL_LIMIT=10
+DEFAULT_LAWYER_ID=supabase-user-uuid-for-automation
 ```
 
 The webhook payload shape already expected by backend:
@@ -70,8 +75,18 @@ The webhook payload shape already expected by backend:
 
 1. Match by client email for email ingestion.
 2. Match by full client name in filename for Intake.
-3. Run OCR with Mistral and match by name, passport number, email, or case reference.
+3. Run OCR and match by name, passport number, email, or case reference.
 4. If confidence is low, keep in Unrecognized.
+
+## Autonomous intake rules
+
+1. Exact email match wins and attaches the document to the existing case.
+2. OCR full-name match attaches the document to an existing case.
+3. Filename full-name match is used when OCR is weak.
+4. If there is no case but OCR extracts a confident full name, or the sender email is known and extraction confidence is acceptable, the system auto-creates a case.
+5. If the same file hash already exists, the new document is marked `duplicate`.
+6. If the same document type already exists in the case, the new document is marked `needs_review` so a human can decide whether it replaces the old file.
+7. If no safe match is found, the document stays `unrecognized`.
 
 ## OCR evaluation
 

@@ -1,6 +1,7 @@
 import base64
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 for key in (
@@ -252,3 +253,119 @@ def test_free_local_ocr_extracts_text_from_pdf():
     assert ocr["provider"] == "pypdf"
     assert "Anna Schmidt" in ocr["raw_text"]
     assert ocr["confidence"] >= 0.65
+
+
+def make_pdf(lines):
+    from io import BytesIO
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    y = 760
+    for line in lines:
+        pdf.drawString(72, y, line)
+        y -= 20
+    pdf.save()
+    return buffer.getvalue()
+
+
+def test_email_webhook_auto_creates_case_from_new_document():
+    reset_state()
+    content = make_pdf([
+        "Passport",
+        "Name: Nora Becker",
+        "Passport number: X12345678",
+        "Date of birth: 03.04.1991",
+        "Germany",
+    ])
+
+    response = client.post(
+        "/api/webhook/email",
+        json={
+            "from": "nora.becker@example.com",
+            "subject": "Blue Card documents",
+            "attachments": [
+                {
+                    "filename": "passport-nora-becker.pdf",
+                    "content_base64": base64.b64encode(content).decode("utf-8"),
+                    "content_type": "application/pdf",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["created_cases"]
+    cases = client.get("/api/cases", headers=AUTH).json()
+    created = next(item for item in cases if item["id"] == payload["created_cases"][0])
+    assert created["client_name"] == "Nora Becker"
+    assert created["client_email"] == "nora.becker@example.com"
+    docs = client.get(f"/api/documents?case_id={created['id']}", headers=AUTH).json()
+    assert docs[0]["document_type"] == "passport"
+    assert docs[0]["status"] == "assigned"
+
+
+def test_email_webhook_detects_duplicate_document_by_hash():
+    reset_state()
+    case = create_case(email="client@example.com")
+    content = make_pdf([
+        "Passport",
+        "Name: Anna Schmidt",
+        "Passport number: C12345678",
+        "Date of birth: 01.02.1990",
+    ])
+    payload = {
+        "from": "client@example.com",
+        "subject": "Documents",
+        "attachments": [
+            {
+                "filename": "passport.pdf",
+                "content_base64": base64.b64encode(content).decode("utf-8"),
+                "content_type": "application/pdf",
+            }
+        ],
+    }
+
+    first = client.post("/api/webhook/email", json=payload)
+    second = client.post("/api/webhook/email", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["duplicates"] == 1
+    docs = client.get(f"/api/documents?case_id={case['id']}", headers=AUTH).json()
+    assert any(doc["status"] == "duplicate" for doc in docs)
+
+
+def test_workflow_summary_flags_overdue_and_due_soon_invoices():
+    reset_state()
+    case = create_case()
+    today = datetime.now(timezone.utc).date()
+    for invoice_id, due_date in (
+        ("inv-overdue", today - timedelta(days=1)),
+        ("inv-soon", today + timedelta(days=2)),
+    ):
+        invoice = {
+            "id": invoice_id,
+            "case_id": case["id"],
+            "number": invoice_id.upper(),
+            "status": "unpaid",
+            "client_name": case["client_name"],
+            "client_email": case["client_email"],
+            "issue_date": str(today),
+            "due_date": str(due_date),
+            "currency": "EUR",
+            "items": [{"description": "Service", "quantity": 1, "unit_price": 100}],
+            "attachments": [],
+        }
+        assert client.post("/api/invoices", headers=AUTH, json=invoice).status_code == 200
+
+    response = client.get("/api/workflow/summary", headers=AUTH)
+
+    assert response.status_code == 200
+    summary = response.json()
+    assert len(summary["invoices"]["overdue"]) == 1
+    assert len(summary["invoices"]["due_soon"]) == 1
+    assert any(item["label"] == "Overdue invoices" for item in summary["actions"])

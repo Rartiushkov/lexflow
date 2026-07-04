@@ -515,6 +515,24 @@ function invoiceStatusBadge(status) {
   return map[status] || 'badge-gray';
 }
 
+function invoiceDueState(invoice) {
+  if (!invoice?.due_date || invoice.status === 'paid') {
+    return { label: 'OK', className: 'badge-gray', daysLeft: null };
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(invoice.due_date);
+  due.setHours(0, 0, 0, 0);
+  const daysLeft = Math.round((due - today) / 86400000);
+  if (daysLeft < 0 || invoice.status === 'overdue') {
+    return { label: `${Math.abs(daysLeft)}d overdue`, className: 'badge-red', daysLeft };
+  }
+  if (daysLeft <= 3) {
+    return { label: `Due in ${daysLeft}d`, className: 'badge-yellow', daysLeft };
+  }
+  return { label: 'On track', className: 'badge-green', daysLeft };
+}
+
 function renderUser() {
   const user = getUser();
   if (!user) return;

@@ -1,5 +1,6 @@
 import base64
 import email
+import hashlib
 import imaplib
 import io
 import json
@@ -7,7 +8,7 @@ import os
 import re
 import smtplib
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.message import EmailMessage, Message
 from email.utils import parseaddr
 from typing import Optional
@@ -26,6 +27,7 @@ app = FastAPI(title="LexFlow Backend", version="0.2.0")
 
 # ─── Config ─────────────────────────────────────────────
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:8001")
+DEFAULT_LAWYER_ID = os.environ.get("DEFAULT_LAWYER_ID", "user_1")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
@@ -104,6 +106,53 @@ memory_evaluations: dict[str, dict] = {}
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def normalize_lookup(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def infer_case_type(document_type: str, subject: str = "") -> str:
+    lookup = f"{document_type} {subject}".lower()
+    if "blue card" in lookup:
+        return "Blue Card"
+    if "employment" in lookup or "passport" in lookup or "permit" in lookup:
+        return "Work permit"
+    if "invoice" in lookup:
+        return "Billing review"
+    return "Document intake"
+
+
+def infer_destination(text: str = "") -> str:
+    lookup = (text or "").lower()
+    if "germany" in lookup or "deutschland" in lookup or "berlin" in lookup:
+        return "Germany"
+    if "netherlands" in lookup:
+        return "Netherlands"
+    if "france" in lookup:
+        return "France"
+    return "EU route"
+
+
+def name_from_email(address: str) -> str:
+    local = (address or "").split("@")[0]
+    parts = [part for part in re.split(r"[._\-+]+", local) if part]
+    return " ".join(part.capitalize() for part in parts[:3]) or "New client"
+
+
+def parse_date(value: str) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            pass
+    return None
 
 
 # ─── Auth ───────────────────────────────────────────────
@@ -236,6 +285,18 @@ async def db_get_document(document_id: str) -> Optional[dict]:
     return memory_documents.get(document_id)
 
 
+async def db_find_document_by_hash(content_hash: str) -> Optional[dict]:
+    if not content_hash:
+        return None
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("documents").select("*").eq("content_hash", content_hash).limit(1).execute()
+            return res.data[0] if res.data else None
+        except Exception as e:
+            print(f"Supabase document hash lookup failed: {e}")
+    return next((item for item in memory_documents.values() if item.get("content_hash") == content_hash), None)
+
+
 async def db_delete_document(document_id: str) -> Optional[dict]:
     doc = await db_get_document(document_id)
     if not doc:
@@ -318,15 +379,20 @@ async def upload_file(case_id: str, file: UploadFile, source: str = "portal") ->
     ext = Path(file.filename or "document.pdf").suffix
     key = f"{case_id}/{uuid.uuid4().hex}{ext}"
     content = await file.read()
+    return await upload_bytes(case_id, file.filename or "document.pdf", file.content_type or "application/octet-stream", content, source, key=key)
 
+
+async def upload_bytes(case_id: str, filename: str, content_type: str, content: bytes, source: str = "portal", key: Optional[str] = None) -> dict:
+    ext = Path(filename or "document.pdf").suffix
+    key = key or f"{case_id}/{uuid.uuid4().hex}{ext}"
     if USE_R2:
         try:
-            r2_client.put_object(Bucket=R2_BUCKET_NAME, Key=key, Body=content, ContentType=file.content_type or "application/octet-stream")
+            r2_client.put_object(Bucket=R2_BUCKET_NAME, Key=key, Body=content, ContentType=content_type or "application/octet-stream")
             url = f"{R2_PUBLIC_URL}/{key}" if R2_PUBLIC_URL else f"{R2_ENDPOINT}/{R2_BUCKET_NAME}/{key}"
-            return {"key": key, "name": file.filename, "url": url, "source": source, "status": "uploaded", "size": len(content), "content_type": file.content_type or "application/octet-stream"}
+            return {"key": key, "name": filename, "url": url, "source": source, "status": "uploaded", "size": len(content), "content_type": content_type or "application/octet-stream"}
         except Exception as e:
             print(f"R2 upload failed: {e}")
-    return {"key": key, "name": file.filename, "url": "", "source": source, "status": "uploaded", "size": len(content), "content_type": file.content_type or "application/octet-stream"}
+    return {"key": key, "name": filename, "url": "", "source": source, "status": "uploaded", "size": len(content), "content_type": content_type or "application/octet-stream"}
 
 
 def delete_r2_object(key: str):
@@ -405,7 +471,7 @@ async def store_extraction_evaluation(case_id: str, document_id: str, fields: di
     evaluation = evaluate_extraction(fields)
     row = {
         "id": str(uuid.uuid4()),
-        "case_id": case_id,
+        "case_id": case_id or None,
         "document_id": document_id,
         "model": "rules+mistral-ocr",
         "score": evaluation["score"],
@@ -416,6 +482,132 @@ async def store_extraction_evaluation(case_id: str, document_id: str, fields: di
     }
     await db_create_evaluation(row)
     return row
+
+
+async def find_case_for_document(sender_email: str, filename: str, fields: dict, cases: list[dict]) -> tuple[Optional[dict], str, float]:
+    sender = (sender_email or "").lower().strip()
+    if sender:
+        for case in cases:
+            if case.get("client_email", "").lower().strip() == sender:
+                return case, "email", 0.98
+
+    full_name = fields.get("full_name", "")
+    normalized_name = normalize_lookup(full_name)
+    if normalized_name:
+        for case in cases:
+            if normalize_lookup(case.get("client_name", "")) == normalized_name:
+                return case, "ocr_name", float(fields.get("confidence") or 0.7)
+
+    filename_lookup = normalize_lookup(filename)
+    for case in cases:
+        parts = normalize_lookup(case.get("client_name", "")).split()
+        if parts and all(part in filename_lookup for part in parts):
+            return case, "filename", 0.75
+
+    return None, "none", 0.0
+
+
+async def create_case_from_document(sender_email: str, subject: str, fields: dict, user_id: str) -> dict:
+    client_name = fields.get("full_name") or name_from_email(sender_email)
+    case_id = str(uuid.uuid4())[:8]
+    case = {
+        "id": case_id,
+        "lawyer_id": user_id,
+        "client_name": client_name,
+        "client_email": sender_email or fields.get("email") or "",
+        "case_type": infer_case_type(fields.get("document_type", ""), subject),
+        "destination": infer_destination(" ".join(str(value) for value in fields.values())),
+        "notes": f"Auto-created from {fields.get('document_type', 'incoming document')}",
+        "stage": "documents",
+        "invoice_paid": False,
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "docs": [],
+        "invoice": None,
+        "extracted": fields,
+        "portal_url": f"{FRONTEND_URL}/client-upload.html?id={case_id}",
+        "automation": {"created_by": "document_intake", "confidence": fields.get("confidence", 0)},
+    }
+    return await db_create_case(case)
+
+
+async def case_has_document_type(case: dict, document_type: str) -> bool:
+    if not case or not document_type or document_type == "unknown":
+        return False
+    docs = await db_get_documents(case_id=case["id"])
+    return any(doc.get("document_type") == document_type and doc.get("status") != "duplicate" for doc in docs)
+
+
+async def route_incoming_document(
+    *,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    source: str,
+    sender_email: str = "",
+    subject: str = "",
+    user_id: str = "user_1",
+) -> dict:
+    content_hash = hashlib.sha256(content).hexdigest()
+    duplicate = await db_find_document_by_hash(content_hash)
+    ocr = await run_ocr(content, filename)
+    fields = parse_document_text(ocr.get("raw_text", ""), filename)
+    fields["ocr_provider"] = ocr.get("provider", "none")
+    fields["ocr_confidence"] = ocr.get("confidence", 0)
+
+    cases = await db_get_cases()
+    matched_case, match_reason, match_score = await find_case_for_document(sender_email, filename, fields, cases)
+    auto_created = False
+    if not matched_case and (fields.get("full_name") or sender_email) and float(fields.get("confidence") or 0) >= 0.45:
+        matched_case = await create_case_from_document(sender_email, subject, fields, user_id)
+        auto_created = True
+
+    case_id = matched_case["id"] if matched_case else "unrecognized"
+    uploaded = await upload_bytes(case_id, filename, content_type, content, source=source)
+    document_type = fields.get("document_type", "unknown")
+    type_exists = await case_has_document_type(matched_case, document_type) if matched_case else False
+    status = "assigned" if matched_case else "unrecognized"
+    automation_note = "routed"
+    if duplicate:
+        status = "duplicate"
+        automation_note = f"duplicate_of:{duplicate.get('id')}"
+    elif type_exists:
+        status = "needs_review"
+        automation_note = f"document_type_already_exists:{document_type}"
+
+    document = {
+        "id": str(uuid.uuid4()),
+        "lawyer_id": user_id,
+        "case_id": matched_case["id"] if matched_case else None,
+        "case_name": matched_case.get("client_name") if matched_case else "",
+        "name": uploaded["name"],
+        "key": uploaded["key"],
+        "url": uploaded.get("url", ""),
+        "source": source,
+        "status": status,
+        "content_type": uploaded.get("content_type", content_type or "application/octet-stream"),
+        "size": uploaded.get("size", len(content)),
+        "content_hash": content_hash,
+        "document_type": document_type,
+        "automation_status": "auto_created_case" if auto_created else match_reason,
+        "automation_note": automation_note,
+        "extracted": fields,
+        "uploaded_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    saved = await db_create_document(document)
+    if matched_case and status != "duplicate":
+        docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"], "document_type": document_type, "status": status}]
+        await db_update_case(matched_case["id"], {"docs": docs, "extracted": {**matched_case.get("extracted", {}), **fields}, "updated_at": utc_now()})
+    await store_extraction_evaluation(matched_case["id"] if matched_case else "", saved["id"], fields)
+    return {
+        "document": saved,
+        "case": matched_case,
+        "auto_created_case": auto_created,
+        "match_reason": match_reason,
+        "match_score": match_score,
+        "duplicate": bool(duplicate),
+    }
 
 
 # ─── PDF mapping helpers ────────────────────────────────
@@ -603,37 +795,15 @@ async def list_documents(status: Optional[str] = None, case_id: Optional[str] = 
 
 @app.post("/api/documents/intake")
 async def intake_document(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    cases = await db_get_cases()
-    filename_lookup = re.sub(r"[^a-z0-9]+", " ", (file.filename or "").lower()).strip()
-    matched_case = None
-    for case in cases:
-        parts = re.sub(r"[^a-z0-9]+", " ", case.get("client_name", "").lower()).split()
-        if parts and all(part in filename_lookup for part in parts):
-            matched_case = case
-            break
-
-    case_id = matched_case["id"] if matched_case else "unrecognized"
-    uploaded = await upload_file(case_id, file, source="intake")
-    document = {
-        "id": str(uuid.uuid4()),
-        "lawyer_id": user["id"],
-        "case_id": matched_case["id"] if matched_case else None,
-        "case_name": matched_case.get("client_name") if matched_case else "",
-        "name": uploaded["name"],
-        "key": uploaded["key"],
-        "url": uploaded.get("url", ""),
-        "source": "intake",
-        "status": "assigned" if matched_case else "unrecognized",
-        "content_type": uploaded.get("content_type", file.content_type or "application/octet-stream"),
-        "size": uploaded.get("size", 0),
-        "uploaded_at": utc_now(),
-        "updated_at": utc_now(),
-    }
-    saved = await db_create_document(document)
-    if matched_case:
-        docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"]}]
-        await db_update_case(matched_case["id"], {"docs": docs, "updated_at": utc_now()})
-    return saved
+    content = await file.read()
+    result = await route_incoming_document(
+        filename=file.filename or "document.pdf",
+        content=content,
+        content_type=file.content_type or "application/octet-stream",
+        source="intake",
+        user_id=user["id"],
+    )
+    return result["document"]
 
 
 @app.post("/api/documents/{document_id}/assign")
@@ -705,6 +875,55 @@ async def delete_case_document(case_id: str, document_ref: str, user: Optional[d
 @app.get("/api/invoices")
 async def list_invoices(case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     return await db_get_invoices(case_id=case_id)
+
+
+@app.get("/api/workflow/summary")
+async def workflow_summary(user: dict = Depends(get_current_user)):
+    today = datetime.now(timezone.utc).date()
+    invoices = await db_get_invoices()
+    documents = await db_get_documents()
+    cases = await db_get_cases()
+    overdue = []
+    due_soon = []
+    for invoice in invoices:
+        if invoice.get("status") == "paid":
+            continue
+        due = parse_date(invoice.get("due_date", ""))
+        if not due:
+            continue
+        days_left = (due - today).days
+        enriched = {**invoice, "days_left": days_left}
+        if days_left < 0:
+            overdue.append(enriched)
+            if invoice.get("status") != "overdue":
+                invoice["status"] = "overdue"
+                invoice["updated_at"] = utc_now()
+                await db_upsert_invoice(invoice)
+        elif days_left <= 3:
+            due_soon.append(enriched)
+
+    doc_counts = {
+        "unrecognized": len([doc for doc in documents if doc.get("status") == "unrecognized"]),
+        "needs_review": len([doc for doc in documents if doc.get("status") == "needs_review"]),
+        "duplicates": len([doc for doc in documents if doc.get("status") == "duplicate"]),
+    }
+    actions = []
+    if overdue:
+        actions.append({"priority": "high", "label": "Overdue invoices", "count": len(overdue), "action": "Send reminder or mark paid"})
+    if due_soon:
+        actions.append({"priority": "medium", "label": "Invoices due soon", "count": len(due_soon), "action": "Follow up before due date"})
+    if doc_counts["unrecognized"]:
+        actions.append({"priority": "medium", "label": "Unrecognized documents", "count": doc_counts["unrecognized"], "action": "Review and assign"})
+    if doc_counts["needs_review"]:
+        actions.append({"priority": "medium", "label": "Duplicate document type", "count": doc_counts["needs_review"], "action": "Confirm replacement or keep both"})
+
+    return {
+        "generated_at": utc_now(),
+        "cases": {"total": len(cases), "by_stage": {stage: len([case for case in cases if case.get("stage") == stage]) for stage in ["documents", "payment", "processing", "review", "submitted"]}},
+        "documents": doc_counts,
+        "invoices": {"overdue": overdue, "due_soon": due_soon},
+        "actions": actions,
+    }
 
 
 @app.get("/api/invoices/{invoice_id}")
@@ -873,33 +1092,34 @@ class EmailWebhook(BaseModel):
 async def process_email_payload(payload: EmailWebhook) -> dict:
     from_email = payload.from_.lower().strip()
     matched = []
-    cases = await db_get_cases()
-    for case in cases:
-        if case.get("client_email", "").lower() == from_email:
-            docs = case.get("docs", [])
-            for att in payload.attachments:
-                document_id = str(uuid.uuid4())
-                key = f"{case['id']}/email/{document_id}/{att.filename}"
-                document = {
-                    "id": document_id,
-                    "lawyer_id": case.get("lawyer_id"),
-                    "case_id": case["id"],
-                    "case_name": case.get("client_name", ""),
-                    "name": att.filename,
-                    "key": key,
-                    "url": "",
-                    "source": "email",
-                    "status": "uploaded_via_email",
-                    "content_type": att.content_type or "application/pdf",
-                    "size": 0,
-                    "uploaded_at": utc_now(),
-                    "updated_at": utc_now(),
-                }
-                await db_create_document(document)
-                docs.append({**document, "subject": payload.subject})
-            await db_update_case(case["id"], {"docs": docs, "updated_at": utc_now()})
-            matched.append(case["id"])
-    return {"matched_cases": matched, "attachments_processed": len(payload.attachments)}
+    created = []
+    documents = []
+    duplicates = 0
+    for att in payload.attachments:
+        content = base64.b64decode(att.content_base64)
+        result = await route_incoming_document(
+            filename=att.filename,
+            content=content,
+            content_type=att.content_type or "application/pdf",
+            source="email",
+            sender_email=from_email,
+            subject=payload.subject,
+            user_id=DEFAULT_LAWYER_ID,
+        )
+        if result["case"]:
+            matched.append(result["case"]["id"])
+        if result["auto_created_case"] and result["case"]:
+            created.append(result["case"]["id"])
+        if result["duplicate"]:
+            duplicates += 1
+        documents.append(result["document"])
+    return {
+        "matched_cases": sorted(set(matched)),
+        "created_cases": sorted(set(created)),
+        "attachments_processed": len(payload.attachments),
+        "duplicates": duplicates,
+        "documents": documents,
+    }
 
 
 @app.post("/api/webhook/email")

@@ -32,11 +32,22 @@ CREATE TABLE IF NOT EXISTS public.documents (
     url TEXT,
     source TEXT DEFAULT 'intake',
     status TEXT DEFAULT 'unrecognized',
+    content_hash TEXT,
+    document_type TEXT,
+    automation_status TEXT,
+    automation_note TEXT,
+    extracted JSONB DEFAULT '{}'::jsonb,
     content_type TEXT,
     size BIGINT DEFAULT 0,
     uploaded_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS document_type TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS automation_status TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS automation_note TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS extracted JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS public.invoice_templates (
     id TEXT PRIMARY KEY,
