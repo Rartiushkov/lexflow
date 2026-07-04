@@ -747,17 +747,30 @@ class EmailWebhook(BaseModel):
 async def email_webhook(payload: EmailWebhook):
     from_email = payload.from_.lower().strip()
     matched = []
-    for case in memory_cases.values():
+    cases = await db_get_cases()
+    for case in cases:
         if case.get("client_email", "").lower() == from_email:
             docs = case.get("docs", [])
             for att in payload.attachments:
-                docs.append({
+                document_id = str(uuid.uuid4())
+                key = f"{case['id']}/email/{document_id}/{att.filename}"
+                document = {
+                    "id": document_id,
+                    "lawyer_id": case.get("lawyer_id"),
+                    "case_id": case["id"],
+                    "case_name": case.get("client_name", ""),
                     "name": att.filename,
-                    "status": "uploaded_via_email",
-                    "uploaded_at": utc_now(),
+                    "key": key,
+                    "url": "",
                     "source": "email",
-                    "subject": payload.subject,
-                })
+                    "status": "uploaded_via_email",
+                    "content_type": att.content_type or "application/pdf",
+                    "size": 0,
+                    "uploaded_at": utc_now(),
+                    "updated_at": utc_now(),
+                }
+                await db_create_document(document)
+                docs.append({**document, "subject": payload.subject})
             await db_update_case(case["id"], {"docs": docs, "updated_at": utc_now()})
             matched.append(case["id"])
     return {"matched_cases": matched, "attachments_processed": len(payload.attachments)}

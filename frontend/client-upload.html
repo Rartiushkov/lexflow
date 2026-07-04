@@ -77,7 +77,10 @@
           document.getElementById('invoice-amount').textContent = formatCurrency(c.invoice.amount);
         }
       } catch (err) {
-        document.getElementById('case-title').textContent = 'Demo case · Blue Card';
+        const localCase = getLocalCaseById(caseId);
+        document.getElementById('case-title').textContent = localCase
+          ? `${localCase.client_name} · ${localCase.case_type}`
+          : 'Demo case · Blue Card';
       }
     }
 
@@ -108,14 +111,33 @@
             showToast(`${file.name} deleted`, 'success');
           });
         } catch (err) {
-          row.querySelector('.badge').textContent = 'failed';
-          row.querySelector('.badge').className = 'badge badge-red';
-          const deleteButton = document.createElement('button');
-          deleteButton.className = 'btn btn-outline btn-sm';
-          deleteButton.type = 'button';
-          deleteButton.textContent = 'Delete';
-          deleteButton.addEventListener('click', () => row.remove());
-          row.appendChild(deleteButton);
+          const dataUrl = await fileToDataUrl(file);
+          const localCase = getLocalCaseById(caseId);
+          const doc = {
+            id: uid('doc'),
+            name: file.name,
+            type: file.type || 'file',
+            size: file.size || 0,
+            uploaded_at: new Date().toISOString(),
+            data_url: dataUrl,
+            status: 'assigned',
+            case_id: caseId,
+            case_name: localCase?.client_name || 'Local case',
+          };
+          saveIncomingDocuments([doc, ...getIncomingDocuments()]);
+          row.dataset.documentRef = doc.id;
+          row.innerHTML = `
+            <span>${file.name}</span>
+            <span class="table-actions">
+              <span class="badge badge-green">uploaded</span>
+              <button class="btn btn-outline btn-sm" type="button" data-delete-upload>Delete</button>
+            </span>
+          `;
+          row.querySelector('[data-delete-upload]').addEventListener('click', () => {
+            deleteIncomingDocumentLocal(doc.id);
+            row.remove();
+            showToast(`${file.name} deleted`, 'success');
+          });
         }
       }
       showToast('Uploads complete', 'success');

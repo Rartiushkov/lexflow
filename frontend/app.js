@@ -221,6 +221,20 @@ function setCaseDirectory(cases) {
   return normalized;
 }
 
+function upsertLocalCase(caseData) {
+  const cases = getCaseDirectory();
+  const normalized = setCaseDirectory([caseData])[0];
+  const idx = cases.findIndex(item => item.id === normalized.id);
+  if (idx >= 0) cases[idx] = normalized;
+  else cases.unshift(normalized);
+  saveCaseDirectory(cases);
+  return normalized;
+}
+
+function getLocalCaseById(caseId) {
+  return getCaseDirectory().find(item => item.id === caseId) || null;
+}
+
 function getIncomingDocuments() {
   try {
     return JSON.parse(localStorage.getItem(LS_INCOMING_DOCUMENTS)) || [];

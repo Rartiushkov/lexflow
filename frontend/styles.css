@@ -569,10 +569,40 @@ body.dashboard::after {
 }
 
 .nav-item svg {
-  display: block;
+  display: none;
+}
+
+.nav-item::before {
+  content: "";
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.82;
+}
+
+.nav-item[href*="dashboard"]::before {
+  box-shadow: inset 6px 0 0 transparent, inset 0 6px 0 transparent;
+}
+
+.nav-item[href*="cases"]::before {
+  border-radius: 2px;
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.18), inset 0 -4px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nav-item[href*="documents"]::before {
+  border-radius: 2px;
+  clip-path: polygon(0 0, 68% 0, 100% 30%, 100% 100%, 0 100%);
+}
+
+.nav-item[href*="invoices"]::before {
+  border-radius: 2px;
+  box-shadow: inset 0 -4px 0 rgba(255, 255, 255, 0.16);
+}
+
+.nav-item[href*="settings"]::before {
+  border-radius: 50%;
 }
 
 .sidebar-footer {
@@ -1250,7 +1280,7 @@ a.queue-row:hover {
 }
 
 .empty-attachments {
-  padding: 14px 0;
+  padding: 16px 20px;
   color: var(--muted);
   font-size: 13px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
