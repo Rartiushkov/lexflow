@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS public.invoices (
     template_id TEXT,
     items JSONB DEFAULT '[]'::jsonb,
     attachments JSONB DEFAULT '[]'::jsonb,
+    sent_at TIMESTAMPTZ,
+    last_sent_to TEXT,
     amount NUMERIC DEFAULT 0,
     net NUMERIC DEFAULT 0,
     vat NUMERIC DEFAULT 0,

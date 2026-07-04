@@ -13,6 +13,8 @@ ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS template_id TEXT;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS last_sent_to TEXT;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 ALTER TABLE public.invoices ALTER COLUMN amount SET DEFAULT 0;
 ALTER TABLE public.invoices ALTER COLUMN net SET DEFAULT 0;

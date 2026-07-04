@@ -1434,6 +1434,11 @@ a.queue-row:hover {
   align-items: start;
 }
 
+.kanban-panel {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
 .kanban-column {
   background: rgba(10, 15, 27, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1498,6 +1503,15 @@ a.queue-row:hover {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.kanban-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 14px;
+  text-align: center;
 }
 
 .tag {
@@ -1889,6 +1903,7 @@ body.landing .footer .brand-mark {
   .system-card-wide { grid-column: span 2; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .dashboard-shell { grid-template-columns: 1fr; }
+  .kanban-board { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 768px) {
@@ -1971,4 +1986,5 @@ body.landing .footer .brand-mark {
   .queue-head { display: none; }
   .dashboard-rail { gap: 12px; }
   .intake-summary-grid { grid-template-columns: 1fr; }
+  .kanban-board { grid-template-columns: 1fr; }
 }

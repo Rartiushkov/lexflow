@@ -37,6 +37,7 @@
       <div class="topbar-actions">
         <a href="invoices.html" class="btn btn-outline">Back</a>
         <button class="btn btn-outline" id="btn-generate-invoice">Generate invoice</button>
+        <button class="btn btn-outline" id="btn-send-invoice">Send invoice</button>
         <button class="btn btn-outline" id="btn-export-pdf">Export PDF</button>
         <button class="btn btn-primary" id="btn-save-invoice">Save invoice</button>
       </div>
@@ -695,6 +696,24 @@
         renderAttachments(saved.attachments || []);
         renderPreview(saved);
         showToast('Invoice PDF attached', 'success');
+      });
+      document.getElementById('btn-send-invoice').addEventListener('click', async () => {
+        syncPreview();
+        const saved = upsertInvoice(collectInvoice());
+        if (!saved.client_email) {
+          showToast('Client email is missing', 'error');
+          return;
+        }
+        await persistInvoiceRemote(saved);
+        try {
+          const result = await post(`/api/invoices/${saved.id}/send`, {});
+          const nextStatus = result.sent ? 'Invoice sent' : 'Invoice queued for test mode';
+          showToast(`${nextStatus}: ${result.to}`, result.sent ? 'success' : 'info');
+          formState.invoice = upsertInvoice({ ...saved, status: saved.status === 'draft' ? 'unpaid' : saved.status });
+          populateForm(formState.invoice);
+        } catch {
+          showToast('Invoice was not sent', 'error');
+        }
       });
       document.getElementById('btn-export-pdf').addEventListener('click', async () => {
         syncPreview();

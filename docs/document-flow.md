@@ -16,6 +16,7 @@ Date: 2026-07-04
 10. Client uploads are attached to the same case.
 11. Email ingestion receives attachments from Gmail and routes them the same way as Intake.
 12. Mistral OCR runs on stored files and writes extracted fields back to the case.
+13. Lawyer sends generated invoices to the case client email from the invoice page.
 
 ## Current implementation status
 
@@ -29,6 +30,7 @@ Date: 2026-07-04
 | Gmail/email ingestion | Webhook exists at `/api/webhook/email`; needs Gmail adapter/forwarder |
 | OCR/Mistral | Backend has `MISTRAL_API_KEY` and `/api/cases/{case_id}/parse`; currently simple field parser after OCR |
 | Delete files | Implemented for intake, case docs, client portal list, and invoice attachments |
+| Invoice email | Endpoint exists at `/api/invoices/{invoice_id}/send`; sends via SMTP when configured and returns `queued_demo` during local/test mode |
 
 ## Gmail test setup
 

@@ -3,8 +3,10 @@ import io
 import json
 import os
 import re
+import smtplib
 import uuid
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from typing import Optional
 from pathlib import Path
 
@@ -27,10 +29,16 @@ R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "lexflow-documents")
 R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "")
 MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "")
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or "587")
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "billing@lexflow.eu")
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
 USE_MISTRAL = bool(MISTRAL_API_KEY)
+USE_SMTP = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
 app.add_middleware(
     CORSMiddleware,
@@ -286,6 +294,29 @@ def delete_r2_object(key: str):
             print(f"R2 delete failed: {e}")
 
 
+def send_email_message(to_email: str, subject: str, body: str) -> dict:
+    if not USE_SMTP:
+        return {
+            "sent": False,
+            "status": "queued_demo",
+            "reason": "SMTP is not configured",
+        }
+    msg = EmailMessage()
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
+            smtp.starttls()
+            smtp.login(SMTP_USER, SMTP_PASSWORD)
+            smtp.send_message(msg)
+        return {"sent": True, "status": "sent"}
+    except Exception as e:
+        print(f"SMTP send failed: {e}")
+        raise HTTPException(status_code=502, detail="Invoice email failed")
+
+
 # ─── OCR helpers ────────────────────────────────────────
 async def run_ocr(content: bytes, filename: str) -> dict:
     if not USE_MISTRAL:
@@ -360,6 +391,7 @@ def health():
         "supabase": USE_SUPABASE,
         "r2": USE_R2,
         "mistral": USE_MISTRAL,
+        "smtp": USE_SMTP,
     }
 
 
@@ -681,6 +713,41 @@ async def delete_invoice_attachment(invoice_id: str, attachment_id: str, user: d
     invoice["updated_at"] = utc_now()
     await db_upsert_invoice(invoice)
     return {"deleted": True, "id": attachment_id}
+
+
+@app.post("/api/invoices/{invoice_id}/send")
+async def send_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
+    invoice = await db_get_invoice(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    case = await db_get_case(invoice.get("case_id", "")) if invoice.get("case_id") else None
+    to_email = invoice.get("client_email") or (case or {}).get("client_email")
+    if not to_email:
+        raise HTTPException(status_code=400, detail="Client email is missing")
+
+    number = invoice.get("number") or invoice_id
+    amount = invoice.get("amount", 0)
+    currency = invoice.get("currency", "EUR")
+    subject = f"Invoice {number}"
+    body = (
+        f"Hello {invoice.get('client_name') or (case or {}).get('client_name') or ''},\n\n"
+        f"Your invoice {number} is ready.\n"
+        f"Amount: {amount} {currency}\n"
+        f"Due date: {invoice.get('due_date') or 'not specified'}\n\n"
+        "Best regards,\nLexFlow"
+    )
+    result = send_email_message(to_email, subject, body)
+    invoice["last_sent_to"] = to_email
+    invoice["sent_at"] = utc_now()
+    if invoice.get("status") == "draft":
+        invoice["status"] = "unpaid"
+    await db_upsert_invoice(invoice)
+    return {
+        **result,
+        "invoice_id": invoice_id,
+        "to": to_email,
+        "subject": subject,
+    }
 
 
 @app.post("/api/cases/{case_id}/invoice")
