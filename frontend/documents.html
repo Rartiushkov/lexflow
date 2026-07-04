@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Intake</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item">Dashboard</a>
+      <a href="cases.html" class="nav-item">Cases</a>
+      <a href="documents.html" class="nav-item active">Intake</a>
+      <a href="invoices.html" class="nav-item">Invoices</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info"><div class="user-name" id="user-name">—</div><div class="user-role" id="user-email">—</div></div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb"><span>Workspace</span><span class="sep">/</span><strong>Intake</strong></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Incoming documents</div>
+          <div class="page-subtitle">Upload files once. Matching files are attached to a case. Everything else stays in a separate holding area for manual review.</div>
+        </div>
+      </div>
+
+      <div class="intake-summary-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total files</div>
+          <div class="stat-value" id="stat-total-docs">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Assigned</div>
+          <div class="stat-value" id="stat-assigned-docs">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Unrecognized</div>
+          <div class="stat-value" id="stat-unrecognized-docs">0</div>
+        </div>
+      </div>
+
+      <div class="card intake-upload-card">
+        <div class="card-body">
+          <div class="intake-dropzone" id="intake-dropzone">
+            <div class="dropzone-title">Add files for intake</div>
+            <div class="dropzone-hint">Base logic: if the file name matches the client name, the document is assigned to that case. If not, it goes to Unrecognized.</div>
+            <input type="file" id="intake-file-input" multiple style="display:none;" />
+          </div>
+        </div>
+      </div>
+
+      <div class="builder-tabs intake-tabs" style="margin-top:16px;">
+        <button class="builder-tab active" type="button" data-doc-tab="assigned">Assigned <span id="assigned-count">0</span></button>
+        <button class="builder-tab" type="button" data-doc-tab="unrecognized">Unrecognized <span id="unrecognized-count">0</span></button>
+      </div>
+
+      <div class="card intake-list-card" data-doc-panel="assigned">
+        <div class="intake-table intake-table-head">
+          <span>File</span>
+          <span>Case</span>
+          <span>Status</span>
+          <span>Uploaded</span>
+          <span></span>
+        </div>
+        <div id="assigned-list"></div>
+      </div>
+
+      <div class="card intake-list-card" data-doc-panel="unrecognized" style="display:none;">
+        <div class="intake-table intake-table-head">
+          <span>File</span>
+          <span>Case</span>
+          <span>Status</span>
+          <span>Uploaded</span>
+          <span></span>
+        </div>
+        <div id="unrecognized-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    async function loadCasesForMatching() {
+      try {
+        const cases = await get('/api/cases');
+        setCaseDirectory(cases);
+      } catch {
+        setCaseDirectory(getCaseDirectory());
+      }
+    }
+
+    function switchDocTab(tab) {
+      document.querySelectorAll('[data-doc-tab]').forEach(button => {
+        button.classList.toggle('active', button.dataset.docTab === tab);
+      });
+      document.querySelectorAll('[data-doc-panel]').forEach(panel => {
+        panel.style.display = panel.dataset.docPanel === tab ? '' : 'none';
+      });
+    }
+
+    function renderIntakeLists() {
+      const assignedHost = document.getElementById('assigned-list');
+      const unrecognizedHost = document.getElementById('unrecognized-list');
+      const docs = getIncomingDocuments();
+      const assigned = docs.filter(item => item.status === 'assigned');
+      const unrecognized = docs.filter(item => item.status === 'unrecognized');
+
+      document.getElementById('stat-total-docs').textContent = docs.length;
+      document.getElementById('stat-assigned-docs').textContent = assigned.length;
+      document.getElementById('stat-unrecognized-docs').textContent = unrecognized.length;
+      document.getElementById('assigned-count').textContent = assigned.length;
+      document.getElementById('unrecognized-count').textContent = unrecognized.length;
+
+      const renderRows = (items, unrecognized = false) => {
+        if (!items.length) {
+          return `<div class="empty-attachments">${unrecognized ? 'No unrecognized documents.' : 'No assigned documents yet.'}</div>`;
+        }
+        return items.map(doc => `
+          <div class="intake-table intake-row">
+            <span><strong>${doc.name}</strong></span>
+            <span>${doc.case_id ? `<a href="case.html?id=${doc.case_id}">${doc.case_name}</a>` : '—'}</span>
+            <span><span class="badge ${doc.status === 'assigned' ? 'badge-green' : 'badge-yellow'}">${doc.status}</span></span>
+            <span>${formatDate(doc.uploaded_at)}</span>
+            <span><a class="btn btn-outline btn-sm" href="${doc.data_url}" download="${doc.name}">Open</a></span>
+          </div>
+        `).join('');
+      };
+      assignedHost.innerHTML = renderRows(assigned);
+      unrecognizedHost.innerHTML = renderRows(unrecognized, true);
+    }
+
+    async function handleIntakeFiles(fileList) {
+      const created = await intakeDocuments(Array.from(fileList), getCaseDirectory());
+      const assignedCount = created.filter(item => item.status === 'assigned').length;
+      const unknownCount = created.filter(item => item.status === 'unrecognized').length;
+      renderIntakeLists();
+      showToast(`Uploaded ${created.length}. Assigned: ${assignedCount}. Unrecognized: ${unknownCount}.`, 'success');
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      requireAuth();
+      await loadCasesForMatching();
+      renderIntakeLists();
+
+      document.querySelectorAll('[data-doc-tab]').forEach(button => {
+        button.addEventListener('click', () => switchDocTab(button.dataset.docTab));
+      });
+
+      const dropzone = document.getElementById('intake-dropzone');
+      const input = document.getElementById('intake-file-input');
+      dropzone.addEventListener('click', () => input.click());
+      dropzone.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+      dropzone.addEventListener('drop', async (event) => {
+        event.preventDefault();
+        dropzone.classList.remove('dragover');
+        await handleIntakeFiles(event.dataTransfer.files);
+      });
+      input.addEventListener('change', async () => {
+        await handleIntakeFiles(input.files);
+        input.value = '';
+      });
+    });
+  </script>
+</body>
+</html>

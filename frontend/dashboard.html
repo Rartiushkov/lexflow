@@ -26,6 +26,10 @@
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
         Cases
       </a>
+      <a href="documents.html" class="nav-item">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M10 2v3h3"/></svg>
+        Intake
+      </a>
       <a href="invoices.html" class="nav-item">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M6 1v2M10 1v2"/></svg>
         Invoices
@@ -230,15 +234,26 @@
       requireAuth();
       try {
         const cases = await get('/api/cases');
+        setCaseDirectory(cases);
         renderDashboard(cases);
       } catch (err) {
         // fallback demo data
-        renderDashboard([
+        const fallbackCases = [
           { id: '1', client_name: 'Anna Schmidt', type: 'Blue Card', country: 'Germany', stage: 'documents', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 1 },
           { id: '2', client_name: 'Marco Rossi', type: 'ICT permit', country: 'Netherlands', stage: 'payment', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 3 },
           { id: '3', client_name: 'Elena Petrova', type: 'Family reunion', country: 'France', stage: 'processing', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 4 },
           { id: '4', client_name: 'Nora Becker', type: 'Work permit', country: 'Austria', stage: 'review', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 6 },
-        ]);
+        ];
+        setCaseDirectory(fallbackCases.map(item => ({
+          id: item.id,
+          client_name: item.client_name,
+          client_email: '',
+          case_type: item.type,
+          destination: item.country,
+          stage: item.stage,
+          created_at: item.created_at,
+        })));
+        renderDashboard(fallbackCases);
       }
     });
   </script>

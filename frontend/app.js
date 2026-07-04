@@ -10,6 +10,8 @@ const LS_TOKEN = 'lexflow_token';
 const LS_USER = 'lexflow_user';
 const LS_INVOICES = 'lexflow_invoices';
 const LS_INVOICE_TEMPLATES = 'lexflow_invoice_templates';
+const LS_CASE_DIRECTORY = 'lexflow_case_directory';
+const LS_INCOMING_DOCUMENTS = 'lexflow_incoming_documents';
 
 // ─── Demo auth fallback ─────────────────────────────────
 function getToken() {
@@ -157,6 +159,130 @@ function invoiceSeed() {
       ],
     },
   ];
+}
+
+function caseDirectorySeed() {
+  return [
+    {
+      id: '1',
+      client_name: 'Anna Schmidt',
+      client_email: 'anna@example.com',
+      case_type: 'Blue Card',
+      destination: 'Germany',
+      stage: 'documents',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: '2',
+      client_name: 'Marco Rossi',
+      client_email: 'marco@example.com',
+      case_type: 'ICT permit',
+      destination: 'Netherlands',
+      stage: 'payment',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: '3',
+      client_name: 'Elena Petrova',
+      client_email: 'elena@example.com',
+      case_type: 'Family reunion',
+      destination: 'France',
+      stage: 'processing',
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
+function getCaseDirectory() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_CASE_DIRECTORY));
+    if (Array.isArray(raw) && raw.length) return raw;
+  } catch {}
+  const seeded = caseDirectorySeed();
+  localStorage.setItem(LS_CASE_DIRECTORY, JSON.stringify(seeded));
+  return seeded;
+}
+
+function saveCaseDirectory(cases) {
+  localStorage.setItem(LS_CASE_DIRECTORY, JSON.stringify(cases));
+}
+
+function setCaseDirectory(cases) {
+  const normalized = (cases || []).map(item => ({
+    id: item.id,
+    client_name: item.client_name,
+    client_email: item.client_email || '',
+    case_type: item.case_type || item.type || '',
+    destination: item.destination || item.country || '',
+    stage: item.stage || 'documents',
+    created_at: item.created_at || new Date().toISOString(),
+  }));
+  if (normalized.length) saveCaseDirectory(normalized);
+  return normalized;
+}
+
+function getIncomingDocuments() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_INCOMING_DOCUMENTS)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveIncomingDocuments(documents) {
+  localStorage.setItem(LS_INCOMING_DOCUMENTS, JSON.stringify(documents));
+}
+
+function normalizeLookup(value) {
+  return (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function matchDocumentToCase(fileName, cases = getCaseDirectory()) {
+  const haystack = normalizeLookup(fileName);
+  return cases.find(item => {
+    const parts = normalizeLookup(item.client_name).split(' ').filter(Boolean);
+    return parts.length && parts.every(part => haystack.includes(part));
+  }) || null;
+}
+
+function getDocumentsForCase(caseId) {
+  return getIncomingDocuments().filter(item => item.case_id === caseId && item.status === 'assigned');
+}
+
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function intakeDocuments(files, cases = getCaseDirectory()) {
+  const existing = getIncomingDocuments();
+  const created = [];
+  for (const file of files) {
+    const dataUrl = await fileToDataUrl(file);
+    const match = matchDocumentToCase(file.name, cases);
+    created.push({
+      id: uid('doc'),
+      name: file.name,
+      type: file.type || 'file',
+      size: file.size || 0,
+      uploaded_at: new Date().toISOString(),
+      data_url: dataUrl,
+      status: match ? 'assigned' : 'unrecognized',
+      case_id: match?.id || '',
+      case_name: match?.client_name || '',
+    });
+  }
+  saveIncomingDocuments([...created, ...existing]);
+  return created;
 }
 
 function getInvoices() {

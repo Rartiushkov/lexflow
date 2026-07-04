@@ -970,6 +970,106 @@ a.queue-row:hover {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.intake-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.intake-upload-card {
+  overflow: hidden;
+}
+
+.intake-dropzone {
+  min-height: 180px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.01) 100%),
+    rgba(9, 13, 21, 0.46);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.intake-dropzone:hover,
+.intake-dropzone.dragover {
+  border-color: rgba(70, 224, 161, 0.38);
+  background:
+    linear-gradient(180deg, rgba(70, 224, 161, 0.06) 0%, rgba(70, 224, 161, 0.02) 100%),
+    rgba(9, 13, 21, 0.56);
+  transform: translateY(-1px);
+}
+
+.intake-tabs .builder-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.intake-tabs .builder-tab span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.intake-tabs .builder-tab.active span {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.intake-list-card {
+  overflow: hidden;
+}
+
+.intake-table {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 1fr) 120px 140px 100px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 20px;
+}
+
+.intake-table-head {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.intake-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.intake-row:first-child {
+  border-top: none;
+}
+
+.intake-row strong,
+.intake-row a {
+  color: var(--text);
+}
+
+.intake-row a:hover {
+  color: #ffffff;
+}
+
 .invoice-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -1534,15 +1634,18 @@ body.auth {
   .dashboard-topbar,
   .page-content { padding-left: 16px; padding-right: 16px; }
   .invoice-table,
+  .intake-table,
   .queue-row {
     grid-template-columns: 1fr;
     gap: 6px;
   }
-  .invoice-table-head { display: none; }
+  .invoice-table-head,
+  .intake-table-head { display: none; }
   .line-items-head { display: none; }
   .line-item-row,
   .invoice-preview-meta,
   .invoice-preview-line { grid-template-columns: 1fr; }
   .queue-head { display: none; }
   .dashboard-rail { gap: 12px; }
+  .intake-summary-grid { grid-template-columns: 1fr; }
 }
