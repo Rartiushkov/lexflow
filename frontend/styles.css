@@ -1050,6 +1050,44 @@ a.queue-row:hover {
   color: var(--text);
 }
 
+.attachment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.attachment-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attachment-copy strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.attachment-copy span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-attachments {
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .invoice-preview {
   padding: 22px;
 }

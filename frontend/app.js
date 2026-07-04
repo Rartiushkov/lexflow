@@ -290,6 +290,7 @@ function createInvoiceDraft(seed = {}) {
     notes: seed.notes || '',
     case_id: seed.case_id || '',
     template_id: seed.template_id || getInvoiceTemplates()[0]?.id || '',
+    attachments: seed.attachments || [],
     items: seed.items?.length
       ? seed.items
       : [{ id: uid('line'), description: 'Legal service', quantity: 1, unit_price: 0 }],

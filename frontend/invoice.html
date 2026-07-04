@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -34,6 +35,7 @@
       <div class="topbar-breadcrumb"><span>Invoices</span><span class="sep">/</span><strong id="invoice-crumb">Draft</strong></div>
       <div class="topbar-actions">
         <a href="invoices.html" class="btn btn-outline">Back</a>
+        <button class="btn btn-outline" id="btn-export-pdf">Export PDF</button>
         <button class="btn btn-primary" id="btn-save-invoice">Save invoice</button>
       </div>
     </div>
@@ -123,6 +125,16 @@
               <span></span>
             </div>
             <div id="line-items"></div>
+
+            <div class="builder-section-head" style="margin-top:22px;">
+              <div>
+                <div class="card-title">Attachments</div>
+                <div class="panel-subtitle">Files linked to this invoice.</div>
+              </div>
+              <label class="btn btn-outline btn-sm" for="invoice-attachment">+ Attach file</label>
+            </div>
+            <input type="file" id="invoice-attachment" style="display:none;" />
+            <div id="invoice-attachments"></div>
           </div>
         </section>
 
@@ -282,6 +294,34 @@
       };
     }
 
+    function renderAttachments(attachments) {
+      const host = document.getElementById('invoice-attachments');
+      if (!attachments.length) {
+        host.innerHTML = `<div class="empty-attachments">No files attached yet.</div>`;
+        return;
+      }
+      host.innerHTML = attachments.map(file => `
+        <div class="attachment-row" data-attachment-id="${file.id}">
+          <div class="attachment-copy">
+            <strong>${file.name}</strong>
+            <span>${file.type || 'file'} · ${Math.round((file.size || 0) / 1024)} KB</span>
+          </div>
+          <div class="attachment-actions">
+            <a class="btn btn-outline btn-sm" href="${file.data_url}" download="${file.name}">Download</a>
+            <button class="line-remove" type="button">Remove</button>
+          </div>
+        </div>
+      `).join('');
+      host.querySelectorAll('.line-remove').forEach(button => {
+        button.addEventListener('click', (event) => {
+          const row = event.target.closest('.attachment-row');
+          formState.invoice.attachments = (formState.invoice.attachments || []).filter(item => item.id !== row.dataset.attachmentId);
+          renderAttachments(formState.invoice.attachments);
+          syncPreview();
+        });
+      });
+    }
+
     function collectTemplate() {
       return {
         ...formState.template,
@@ -374,6 +414,12 @@
           <span>Total</span>
           <strong>${formatCurrency(total + vatAmount, invoice.currency || 'EUR')}</strong>
         </div>
+        ${(invoice.attachments || []).length ? `
+          <div class="invoice-preview-notes">
+            <span>Attachments</span>
+            ${(invoice.attachments || []).map(file => `<p>${file.name}</p>`).join('')}
+          </div>
+        ` : ''}
         <div class="invoice-preview-notes">
           <span>Notes</span>
           <p>${invoice.notes || 'Add payment or delivery notes here.'}</p>
@@ -415,6 +461,7 @@
 
     function syncPreview() {
       formState.invoice = collectInvoice();
+      formState.invoice.attachments = formState.invoice.attachments || [];
       document.querySelectorAll('.line-item-row').forEach(row => {
         const qty = Number(row.querySelector('[data-field="quantity"]').value || 0);
         const price = Number(row.querySelector('[data-field="unit_price"]').value || 0);
@@ -446,6 +493,7 @@
       document.getElementById('invoice-title').textContent = formState.invoice.number;
       document.getElementById('invoice-crumb').textContent = formState.invoice.number;
       renderLineItems(formState.invoice.items);
+      renderAttachments(formState.invoice.attachments || []);
       syncPreview();
     }
 
@@ -502,6 +550,32 @@
         showToast('Invoice saved', 'success');
         window.location.href = `invoice.html?id=${saved.id}`;
       });
+      document.getElementById('btn-export-pdf').addEventListener('click', async () => {
+        syncPreview();
+        const preview = document.getElementById('invoice-preview');
+        const clone = preview.cloneNode(true);
+        clone.style.background = '#ffffff';
+        clone.style.color = '#111111';
+        clone.style.width = '800px';
+        clone.style.padding = '32px';
+        clone.querySelectorAll('*').forEach(el => {
+          el.style.color = '#111111';
+          if (el.classList.contains('badge')) {
+            el.style.border = '1px solid #cccccc';
+            el.style.background = '#f3f3f3';
+          }
+        });
+        const wrapper = document.createElement('div');
+        wrapper.style.background = '#ffffff';
+        wrapper.appendChild(clone);
+        await html2pdf().set({
+          margin: 10,
+          filename: `${collectInvoice().number || 'invoice'}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        }).from(wrapper).save();
+      });
       document.getElementById('btn-save-template').addEventListener('click', () => {
         const saved = upsertInvoiceTemplate(collectTemplate());
         renderTemplateSelects(saved.id);
@@ -515,6 +589,27 @@
         reader.onload = () => {
           formState.template = { ...collectTemplate(), logo_data_url: reader.result };
           renderTemplatePreview(formState.template);
+        };
+        reader.readAsDataURL(file);
+      });
+      document.getElementById('invoice-attachment').addEventListener('change', (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          formState.invoice.attachments = [
+            ...(formState.invoice.attachments || []),
+            {
+              id: uid('att'),
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data_url: reader.result,
+            },
+          ];
+          renderAttachments(formState.invoice.attachments);
+          syncPreview();
+          event.target.value = '';
         };
         reader.readAsDataURL(file);
       });
