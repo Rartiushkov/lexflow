@@ -273,23 +273,10 @@
         body.className = 'kanban-column-body';
         body.dataset.stage = stage.id;
 
-        // Drop zone events
-        body.addEventListener('dragover', e => { e.preventDefault(); column.classList.add('kanban-drop-over'); });
-        body.addEventListener('dragleave', e => { if (!column.contains(e.relatedTarget)) column.classList.remove('kanban-drop-over'); });
-        body.addEventListener('drop', async e => {
-          e.preventDefault();
-          column.classList.remove('kanban-drop-over');
-          const caseId = e.dataTransfer.getData('text/plain');
-          const fromStage = e.dataTransfer.getData('from-stage');
-          if (!caseId || fromStage === stage.id) return;
-          try {
-            await patch(`/api/cases/${caseId}`, { stage: stage.id });
-            showToast(`Moved to ${stage.label}`, 'success');
-            const cases = await get('/api/cases');
-            setCaseDirectory(cases);
-            renderDashboard(cases);
-          } catch { showToast('Could not update stage', 'error'); }
-        });
+        // Drop zone stored on element for pointer-based drag
+        body._stageId = stage.id;
+        body._stageLabel = stage.label;
+        column._body = body;
 
         column.innerHTML = `
           <div class="kanban-header">
@@ -302,8 +289,8 @@
           stageCases.forEach(c => {
             const card = document.createElement('div');
             card.className = 'kanban-card';
-            card.draggable = true;
             card.dataset.id = c.id;
+            card.dataset.stage = c.stage;
             card.innerHTML = `
               <div class="kanban-card-title">${c.client_name}</div>
               <div class="kanban-card-meta">
@@ -316,30 +303,53 @@
                 <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Open'}</span>
               </div>
             `;
-            card.addEventListener('dragstart', e => {
-              e.dataTransfer.setData('text/plain', c.id);
-              e.dataTransfer.setData('from-stage', c.stage);
-              e.dataTransfer.effectAllowed = 'move';
-              // Custom drag ghost — solid opaque clone
-              const ghost = card.cloneNode(true);
-              ghost.style.cssText = `
-                position:fixed; top:-9999px; left:-9999px;
-                width:${card.offsetWidth}px;
-                background:var(--surface-3);
-                border:1px solid rgba(200,164,74,0.6);
-                border-radius:var(--radius-sm);
-                padding:14px;
-                opacity:1;
-                box-shadow:0 8px 32px rgba(0,0,0,0.5);
-                pointer-events:none;
-              `;
-              document.body.appendChild(ghost);
-              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, 20);
-              setTimeout(() => ghost.remove(), 0);
-              card.classList.add('kanban-card-dragging');
+            let _dragging = false, _ghost = null, _moved = false;
+            card.addEventListener('pointerdown', e => {
+              if (e.button !== 0) return;
+              _moved = false;
+              const startX = e.clientX, startY = e.clientY;
+              const onMove = mv => {
+                if (!_moved && Math.hypot(mv.clientX - startX, mv.clientY - startY) < 5) return;
+                if (!_moved) {
+                  _moved = true;
+                  _dragging = true;
+                  card.classList.add('kanban-card-dragging');
+                  _ghost = card.cloneNode(true);
+                  _ghost.classList.remove('kanban-card-dragging');
+                  _ghost.style.cssText = `position:fixed;pointer-events:none;z-index:9999;width:${card.offsetWidth}px;background:var(--surface-3);border:1.5px solid rgba(200,164,74,0.7);border-radius:var(--radius-sm);padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);opacity:1;transition:none;`;
+                  document.body.appendChild(_ghost);
+                }
+                _ghost.style.left = (mv.clientX - card.offsetWidth / 2) + 'px';
+                _ghost.style.top = (mv.clientY - 20) + 'px';
+                // Highlight drop target
+                document.querySelectorAll('.kanban-column').forEach(col => col.classList.remove('kanban-drop-over'));
+                const el = document.elementFromPoint(mv.clientX, mv.clientY);
+                const col = el?.closest('.kanban-column');
+                if (col && col.dataset.stage !== c.stage) col.classList.add('kanban-drop-over');
+              };
+              const onUp = async up => {
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+                if (_ghost) { _ghost.remove(); _ghost = null; }
+                card.classList.remove('kanban-card-dragging');
+                document.querySelectorAll('.kanban-column').forEach(col => col.classList.remove('kanban-drop-over'));
+                if (!_moved) { window.location.href = `case.html?id=${c.id}`; return; }
+                _dragging = false;
+                const el = document.elementFromPoint(up.clientX, up.clientY);
+                const col = el?.closest('.kanban-column');
+                const targetStage = col?.dataset?.stage;
+                if (!targetStage || targetStage === c.stage) return;
+                try {
+                  await patch(`/api/cases/${c.id}`, { stage: targetStage });
+                  showToast(`Moved to ${targetStage}`, 'success');
+                  const cases = await get('/api/cases');
+                  setCaseDirectory(cases);
+                  renderDashboard(cases);
+                } catch { showToast('Could not update stage', 'error'); }
+              };
+              document.addEventListener('pointermove', onMove);
+              document.addEventListener('pointerup', onUp);
             });
-            card.addEventListener('dragend', () => card.classList.remove('kanban-card-dragging'));
-            card.addEventListener('click', () => { window.location.href = `case.html?id=${c.id}`; });
             body.appendChild(card);
           });
         } else {

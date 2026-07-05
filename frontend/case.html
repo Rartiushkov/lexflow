@@ -469,9 +469,12 @@
       if (mergedDocs.length) {
         const _docMap = {};
         list.innerHTML = mergedDocs.map((d, i) => {
-          const url = d.data_url || d.url || '';
-          const canPreview = !!(url || d.document_id);
-          _docMap[i] = { url, name: d.name, docId: d.document_id || d.id || '' };
+          // data_url = local (Application form PDF, etc.) — use directly
+          // url = R2 private URL — must go through proxy
+          const localUrl = d.data_url || '';
+          const docId = d.document_id || d.id || '';
+          const canPreview = !!(localUrl || docId);
+          _docMap[i] = { url: localUrl, name: d.name, docId };
           return `
           <div class="table-row case-doc-row" style="grid-template-columns:1fr 100px 80px auto;">
             <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${d.name}</div>
