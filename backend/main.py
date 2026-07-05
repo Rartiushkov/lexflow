@@ -203,6 +203,32 @@ def is_usable_email_integration(row: dict) -> bool:
     return bool(row.get("email")) and bool(row.get("app_password"))
 
 
+def pick_runtime_email_integrations(rows: list[dict]) -> list[dict]:
+    usable = [row for row in (rows or []) if is_usable_email_integration(row)]
+    if not usable:
+        return []
+
+    def sort_key(row: dict) -> tuple:
+        auth_type = row.get("auth_type") or "app_password"
+        is_oauth = auth_type == "oauth"
+        is_active = row.get("active") is not False
+        has_refresh = bool(row.get("refresh_token"))
+        has_access = bool(row.get("access_token"))
+        return (
+            1 if is_active else 0,
+            1 if is_oauth else 0,
+            1 if has_refresh else 0,
+            1 if has_access else 0,
+            row.get("updated_at") or row.get("created_at") or "",
+        )
+
+    preferred_by_email: dict[str, dict] = {}
+    for row in sorted(usable, key=sort_key, reverse=True):
+        email_key = (row.get("email") or "").lower().strip() or row.get("id") or str(uuid.uuid4())
+        preferred_by_email.setdefault(email_key, row)
+    return list(preferred_by_email.values())
+
+
 def strip_unsupported_case_fields(data: dict) -> dict:
     unsupported = {
         "firm_id",
@@ -2656,7 +2682,9 @@ async def poll_gmail(user: dict = Depends(get_current_user)):
     integrations = await db_get_email_integrations(firm_id=actor["firm"]["id"], active_only=True)
     if not integrations:
         all_integrations = await db_get_email_integrations(firm_id=actor["firm"]["id"])
-        integrations = [item for item in all_integrations if is_usable_email_integration(item)]
+        integrations = pick_runtime_email_integrations(all_integrations)
+    else:
+        integrations = pick_runtime_email_integrations(integrations)
     if not integrations and USE_GMAIL:
         integrations = [{
             "id": "env-fallback",

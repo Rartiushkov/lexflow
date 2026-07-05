@@ -170,14 +170,31 @@
       localStorage.setItem(WORK_EMAIL_LIST_CACHE_KEY, JSON.stringify(Array.isArray(items) ? items : []));
     }
 
+    function pickPreferredIntegration(integrations, fallback = null) {
+      const items = Array.isArray(integrations) ? integrations.filter(Boolean) : [];
+      const scored = items
+        .map((item, index) => {
+          const isActive = item.active !== false;
+          const isOauth = item.auth_type === 'oauth';
+          const hasToken = Boolean(item.refresh_token || item.access_token || isOauth);
+          const score =
+            (isActive ? 100 : 0) +
+            (isOauth ? 20 : 0) +
+            (hasToken ? 10 : 0) -
+            index;
+          return { item, score };
+        })
+        .sort((a, b) => b.score - a.score);
+      return scored[0]?.item || fallback;
+    }
+
     function renderWorkEmailStatus(integrations) {
       const badge = document.getElementById('work-email-status-badge');
       const value = document.getElementById('work-email-status-value');
       const note = document.getElementById('work-email-status-note');
       const disconnectBtn = document.getElementById('btn-disconnect-email');
-      const live = integrations?.find(item => item.active);
       const cached = readWorkEmailCache();
-      const current = live || cached;
+      const current = pickPreferredIntegration(integrations, cached);
       if (!current) {
         badge.className = 'badge badge-gray';
         badge.textContent = 'offline';
@@ -194,14 +211,13 @@
         : 'Manual IMAP is saved for this workspace.';
       if (disconnectBtn) {
         disconnectBtn.style.display = 'inline-flex';
-        disconnectBtn._integrationId = live?.id;
+        disconnectBtn._integrationId = current?.id;
       }
     }
 
     function syncEmailIntegrationPanels(integrations) {
-      const live = integrations?.find(item => item.active);
       const cached = readWorkEmailCache();
-      const current = live || cached;
+      const current = pickPreferredIntegration(integrations, cached);
       const isOauth = current?.auth_type === 'oauth' && current?.active !== false;
       const hasConnection = !!current && current.active !== false;
       const toggleRow = document.getElementById('manual-imap-toggle-row');
@@ -302,16 +318,16 @@
       document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
       writeWorkEmailListCache(integrations);
       renderWorkEmailStatus(integrations);
-      if (integrations.length) {
-        const first = integrations[0];
+      const preferred = pickPreferredIntegration(integrations);
+      if (preferred) {
         writeWorkEmailCache({
-          id: first.id,
-          email: first.email,
-          auth_type: first.auth_type,
-          mailbox: first.mailbox,
-          imap_host: first.imap_host || 'imap.gmail.com',
-          poll_limit: first.poll_limit || 10,
-          active: first.active,
+          id: preferred.id,
+          email: preferred.email,
+          auth_type: preferred.auth_type,
+          mailbox: preferred.mailbox,
+          imap_host: preferred.imap_host || 'imap.gmail.com',
+          poll_limit: preferred.poll_limit || 10,
+          active: preferred.active,
         });
       }
       syncEmailIntegrationPanels(integrations);

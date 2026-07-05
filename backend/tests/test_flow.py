@@ -775,3 +775,32 @@ def test_poll_gmail_uses_oauth_integration_even_without_active_flag(monkeypatch)
     payload = response.json()
     assert payload["count"] == 0
     assert payload["runs"][0]["integration_id"] == "oauth-1"
+
+
+def test_pick_runtime_email_integrations_prefers_oauth_per_email():
+    rows = [
+        {
+            "id": "manual-1",
+            "provider": "gmail",
+            "auth_type": "app_password",
+            "email": "firm@gmail.com",
+            "app_password": "secret",
+            "active": True,
+            "updated_at": "2026-07-05T10:00:00Z",
+        },
+        {
+            "id": "oauth-1",
+            "provider": "gmail",
+            "auth_type": "oauth",
+            "email": "firm@gmail.com",
+            "refresh_token": "refresh",
+            "access_token": "",
+            "active": True,
+            "updated_at": "2026-07-05T09:00:00Z",
+        },
+    ]
+
+    picked = main.pick_runtime_email_integrations(rows)
+
+    assert len(picked) == 1
+    assert picked[0]["id"] == "oauth-1"
