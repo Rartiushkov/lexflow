@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -78,6 +79,64 @@ def test_schema_compat_error_matches_legacy_supabase_messages():
     assert main.is_schema_compat_error("Could not find the 'firm_id' column of 'cases' in the schema cache")
     assert main.is_schema_compat_error("Could not find the table 'public.firms' in the schema cache")
     assert main.is_schema_compat_error("column invoices.updated_at does not exist")
+
+
+def test_extract_missing_case_columns_parses_supabase_errors():
+    assert main.extract_missing_case_columns("Could not find the 'notes' column of 'cases' in the schema cache") == {"notes"}
+    assert main.extract_missing_case_columns('column cases.control_state does not exist') == {"control_state"}
+    assert main.extract_missing_case_columns('column "route_code" of relation "cases" does not exist') == {"route_code"}
+
+
+def test_db_update_case_retries_without_missing_columns(monkeypatch):
+    reset_state()
+    original_use_supabase = main.USE_SUPABASE
+    original_client = getattr(main, "supabase_client", None)
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    class FakeCasesTable:
+        def __init__(self):
+            self.payloads = []
+            self.current_payload = None
+
+        def update(self, payload):
+            self.current_payload = payload
+            self.payloads.append(payload)
+            return self
+
+        def eq(self, *_args):
+            return self
+
+        def execute(self):
+            if "notes" in self.current_payload:
+                raise Exception("Could not find the 'notes' column of 'cases' in the schema cache")
+            return FakeResult([{"id": "case_1", **self.current_payload}])
+
+    class FakeSupabase:
+        def __init__(self):
+            self.cases = FakeCasesTable()
+
+        def table(self, name):
+            assert name == "cases"
+            return self.cases
+
+    fake = FakeSupabase()
+    monkeypatch.setattr(main, "USE_SUPABASE", True)
+    monkeypatch.setattr(main, "supabase_client", fake, raising=False)
+
+    try:
+        payload = {"stage": "payment", "notes": "legacy field", "updated_at": "2026-07-05T00:00:00Z"}
+        updated = asyncio.run(main.db_update_case("case_1", payload))
+    finally:
+        monkeypatch.setattr(main, "USE_SUPABASE", original_use_supabase)
+        monkeypatch.setattr(main, "supabase_client", original_client, raising=False)
+
+    assert fake.cases.payloads[0]["notes"] == "legacy field"
+    assert "notes" not in fake.cases.payloads[1]
+    assert updated["stage"] == "payment"
+    assert updated["notes"] == "legacy field"
 
 
 def test_case_upload_creates_document_and_delete_removes_it():

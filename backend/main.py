@@ -206,6 +206,20 @@ def strip_unsupported_case_fields(data: dict) -> dict:
     return {key: value for key, value in data.items() if key not in unsupported}
 
 
+def extract_missing_case_columns(message: str) -> set[str]:
+    if not message:
+        return set()
+    columns = set()
+    patterns = (
+        r"Could not find the '([^']+)' column of 'cases'",
+        r"column\s+cases\.([a-zA-Z0-9_]+)\s+does not exist",
+        r"column\s+\"?([a-zA-Z0-9_]+)\"?\s+of relation\s+\"?cases\"?\s+does not exist",
+    )
+    for pattern in patterns:
+        columns.update(re.findall(pattern, message, flags=re.IGNORECASE))
+    return {column for column in columns if column}
+
+
 def is_schema_compat_error(message: str) -> bool:
     text = (message or "").lower()
     return any(
@@ -219,6 +233,13 @@ def is_schema_compat_error(message: str) -> bool:
             "pgrst205",
         )
     )
+
+
+def prune_case_payload_for_legacy_schema(data: dict, message: str) -> dict:
+    unsupported = set(strip_unsupported_case_fields(data).keys()) ^ set(data.keys())
+    missing_columns = extract_missing_case_columns(message)
+    blocked = unsupported | missing_columns
+    return {key: value for key, value in data.items() if key not in blocked}
 
 
 def build_default_actor_context(user: dict) -> dict:
@@ -327,7 +348,7 @@ async def db_create_case(data: dict) -> dict:
             print(f"Supabase insert failed: {e}")
             message = str(e)
             if is_schema_compat_error(message):
-                legacy = strip_unsupported_case_fields(data)
+                legacy = prune_case_payload_for_legacy_schema(data, message)
                 try:
                     res = supabase_client.table("cases").insert(legacy).execute()
                     return {**data, **(res.data[0] if res.data else legacy)}
@@ -369,7 +390,7 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
             print(f"Supabase update failed: {e}")
             message = str(e)
             if is_schema_compat_error(message):
-                legacy = strip_unsupported_case_fields(patch)
+                legacy = prune_case_payload_for_legacy_schema(patch, message)
                 try:
                     res = supabase_client.table("cases").update(legacy).eq("id", case_id).execute()
                     if res.data:
