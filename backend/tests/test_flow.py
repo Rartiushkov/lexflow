@@ -105,6 +105,27 @@ def test_case_upload_creates_document_and_delete_removes_it():
     assert docs_after.json() == []
 
 
+def test_case_patch_succeeds_even_if_control_refresh_fails(monkeypatch):
+    reset_state()
+    case = create_case()
+
+    async def broken_refresh(*args, **kwargs):
+        raise RuntimeError("refresh failed")
+
+    monkeypatch.setattr(main, "refresh_case_control", broken_refresh)
+
+    response = client.patch(
+        f"/api/cases/{case['id']}",
+        headers=AUTH,
+        json={"stage": "payment", "notes": "Updated from UI"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stage"] == "payment"
+    assert payload["notes"] == "Updated from UI"
+
+
 def test_intake_matches_case_by_filename():
     reset_state()
     case = create_case()

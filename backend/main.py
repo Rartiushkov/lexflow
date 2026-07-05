@@ -1641,7 +1641,12 @@ async def update_case(case_id: str, req: UpdateCase, user: dict = Depends(get_cu
     patch_data["updated_at"] = utc_now()
     updated = await db_update_case(case_id, patch_data)
     if any(key in patch_data for key in ("case_type", "destination", "stage", "priority", "invoice_paid", "extracted", "public_notes")):
-        await refresh_case_control(case_id, trigger="case_patch")
+        try:
+            refreshed = await refresh_case_control(case_id, trigger="case_patch")
+            if refreshed:
+                updated = refreshed
+        except Exception as e:
+            print(f"Case control refresh failed after patch {case_id}: {e}")
     return updated or {**case, **patch_data}
 
 
