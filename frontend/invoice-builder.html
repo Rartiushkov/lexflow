@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexFlow — Invoice Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css?v=10" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    /* ── Builder layout ── */
+    .builder-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 0;
+      height: calc(100vh - var(--topbar-h));
+      overflow: hidden;
+    }
+    .builder-panel {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 14px;
+    }
+    .builder-panel-section {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .builder-panel-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 10px 14px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .builder-panel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .block-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-2);
+      background: var(--surface-3);
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: grab;
+      transition: background 120ms, border-color 120ms;
+    }
+    .block-chip:hover { background: rgba(200,164,74,0.07); border-color: rgba(200,164,74,0.3); color: var(--text); }
+    .block-chip svg { flex-shrink: 0; opacity: 0.6; }
+    .add-block-btn {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px dashed var(--border-2);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    .add-block-btn:hover { background: var(--surface-3); color: var(--text); border-style: solid; }
+
+    /* ── Canvas area ── */
+    .builder-canvas-area {
+      overflow-y: auto;
+      background: #2a2a30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 24px;
+      gap: 0;
+    }
+    .canvas-toolbar {
+      width: 794px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .cvs-tool-btn {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-2);
+      background: var(--surface-2);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    .cvs-tool-btn:hover { background: var(--surface-3); color: var(--text); }
+    .cvs-tool-btn.danger { color: var(--red); border-color: rgba(196,100,90,0.3); }
+
+    /* ── A4 paper ── */
+    #a4-paper {
+      width: 794px;
+      min-height: 1123px;
+      background: #fff;
+      position: relative;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.45);
+      border-radius: 2px;
+      font-family: "Inter", Arial, sans-serif;
+      font-size: 12px;
+      color: #111;
+      line-height: 1.5;
+    }
+    /* ── Draggable blocks on paper ── */
+    .paper-block {
+      position: absolute;
+      cursor: move;
+      border: 1.5px solid transparent;
+      border-radius: 3px;
+      box-sizing: border-box;
+      transition: border-color 80ms;
+      min-width: 80px;
+      min-height: 20px;
+    }
+    .paper-block:hover { border-color: rgba(200,164,74,0.4); }
+    .paper-block.selected {
+      border-color: rgba(200,164,74,0.75);
+      box-shadow: 0 0 0 2px rgba(200,164,74,0.18);
+    }
+    .paper-block.selected .block-tools { display: flex; }
+    .block-tools {
+      display: none;
+      position: absolute;
+      top: -30px;
+      left: 0;
+      gap: 4px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 3px 5px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      z-index: 100;
+      white-space: nowrap;
+    }
+    .bt-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: #333;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .bt-btn:hover { background: #f0f0f0; }
+    .bt-btn.del { color: #c55; }
+    .resize-handle {
+      position: absolute;
+      right: -5px;
+      bottom: -5px;
+      width: 12px;
+      height: 12px;
+      background: #c8a44a;
+      border-radius: 2px;
+      cursor: se-resize;
+      display: none;
+    }
+    .paper-block.selected .resize-handle { display: block; }
+
+    /* ── Block content types ── */
+    .blk-header {
+      padding: 16px 20px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #c8a44a;
+    }
+    .blk-header-left .company { font-size: 18px; font-weight: 800; color: #111; }
+    .blk-header-left .tagline { font-size: 11px; color: #666; margin-top: 2px; }
+    .blk-header-right { text-align: right; }
+    .blk-header-right .inv-title { font-size: 22px; font-weight: 800; color: #c8a44a; }
+    .blk-header-right .inv-meta { font-size: 11px; color: #666; margin-top: 3px; }
+
+    .blk-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 14px 20px; }
+    .blk-party-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #c8a44a; margin-bottom: 5px; }
+    .blk-party-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+    .blk-party-detail { font-size: 11px; color: #555; line-height: 1.5; }
+
+    .blk-table { width: 100%; border-collapse: collapse; }
+    .blk-table thead tr { background: #f5f5f5; }
+    .blk-table th { padding: 8px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #666; text-align: left; }
+    .blk-table td { padding: 9px 12px; border-bottom: 1px solid #eee; color: #222; font-size: 12px; }
+    .blk-table tr:last-child td { border-bottom: none; }
+
+    .blk-totals { padding: 10px 20px 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; border-top: 1px solid #ddd; }
+    .blk-total-row { display: flex; gap: 48px; font-size: 12px; color: #555; }
+    .blk-total-row span:first-child { min-width: 80px; text-align: right; }
+    .blk-grand { font-size: 15px; font-weight: 700; color: #111; border-top: 2px solid #c8a44a; padding-top: 6px; margin-top: 4px; }
+
+    .blk-payment { padding: 12px 16px; background: #f9f9f9; border-left: 3px solid #c8a44a; border-radius: 2px; }
+    .blk-payment-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #c8a44a; margin-bottom: 6px; }
+    .blk-payment-row { display: flex; gap: 12px; font-size: 12px; margin-bottom: 2px; }
+    .blk-payment-row span { color: #666; min-width: 36px; }
+    .blk-payment-row strong { font-family: monospace; color: #111; }
+
+    .blk-text { padding: 8px 12px; font-size: 12px; color: #333; line-height: 1.55; outline: none; }
+    .blk-field-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #999; margin-bottom: 2px; padding: 8px 12px 0; }
+    .blk-field-value { font-size: 12px; color: #111; padding: 2px 12px 8px; outline: none; }
+    .blk-divider { border: none; border-top: 1px solid #ccc; margin: 4px 12px; }
+    .blk-image img { max-width: 100%; display: block; border-radius: 2px; }
+    .blk-footer { padding: 12px 20px; border-top: 1px solid #eee; font-size: 11px; color: #666; line-height: 1.6; }
+
+    /* ── Properties panel ── */
+    .prop-panel {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .prop-panel.visible { display: flex; }
+    .prop-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; display: block; }
+    .prop-input {
+      width: 100%;
+      background: var(--surface-3);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 8px;
+      font-family: inherit;
+    }
+    .prop-input:focus { outline: none; border-color: rgba(200,164,74,0.5); }
+    .prop-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* ── Add field dialog ── */
+    .field-dialog {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--surface-3);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius);
+    }
+    .field-dialog.visible { display: flex; }
+  </style>
+</head>
+<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <aside class="sidebar">
+    <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
+    <nav class="sidebar-nav">
+      <span class="nav-section-label">Workspace</span>
+      <a href="dashboard.html" class="nav-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</a>
+      <a href="cases.html" class="nav-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"/></svg>Cases</a>
+      <a href="documents.html" class="nav-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M10 2v3h3"/></svg>Intake</a>
+      <a href="invoices.html" class="nav-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h3"/></svg>Invoices</a>
+      <a href="invoice-builder.html" class="nav-item active"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1"/><path d="M5 7h6M5 10h4"/><circle cx="12" cy="6" r="1.5" fill="currentColor" stroke="none"/></svg>Invoice Builder</a>
+      <span class="nav-section-label">Account</span>
+      <a href="settings.html" class="nav-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info"><div class="user-name" id="user-name">—</div><div class="user-role" id="user-email">—</div></div>
+        <button id="btn-signout" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 5l4 3-4 3M6 8h8"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="dashboard-main">
+    <div class="dashboard-topbar">
+      <div class="topbar-breadcrumb">
+        <span>Workspace</span><span class="sep">/</span><strong>Invoice Builder</strong>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-outline" id="btn-clear-canvas">Clear all</button>
+        <button class="btn btn-outline" id="btn-load-default">Load default</button>
+        <button class="btn btn-outline" id="btn-export-pdf">Export PDF</button>
+        <button class="btn btn-primary" id="btn-save-layout">Save layout</button>
+      </div>
+    </div>
+
+    <div class="builder-layout">
+      <!-- LEFT: block palette + properties -->
+      <div class="builder-panel">
+
+        <div class="builder-panel-section">
+          <div class="builder-panel-title">Add blocks</div>
+          <div class="builder-panel-body">
+            <button class="add-block-btn" data-type="header">+ Header (company + invoice #)</button>
+            <button class="add-block-btn" data-type="parties">+ Parties (from / to)</button>
+            <button class="add-block-btn" data-type="table">+ Line items table</button>
+            <button class="add-block-btn" data-type="totals">+ Totals (subtotal / VAT / grand)</button>
+            <button class="add-block-btn" data-type="payment">+ Payment details (IBAN)</button>
+            <button class="add-block-btn" data-type="footer">+ Footer note</button>
+            <button class="add-block-btn" data-type="text">+ Free text</button>
+            <button class="add-block-btn" data-type="divider">+ Divider line</button>
+            <button class="add-block-btn" data-type="image">+ Image / logo / stamp</button>
+          </div>
+        </div>
+
+        <div class="builder-panel-section" id="custom-field-section">
+          <div class="builder-panel-title">Custom field</div>
+          <div class="builder-panel-body">
+            <div class="field-dialog visible" id="field-form">
+              <div>
+                <label class="prop-label">Label</label>
+                <input class="prop-input" id="cf-label" placeholder="e.g. Reference No." />
+              </div>
+              <div>
+                <label class="prop-label">Value</label>
+                <input class="prop-input" id="cf-value" placeholder="e.g. REF-2025-001" />
+              </div>
+              <button class="add-block-btn" id="btn-add-custom-field">+ Add custom field to canvas</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="builder-panel-section" id="prop-section" style="display:none;">
+          <div class="builder-panel-title">Properties</div>
+          <div class="builder-panel-body">
+            <div class="prop-panel visible" id="prop-panel">
+              <div class="prop-row">
+                <div>
+                  <label class="prop-label">Width (px)</label>
+                  <input class="prop-input" id="prop-w" type="number" min="80" />
+                </div>
+                <div>
+                  <label class="prop-label">Font size</label>
+                  <input class="prop-input" id="prop-fs" type="number" min="8" max="36" />
+                </div>
+              </div>
+              <div>
+                <label class="prop-label">Text colour</label>
+                <input class="prop-input" id="prop-color" type="color" value="#111111" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="builder-panel-section">
+          <div class="builder-panel-title">Image upload</div>
+          <div class="builder-panel-body">
+            <input type="file" id="img-upload" accept="image/*" class="prop-input" style="padding:4px;height:auto;" />
+            <button class="add-block-btn" id="btn-add-image">+ Place image on canvas</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: A4 Canvas -->
+      <div class="builder-canvas-area" id="canvas-area">
+        <div class="canvas-toolbar">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#888;">Canvas</span>
+          <span style="flex:1;font-size:11px;color:#555;" id="canvas-hint">Click a block to select · Drag to move · Double-click text to edit · ⌦ to delete selected</span>
+        </div>
+        <div id="a4-paper"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js?v=10"></script>
+  <script>
+  /* ═══════════════════════════════════════════
+     INVOICE BUILDER — full WYSIWYG canvas
+  ═══════════════════════════════════════════ */
+  const SAVE_KEY = 'lf_builder_blocks';
+  let blocks = [];       // { id, type, x, y, w, data, fontSize, color }
+  let selectedId = null;
+
+  // ── Default template data ──
+  const DEFAULTS = {
+    company: 'LexFlow Legal Services',
+    tagline: 'EU Immigration Law Practice',
+    invoiceNo: 'INV-2025-001',
+    invoiceDate: new Date().toLocaleDateString('en-GB'),
+    dueDate: '',
+    fromName: 'LexFlow Legal Services',
+    fromAddress: '123 Law Street, Berlin, DE',
+    fromVAT: 'DE123456789',
+    toName: 'Client Name',
+    toAddress: '456 Client Ave, Vienna, AT',
+    toVAT: '',
+    items: [
+      { desc: 'Legal consultation — EU Blue Card', qty: 1, unit: 1200, vat: 19 },
+      { desc: 'Document preparation & filing', qty: 1, unit: 800, vat: 19 },
+    ],
+    subtotal: 2000,
+    vatAmount: 380,
+    total: 2380,
+    currency: 'EUR',
+    iban: 'DE89 3704 0044 0532 0130 00',
+    bic: 'COBADEFFXXX',
+    bank: 'Commerzbank',
+    footerNote: 'Thank you for your trust. Payment due within 14 days. VAT charged per §13 UStG.',
+  };
+
+  // ── HTML templates per block type ──
+  function blockHTML(type, data) {
+    const D = { ...DEFAULTS, ...data };
+    if (type === 'header') return `
+      <div class="blk-header">
+        <div class="blk-header-left">
+          <div class="company" contenteditable="true">${D.company}</div>
+          <div class="tagline" contenteditable="true">${D.tagline}</div>
+        </div>
+        <div class="blk-header-right">
+          <div class="inv-title" contenteditable="true">INVOICE</div>
+          <div class="inv-meta" contenteditable="true"># ${D.invoiceNo}</div>
+          <div class="inv-meta" contenteditable="true">Date: ${D.invoiceDate}</div>
+        </div>
+      </div>`;
+    if (type === 'parties') return `
+      <div class="blk-parties">
+        <div>
+          <div class="blk-party-label">From</div>
+          <div class="blk-party-name" contenteditable="true">${D.fromName}</div>
+          <div class="blk-party-detail" contenteditable="true">${D.fromAddress}<br/>VAT: ${D.fromVAT}</div>
+        </div>
+        <div>
+          <div class="blk-party-label">Bill To</div>
+          <div class="blk-party-name" contenteditable="true">${D.toName}</div>
+          <div class="blk-party-detail" contenteditable="true">${D.toAddress}</div>
+        </div>
+      </div>`;
+    if (type === 'table') return `
+      <table class="blk-table">
+        <thead><tr>
+          <th>Description</th><th>Qty</th><th>Unit price</th><th>VAT %</th><th>Amount</th>
+        </tr></thead>
+        <tbody>${D.items.map(i => `<tr>
+          <td contenteditable="true">${i.desc}</td>
+          <td contenteditable="true">${i.qty}</td>
+          <td contenteditable="true">${i.unit.toFixed(2)} ${D.currency}</td>
+          <td contenteditable="true">${i.vat}%</td>
+          <td>${(i.qty * i.unit).toFixed(2)} ${D.currency}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    if (type === 'totals') return `
+      <div class="blk-totals">
+        <div class="blk-total-row"><span>Subtotal</span><span contenteditable="true">${D.subtotal.toFixed(2)} ${D.currency}</span></div>
+        <div class="blk-total-row"><span>VAT</span><span contenteditable="true">${D.vatAmount.toFixed(2)} ${D.currency}</span></div>
+        <div class="blk-total-row blk-grand"><span>Total</span><span contenteditable="true">${D.total.toFixed(2)} ${D.currency}</span></div>
+      </div>`;
+    if (type === 'payment') return `
+      <div class="blk-payment">
+        <div class="blk-payment-label">Payment details</div>
+        <div class="blk-payment-row"><span>IBAN</span><strong contenteditable="true">${D.iban}</strong></div>
+        <div class="blk-payment-row"><span>BIC</span><strong contenteditable="true">${D.bic}</strong></div>
+        <div class="blk-payment-row"><span>Bank</span><strong contenteditable="true">${D.bank}</strong></div>
+      </div>`;
+    if (type === 'footer') return `
+      <div class="blk-footer" contenteditable="true">${D.footerNote}</div>`;
+    if (type === 'text') return `
+      <div class="blk-text" contenteditable="true">${D.text || 'Click to edit text…'}</div>`;
+    if (type === 'divider') return `<hr class="blk-divider" />`;
+    if (type === 'field') return `
+      <div class="blk-field-label" contenteditable="true">${D.label || 'FIELD LABEL'}</div>
+      <div class="blk-field-value" contenteditable="true">${D.value || 'Field value'}</div>`;
+    if (type === 'image') return `
+      <div class="blk-image"><img src="${D.src}" style="width:${D.imgW || 120}px;" /></div>`;
+    return '';
+  }
+
+  // ── Default layout positions ──
+  const DEFAULT_LAYOUT = [
+    { type: 'header',  x: 0,  y: 0,   w: 794 },
+    { type: 'parties', x: 0,  y: 110, w: 794 },
+    { type: 'table',   x: 0,  y: 230, w: 794 },
+    { type: 'totals',  x: 0,  y: 380, w: 794 },
+    { type: 'payment', x: 20, y: 510, w: 380 },
+    { type: 'footer',  x: 0,  y: 640, w: 794 },
+  ];
+
+  function genId() { return 'blk-' + Date.now() + '-' + Math.random().toString(36).slice(2,6); }
+
+  function saveBlocks() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(blocks)); } catch {}
+  }
+  function loadBlocks() {
+    try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { return null; }
+  }
+
+  function renderBlocks() {
+    const paper = document.getElementById('a4-paper');
+    paper.innerHTML = '';
+    blocks.forEach(blk => mountBlock(blk));
+  }
+
+  function mountBlock(blk) {
+    const paper = document.getElementById('a4-paper');
+    const div = document.createElement('div');
+    div.className = 'paper-block' + (blk.id === selectedId ? ' selected' : '');
+    div.dataset.id = blk.id;
+    div.style.cssText = `left:${blk.x}px;top:${blk.y}px;width:${blk.w}px;`;
+    if (blk.fontSize) div.style.fontSize = blk.fontSize + 'px';
+    if (blk.color) div.style.color = blk.color;
+
+    div.innerHTML = blockHTML(blk.type, blk.data || {}) +
+      `<div class="block-tools">
+        <button class="bt-btn" data-act="up">↑</button>
+        <button class="bt-btn" data-act="down">↓</button>
+        <button class="bt-btn" data-act="dup">⎘</button>
+        <button class="bt-btn del" data-act="del">✕</button>
+      </div>
+      <div class="resize-handle"></div>`;
+
+    paper.appendChild(div);
+    bindBlock(div, blk);
+  }
+
+  function bindBlock(div, blk) {
+    // Click to select
+    div.addEventListener('mousedown', e => {
+      if (e.target.closest('.block-tools') || e.target.closest('.resize-handle')) return;
+      if (e.target.isContentEditable) { selectBlock(blk.id); return; }
+      e.preventDefault();
+      selectBlock(blk.id);
+
+      let ox = e.clientX - blk.x, oy = e.clientY - blk.y;
+      const onMove = ev => {
+        blk.x = Math.max(0, Math.min(ev.clientX - ox, 794 - blk.w));
+        blk.y = Math.max(0, ev.clientY - oy);
+        div.style.left = blk.x + 'px';
+        div.style.top = blk.y + 'px';
+      };
+      const onUp = () => {
+        saveBlocks();
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // Double-click to focus editable
+    div.addEventListener('dblclick', e => {
+      const ed = e.target.closest('[contenteditable]');
+      if (ed) { ed.focus(); selectBlock(blk.id); }
+    });
+
+    // Save editable content on blur
+    div.querySelectorAll('[contenteditable]').forEach(el => {
+      el.addEventListener('blur', () => { blk.data = blk.data || {}; saveBlocks(); });
+    });
+
+    // Toolbar actions
+    div.querySelectorAll('.bt-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const act = btn.dataset.act;
+        const idx = blocks.findIndex(b => b.id === blk.id);
+        if (act === 'del') { blocks.splice(idx, 1); selectedId = null; }
+        else if (act === 'dup') { const copy = { ...blk, id: genId(), x: blk.x + 20, y: blk.y + 20 }; blocks.splice(idx + 1, 0, copy); selectedId = copy.id; }
+        else if (act === 'up' && idx > 0) { [blocks[idx-1], blocks[idx]] = [blocks[idx], blocks[idx-1]]; }
+        else if (act === 'down' && idx < blocks.length - 1) { [blocks[idx], blocks[idx+1]] = [blocks[idx+1], blocks[idx]]; }
+        saveBlocks();
+        renderBlocks();
+        updatePropPanel();
+      });
+    });
+
+    // Resize handle
+    const rh = div.querySelector('.resize-handle');
+    rh.addEventListener('mousedown', e => {
+      e.stopPropagation(); e.preventDefault();
+      let sx = e.clientX, sw = blk.w;
+      const onMove = ev => { blk.w = Math.max(80, sw + ev.clientX - sx); div.style.width = blk.w + 'px'; };
+      const onUp = () => { saveBlocks(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  function selectBlock(id) {
+    selectedId = id;
+    document.querySelectorAll('.paper-block').forEach(el => {
+      el.classList.toggle('selected', el.dataset.id === id);
+    });
+    updatePropPanel();
+  }
+
+  function updatePropPanel() {
+    const blk = blocks.find(b => b.id === selectedId);
+    const sec = document.getElementById('prop-section');
+    if (!blk) { sec.style.display = 'none'; return; }
+    sec.style.display = 'block';
+    document.getElementById('prop-w').value = blk.w || 794;
+    document.getElementById('prop-fs').value = blk.fontSize || 12;
+    document.getElementById('prop-color').value = blk.color || '#111111';
+  }
+
+  // ── Prop panel live updates ──
+  document.getElementById('prop-w').addEventListener('input', e => {
+    const blk = blocks.find(b => b.id === selectedId); if (!blk) return;
+    blk.w = +e.target.value;
+    const el = document.querySelector(`.paper-block[data-id="${selectedId}"]`);
+    if (el) el.style.width = blk.w + 'px';
+    saveBlocks();
+  });
+  document.getElementById('prop-fs').addEventListener('input', e => {
+    const blk = blocks.find(b => b.id === selectedId); if (!blk) return;
+    blk.fontSize = +e.target.value;
+    const el = document.querySelector(`.paper-block[data-id="${selectedId}"]`);
+    if (el) el.style.fontSize = blk.fontSize + 'px';
+    saveBlocks();
+  });
+  document.getElementById('prop-color').addEventListener('input', e => {
+    const blk = blocks.find(b => b.id === selectedId); if (!blk) return;
+    blk.color = e.target.value;
+    const el = document.querySelector(`.paper-block[data-id="${selectedId}"]`);
+    if (el) el.style.color = blk.color;
+    saveBlocks();
+  });
+
+  // ── Add blocks from palette ──
+  document.querySelectorAll('.add-block-btn[data-type]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      if (type === 'image') { document.getElementById('img-upload').click(); return; }
+      addBlock(type);
+    });
+  });
+
+  function addBlock(type, extra = {}) {
+    const offset = blocks.length * 16;
+    const blk = { id: genId(), type, x: 20 + (offset % 60), y: 20 + offset, w: 754, data: {}, ...extra };
+    blocks.push(blk);
+    selectedId = blk.id;
+    saveBlocks();
+    mountBlock(blk);
+    updatePropPanel();
+    // Scroll to new block
+    const paper = document.getElementById('a4-paper');
+    const el = paper.querySelector(`[data-id="${blk.id}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  // ── Custom field ──
+  document.getElementById('btn-add-custom-field').addEventListener('click', () => {
+    const label = document.getElementById('cf-label').value.trim() || 'Custom Field';
+    const value = document.getElementById('cf-value').value.trim() || '';
+    addBlock('field', { data: { label, value }, w: 220 });
+    document.getElementById('cf-label').value = '';
+    document.getElementById('cf-value').value = '';
+  });
+
+  // ── Image upload ──
+  document.getElementById('img-upload').addEventListener('change', e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { addBlock('image', { data: { src: reader.result, imgW: 150 }, w: 180 }); };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+  document.getElementById('btn-add-image').addEventListener('click', () => {
+    document.getElementById('img-upload').click();
+  });
+
+  // ── Keyboard: Delete selected ──
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && document.activeElement.tagName !== 'INPUT' && !document.activeElement.isContentEditable) {
+      blocks = blocks.filter(b => b.id !== selectedId);
+      selectedId = null;
+      saveBlocks();
+      renderBlocks();
+      updatePropPanel();
+    }
+    if (e.key === 'Escape') { selectedId = null; document.querySelectorAll('.paper-block').forEach(el => el.classList.remove('selected')); updatePropPanel(); }
+  });
+
+  // ── Click outside deselects ──
+  document.getElementById('a4-paper').addEventListener('mousedown', e => {
+    if (e.target === e.currentTarget) { selectedId = null; document.querySelectorAll('.paper-block').forEach(el => el.classList.remove('selected')); updatePropPanel(); }
+  });
+
+  // ── Toolbar buttons ──
+  document.getElementById('btn-clear-canvas').addEventListener('click', () => {
+    if (confirm('Remove all blocks from canvas?')) { blocks = []; selectedId = null; saveBlocks(); renderBlocks(); updatePropPanel(); }
+  });
+
+  document.getElementById('btn-load-default').addEventListener('click', () => {
+    blocks = DEFAULT_LAYOUT.map(d => ({ id: genId(), data: {}, ...d }));
+    selectedId = null;
+    saveBlocks();
+    renderBlocks();
+    updatePropPanel();
+  });
+
+  document.getElementById('btn-save-layout').addEventListener('click', () => {
+    saveBlocks();
+    // Show brief feedback
+    const btn = document.getElementById('btn-save-layout');
+    const orig = btn.textContent;
+    btn.textContent = 'Saved ✓';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+  });
+
+  document.getElementById('btn-export-pdf').addEventListener('click', () => {
+    const paper = document.getElementById('a4-paper');
+    // Remove selection chrome
+    document.querySelectorAll('.paper-block').forEach(el => el.classList.remove('selected'));
+    selectedId = null;
+    updatePropPanel();
+    const clone = paper.cloneNode(true);
+    clone.querySelectorAll('.block-tools, .resize-handle').forEach(el => el.remove());
+    clone.querySelectorAll('.paper-block').forEach(el => {
+      el.style.border = 'none';
+      el.style.boxShadow = 'none';
+    });
+    html2pdf().set({
+      margin: 0,
+      filename: 'invoice-layout.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
+    }).from(clone).save();
+  });
+
+  // ── Init ──
+  document.addEventListener('DOMContentLoaded', async () => {
+    await requireAuth();
+    const saved = loadBlocks();
+    if (saved && saved.length) {
+      blocks = saved;
+      renderBlocks();
+    } else {
+      // Auto-load default layout on first visit
+      blocks = DEFAULT_LAYOUT.map(d => ({ id: genId(), data: {}, ...d }));
+      saveBlocks();
+      renderBlocks();
+    }
+  });
+  </script>
+</body>
+</html>
