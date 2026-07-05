@@ -37,7 +37,10 @@
       <div class="topbar-actions">
         <a href="invoices.html" class="btn btn-outline">Back</a>
         <button class="btn btn-outline" id="btn-generate-invoice">Generate invoice</button>
-        <button class="btn btn-outline" id="btn-send-invoice">Send invoice</button>
+        <button class="btn btn-outline" id="btn-send-invoice">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 3h12l-6 6-6-6z"/><path d="M2 3v9a1 1 0 001 1h10a1 1 0 001-1V3"/></svg>
+          Send
+        </button>
         <button class="btn btn-outline" id="btn-export-pdf">Export PDF</button>
         <button class="btn btn-primary" id="btn-save-invoice">Save invoice</button>
       </div>
@@ -50,9 +53,15 @@
         </div>
       </div>
 
-      <div class="builder-tabs">
-        <button class="builder-tab active" type="button" data-tab="invoice">Invoice</button>
-        <button class="builder-tab" type="button" data-tab="template">Template</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="builder-tabs">
+          <button class="builder-tab active" type="button" data-tab="invoice">Invoice</button>
+          <button class="builder-tab" type="button" data-tab="template">Templates</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);">Template:</span>
+          <div id="template-picker" style="display:flex;gap:6px;"></div>
+        </div>
       </div>
 
       <div class="invoice-workspace" data-panel="invoice">
@@ -107,9 +116,43 @@
               </div>
             </div>
 
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="client-vat">Client VAT ID</label>
+                <input class="form-input" id="client-vat" placeholder="DE123456789" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="client-address">Client address</label>
+                <input class="form-input" id="client-address" placeholder="Street, City, Country" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="invoice-currency">Currency</label>
+                <select class="form-select" id="invoice-currency">
+                  <option value="EUR">EUR &mdash; Euro</option>
+                  <option value="GBP">GBP &mdash; Pound</option>
+                  <option value="USD">USD &mdash; Dollar</option>
+                  <option value="CHF">CHF &mdash; Swiss Franc</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="invoice-vat-rate">VAT rate %</label>
+                <input class="form-input" type="number" id="invoice-vat-rate" min="0" max="100" step="0.1" placeholder="19" />
+              </div>
+            </div>
+
             <div class="form-group">
-              <label class="form-label" for="invoice-notes">Notes</label>
-              <textarea class="form-textarea" id="invoice-notes"></textarea>
+              <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="reverse-charge" style="width:14px;height:14px;accent-color:var(--gold);" />
+                <span>Reverse charge (Article 196 EU VAT Directive)</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="invoice-notes">Notes / payment instructions</label>
+              <textarea class="form-textarea" id="invoice-notes" rows="3"></textarea>
             </div>
 
             <div class="builder-section-head">
@@ -148,14 +191,12 @@
           </div>
         </section>
 
-        <aside class="card invoice-preview-card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Preview</div>
-              <div class="panel-subtitle">Strict customer-facing document.</div>
-            </div>
+        <aside class="invoice-preview-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 2px;">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">A4 Preview</span>
+            <span style="font-size:11px;color:var(--dim);">Customer-facing document</span>
           </div>
-          <div class="invoice-preview" id="invoice-preview"></div>
+          <div class="invoice-a4" id="invoice-preview"></div>
         </aside>
       </div>
 
@@ -265,6 +306,29 @@
     </div>
   </div>
 
+  <!-- Send invoice modal -->
+  <div id="send-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border-2);border-radius:var(--radius);width:480px;max-width:95vw;padding:28px;box-shadow:var(--shadow-lg);">
+      <div style="font-size:16px;font-weight:700;margin-bottom:20px;">Send invoice by email</div>
+      <div class="form-group">
+        <label class="form-label">To</label>
+        <input class="form-input" id="send-to" type="email" placeholder="client@example.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subject</label>
+        <input class="form-input" id="send-subject" placeholder="Invoice #INV-001 from LexFlow Legal" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <textarea class="form-textarea" id="send-body" rows="4" placeholder="Dear client, please find your invoice attached..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn btn-outline" id="send-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="send-modal-confirm">Send invoice</button>
+      </div>
+    </div>
+  </div>
+
   <script src="./app.js?v=10"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
@@ -285,6 +349,67 @@
       if (el) el.value = value ?? '';
     }
 
+    const DEFAULT_TEMPLATES = [
+      {
+        id: 'tpl-standard', name: 'Standard',
+        issuer_name: '', issuer_address: '', issuer_email: '', issuer_phone: '',
+        issuer_vat_id: '', issuer_tax_number: '', iban: '', bic: '',
+        default_vat_rate: 19, payment_terms: 'Payment due within 14 days of issue.',
+        footer_note: 'Thank you for choosing our legal services.',
+        accent: '#c8a44a', logo_data_url: null,
+      },
+      {
+        id: 'tpl-retainer', name: 'Retainer',
+        issuer_name: '', issuer_address: '', issuer_email: '', issuer_phone: '',
+        issuer_vat_id: '', issuer_tax_number: '', iban: '', bic: '',
+        default_vat_rate: 0, payment_terms: 'Monthly retainer — invoiced in advance. Payment due within 7 days.',
+        footer_note: 'Retainer invoice. VAT reverse charge applies per Art. 196 EU VAT Directive.',
+        accent: '#5a9fd4', logo_data_url: null,
+      },
+      {
+        id: 'tpl-disbursements', name: 'Disbursements',
+        issuer_name: '', issuer_address: '', issuer_email: '', issuer_phone: '',
+        issuer_vat_id: '', issuer_tax_number: '', iban: '', bic: '',
+        default_vat_rate: 0, payment_terms: 'Reimbursement of disbursements. No VAT charged.',
+        footer_note: 'All disbursements are billed at cost with supporting receipts available on request.',
+        accent: '#3db87a', logo_data_url: null,
+      },
+    ];
+
+    function ensureDefaultTemplates() {
+      const existing = getInvoiceTemplates();
+      DEFAULT_TEMPLATES.forEach(tpl => {
+        if (!existing.find(t => t.id === tpl.id)) upsertInvoiceTemplate(tpl);
+      });
+    }
+
+    function renderTemplatePicker(activeId) {
+      const host = document.getElementById('template-picker');
+      if (!host) return;
+      const templates = getInvoiceTemplates();
+      host.innerHTML = templates.map(t => `
+        <button type="button" data-tpl-id="${t.id}" style="
+          padding:5px 12px;font-size:12px;font-weight:600;border-radius:var(--radius-sm);
+          border:1px solid ${t.id === activeId ? 'rgba(200,164,74,0.6)' : 'var(--border)'};
+          background:${t.id === activeId ? 'rgba(200,164,74,0.08)' : 'var(--surface-2)'};
+          color:${t.id === activeId ? 'var(--gold)' : 'var(--text-2)'};
+          cursor:pointer;transition:all 120ms;
+        ">${t.name}</button>
+      `).join('');
+      host.querySelectorAll('[data-tpl-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tpl = getInvoiceTemplateById(btn.dataset.tplId);
+          if (tpl) {
+            populateTemplateForm(tpl);
+            setFieldValue('invoice-template', tpl.id);
+            formState.invoice.template_id = tpl.id;
+            renderTemplatePicker(tpl.id);
+            syncPreview();
+          }
+        });
+      });
+    }
+
     function collectInvoice() {
       return {
         ...formState.invoice,
@@ -293,6 +418,11 @@
         template_id: getFieldValue('invoice-template'),
         client_name: getFieldValue('client-name'),
         client_email: getFieldValue('client-email'),
+        client_vat: getFieldValue('client-vat'),
+        client_address: getFieldValue('client-address'),
+        currency: getFieldValue('invoice-currency') || 'EUR',
+        vat_rate: Number(getFieldValue('invoice-vat-rate') || 0),
+        reverse_charge: document.getElementById('reverse-charge')?.checked || false,
         issue_date: getFieldValue('issue-date'),
         due_date: getFieldValue('due-date'),
         notes: getFieldValue('invoice-notes'),
@@ -455,56 +585,108 @@
     function renderPreview(invoice) {
       const preview = document.getElementById('invoice-preview');
       const template = getInvoiceTemplateById(invoice.template_id) || getInvoiceTemplates()[0];
-      const total = calculateInvoiceTotal(invoice);
-      const vatRate = Number(template?.default_vat_rate || 0);
-      const vatAmount = total * (vatRate / 100);
+      const cur = invoice.currency || 'EUR';
+      const net = calculateInvoiceTotal(invoice);
+      const vatRate = Number(invoice.vat_rate ?? template?.default_vat_rate ?? 0);
+      const vatAmount = invoice.reverse_charge ? 0 : net * (vatRate / 100);
+      const grand = net + vatAmount;
+      const accent = template?.accent || '#c8a44a';
       preview.innerHTML = `
-        <div class="invoice-preview-head">
-          <div>
-            <div class="invoice-preview-eyebrow">Invoice</div>
-            <h2>${invoice.number}</h2>
-          </div>
-          <span class="badge ${invoiceStatusBadge(invoice.status)}">${invoice.status}</span>
-        </div>
-        ${template?.logo_data_url ? `<div class="template-logo-preview"><img src="${template.logo_data_url}" alt="Template logo" /></div>` : ''}
-        <div class="invoice-preview-meta">
-          <div><span>Seller</span><strong>${template?.issuer_name || 'Seller legal name'}</strong></div>
-          <div><span>Seller address</span><strong>${template?.issuer_address || 'Seller address'}</strong></div>
-          <div><span>Client</span><strong>${invoice.client_name || 'Client name'}</strong></div>
-          <div><span>Email</span><strong>${invoice.client_email || 'client@email.com'}</strong></div>
-          <div><span>Issue</span><strong>${formatDate(invoice.issue_date)}</strong></div>
-          <div><span>Due</span><strong>${formatDate(invoice.due_date)}</strong></div>
-          <div><span>VAT ID</span><strong>${template?.issuer_vat_id || 'VAT ID'}</strong></div>
-          <div><span>Tax number</span><strong>${template?.issuer_tax_number || 'Tax number'}</strong></div>
-        </div>
-        <div class="invoice-preview-lines">
-          ${(invoice.items || []).map(item => `
-            <div class="invoice-preview-line">
-              <span>${item.description || 'Service line'}</span>
-              <span>${item.quantity || 0} x ${formatCurrency(item.unit_price || 0, invoice.currency || 'EUR')}</span>
-              <strong>${formatCurrency((item.quantity || 0) * (item.unit_price || 0), invoice.currency || 'EUR')}</strong>
+        <div class="a4-sheet" style="--inv-accent:${accent};">
+          <!-- HEADER -->
+          <div class="a4-header">
+            <div class="a4-header-left">
+              ${template?.logo_data_url
+                ? `<img src="${template.logo_data_url}" alt="Logo" style="max-height:48px;max-width:140px;object-fit:contain;margin-bottom:8px;" />`
+                : `<div style="font-size:20px;font-weight:800;color:#111;letter-spacing:-0.03em;">${template?.issuer_name || 'Law Firm Name'}</div>`
+              }
+              <div style="font-size:11px;color:#555;line-height:1.5;margin-top:4px;">
+                ${template?.issuer_address || ''}<br/>
+                ${template?.issuer_email || ''} &nbsp; ${template?.issuer_phone || ''}
+              </div>
             </div>
-          `).join('')}
-        </div>
-        <div class="invoice-preview-vat">
-          <span>VAT ${vatRate}%</span>
-          <strong>${formatCurrency(vatAmount, invoice.currency || 'EUR')}</strong>
-        </div>
-        <div class="invoice-preview-total">
-          <span>Total</span>
-          <strong>${formatCurrency(total + vatAmount, invoice.currency || 'EUR')}</strong>
-        </div>
-        ${(invoice.attachments || []).length ? `
-          <div class="invoice-preview-notes">
-            <span>Attachments</span>
-            ${(invoice.attachments || []).map(file => `<p>${file.name}</p>`).join('')}
+            <div class="a4-header-right">
+              <div style="font-size:28px;font-weight:800;color:#111;letter-spacing:-0.03em;">INVOICE</div>
+              <div style="font-size:13px;color:#555;margin-top:6px;">${invoice.number || 'DRAFT'}</div>
+              <div style="margin-top:10px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:#555;">
+                <span><b>Issue:</b> ${invoice.issue_date || '—'}</span>
+                <span><b>Due:</b> ${invoice.due_date || '—'}</span>
+              </div>
+            </div>
           </div>
-        ` : ''}
-        <div class="invoice-preview-notes">
-          <span>Notes</span>
-          <p>${invoice.notes || 'Add payment or delivery notes here.'}</p>
-          <p>${template?.payment_terms || ''}</p>
-          <p>${template?.footer_note || ''}</p>
+
+          <!-- PARTIES -->
+          <div class="a4-parties">
+            <div class="a4-party">
+              <div class="a4-party-label">FROM</div>
+              <div class="a4-party-name">${template?.issuer_name || 'Your Law Firm'}</div>
+              <div class="a4-party-detail">${template?.issuer_address || ''}</div>
+              ${template?.issuer_vat_id ? `<div class="a4-party-detail">VAT ID: ${template.issuer_vat_id}</div>` : ''}
+              ${template?.issuer_tax_number ? `<div class="a4-party-detail">Tax: ${template.issuer_tax_number}</div>` : ''}
+            </div>
+            <div class="a4-party">
+              <div class="a4-party-label">TO</div>
+              <div class="a4-party-name">${invoice.client_name || 'Client Name'}</div>
+              <div class="a4-party-detail">${invoice.client_email || ''}</div>
+              ${invoice.client_address ? `<div class="a4-party-detail">${invoice.client_address}</div>` : ''}
+              ${invoice.client_vat ? `<div class="a4-party-detail">VAT ID: ${invoice.client_vat}</div>` : ''}
+            </div>
+          </div>
+
+          <!-- LINE ITEMS TABLE -->
+          <table class="a4-table">
+            <thead>
+              <tr>
+                <th style="width:50%;">Description</th>
+                <th style="text-align:right;">Qty</th>
+                <th style="text-align:right;">Unit price</th>
+                <th style="text-align:right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(invoice.items || []).map(item => `
+                <tr>
+                  <td>${item.description || '—'}</td>
+                  <td style="text-align:right;">${item.quantity || 0}</td>
+                  <td style="text-align:right;">${formatCurrency(item.unit_price || 0, cur)}</td>
+                  <td style="text-align:right;font-weight:600;">${formatCurrency((item.quantity||0)*(item.unit_price||0), cur)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <!-- TOTALS -->
+          <div class="a4-totals">
+            <div class="a4-total-row">
+              <span>Subtotal</span>
+              <span>${formatCurrency(net, cur)}</span>
+            </div>
+            ${invoice.reverse_charge
+              ? `<div class="a4-total-row"><span>VAT</span><span style="color:#555;">Reverse charge</span></div>`
+              : `<div class="a4-total-row"><span>VAT ${vatRate}%</span><span>${formatCurrency(vatAmount, cur)}</span></div>`
+            }
+            <div class="a4-total-row a4-grand">
+              <span>Total due</span>
+              <span>${formatCurrency(grand, cur)}</span>
+            </div>
+          </div>
+
+          <!-- PAYMENT DETAILS -->
+          ${(template?.iban || template?.bic) ? `
+            <div class="a4-payment">
+              <div class="a4-payment-label">PAYMENT DETAILS</div>
+              ${template.iban ? `<div class="a4-payment-row"><span>IBAN</span><strong>${template.iban}</strong></div>` : ''}
+              ${template.bic  ? `<div class="a4-payment-row"><span>BIC</span><strong>${template.bic}</strong></div>` : ''}
+            </div>
+          ` : ''}
+
+          <!-- FOOTER -->
+          <div class="a4-footer">
+            ${invoice.reverse_charge ? '<p><em>VAT reverse charge — the tax liability is transferred to the recipient per Art. 196 EU VAT Directive.</em></p>' : ''}
+            ${invoice.notes ? `<p>${invoice.notes}</p>` : ''}
+            ${template?.payment_terms ? `<p>${template.payment_terms}</p>` : ''}
+            ${template?.footer_note ? `<p style="margin-top:8px;color:#888;">${template.footer_note}</p>` : ''}
+          </div>
         </div>
       `;
     }
@@ -540,19 +722,10 @@
     }
 
     function buildPrintablePreview(invoice) {
-      const preview = document.getElementById('invoice-preview');
-      const clone = preview.cloneNode(true);
-      clone.style.background = '#ffffff';
-      clone.style.color = '#111111';
-      clone.style.width = '800px';
-      clone.style.padding = '32px';
-      clone.querySelectorAll('*').forEach(el => {
-        el.style.color = '#111111';
-        if (el.classList.contains('badge')) {
-          el.style.border = '1px solid #cccccc';
-          el.style.background = '#f3f3f3';
-        }
-      });
+      const sheet = document.querySelector('.a4-sheet');
+      const clone = sheet ? sheet.cloneNode(true) : document.getElementById('invoice-preview').cloneNode(true);
+      clone.style.boxShadow = 'none';
+      clone.style.borderRadius = '0';
       const wrapper = document.createElement('div');
       wrapper.style.background = '#ffffff';
       wrapper.appendChild(clone);
@@ -601,11 +774,18 @@
     function populateForm(invoice) {
       formState.invoice = createInvoiceDraft(invoice);
       renderTemplateSelects(formState.invoice.template_id);
+      renderTemplatePicker(formState.invoice.template_id);
       setFieldValue('invoice-number', formState.invoice.number);
       setFieldValue('invoice-status', formState.invoice.status);
       setFieldValue('invoice-template', formState.invoice.template_id);
       setFieldValue('client-name', formState.invoice.client_name);
       setFieldValue('client-email', formState.invoice.client_email);
+      setFieldValue('client-vat', formState.invoice.client_vat || '');
+      setFieldValue('client-address', formState.invoice.client_address || '');
+      setFieldValue('invoice-currency', formState.invoice.currency || 'EUR');
+      setFieldValue('invoice-vat-rate', formState.invoice.vat_rate ?? '');
+      if (document.getElementById('reverse-charge'))
+        document.getElementById('reverse-charge').checked = !!formState.invoice.reverse_charge;
       setFieldValue('issue-date', formState.invoice.issue_date);
       setFieldValue('due-date', formState.invoice.due_date);
       setFieldValue('invoice-notes', formState.invoice.notes);
@@ -646,9 +826,13 @@
     }
 
     function bindForm() {
-      ['invoice-number', 'invoice-status', 'invoice-template', 'client-name', 'client-email', 'issue-date', 'due-date', 'invoice-notes'].forEach(id => {
-        document.getElementById(id).addEventListener('input', syncPreview);
+      ['invoice-number', 'invoice-status', 'invoice-template', 'client-name', 'client-email',
+       'client-vat', 'client-address', 'invoice-currency', 'invoice-vat-rate',
+       'issue-date', 'due-date', 'invoice-notes'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', syncPreview);
+        document.getElementById(id)?.addEventListener('change', syncPreview);
       });
+      document.getElementById('reverse-charge')?.addEventListener('change', syncPreview);
       document.getElementById('template-select').addEventListener('change', (event) => {
         const template = getInvoiceTemplateById(event.target.value);
         if (template) populateTemplateForm(template);
@@ -697,22 +881,39 @@
         renderPreview(saved);
         showToast('Invoice PDF attached', 'success');
       });
-      document.getElementById('btn-send-invoice').addEventListener('click', async () => {
+      document.getElementById('btn-send-invoice').addEventListener('click', () => {
         syncPreview();
+        const inv = collectInvoice();
+        const modal = document.getElementById('send-modal');
+        document.getElementById('send-to').value = inv.client_email || '';
+        const tpl = getInvoiceTemplateById(inv.template_id) || getInvoiceTemplates()[0];
+        document.getElementById('send-subject').value =
+          `Invoice ${inv.number} from ${tpl?.issuer_name || 'LexFlow Legal'}`;
+        document.getElementById('send-body').value =
+          `Dear ${inv.client_name || 'Client'},\n\nPlease find your invoice ${inv.number} attached.\n\nAmount due: ${formatCurrency(calculateInvoiceTotal(inv), inv.currency || 'EUR')}\nDue date: ${inv.due_date || '—'}\n\nKind regards,\n${tpl?.issuer_name || 'LexFlow Legal'}`;
+        modal.style.display = 'flex';
+      });
+
+      document.getElementById('send-modal-cancel').addEventListener('click', () => {
+        document.getElementById('send-modal').style.display = 'none';
+      });
+
+      document.getElementById('send-modal-confirm').addEventListener('click', async () => {
         const saved = upsertInvoice(collectInvoice());
-        if (!saved.client_email) {
-          showToast('Client email is missing', 'error');
-          return;
-        }
+        const to = document.getElementById('send-to').value;
+        const subject = document.getElementById('send-subject').value;
+        const body = document.getElementById('send-body').value;
+        if (!to) { showToast('Recipient email is missing', 'error'); return; }
+        document.getElementById('send-modal').style.display = 'none';
         await persistInvoiceRemote(saved);
         try {
-          const result = await post(`/api/invoices/${saved.id}/send`, {});
-          const nextStatus = result.sent ? 'Invoice sent' : 'Invoice queued for test mode';
-          showToast(`${nextStatus}: ${result.to}`, result.sent ? 'success' : 'info');
+          const result = await post(`/api/invoices/${saved.id}/send`, { to, subject, body });
+          const nextStatus = result.sent ? 'Invoice sent' : 'Queued (test mode)';
+          showToast(`${nextStatus} → ${to}`, result.sent ? 'success' : 'info');
           formState.invoice = upsertInvoice({ ...saved, status: saved.status === 'draft' ? 'unpaid' : saved.status });
           populateForm(formState.invoice);
         } catch {
-          showToast('Invoice was not sent', 'error');
+          showToast('Send failed — check work email in Settings', 'error');
         }
       });
       document.getElementById('btn-export-pdf').addEventListener('click', async () => {
@@ -768,7 +969,13 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
-        bindForm();
+      ensureDefaultTemplates();
+      bindForm();
+
+      // Close modal on backdrop click
+      document.getElementById('send-modal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+      });
 
       let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
       if (!invoice && caseId) {
