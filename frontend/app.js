@@ -558,6 +558,59 @@ function getInvoiceById(id) {
   return getInvoices().find(invoice => invoice.id === id || invoice.number === id) || null;
 }
 
+function getCaseServices(caseId) {
+  if (!caseId) return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(`lf_case_services_${caseId}`) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeCaseService(service = {}, index = 0) {
+  return {
+    id: service.id || uid('svc'),
+    name: service.name || service.description || '',
+    qty: Number(service.qty ?? service.quantity ?? 1),
+    price: Number(service.price ?? service.unit_price ?? 0),
+    unit: service.unit || 'flat',
+    invoice_number: service.invoice_number || '',
+    invoice_id: service.invoice_id || '',
+  };
+}
+
+function saveCaseServices(caseId, services) {
+  if (!caseId) return [];
+  const normalized = (services || []).map(normalizeCaseService);
+  localStorage.setItem(`lf_case_services_${caseId}`, JSON.stringify(normalized));
+  return normalized;
+}
+
+function invoiceItemsToCaseServices(invoice) {
+  return (invoice?.items || []).map((item, index) => normalizeCaseService({
+    id: item.id || `svc-${index}`,
+    name: item.description || '',
+    qty: item.quantity ?? 1,
+    price: item.unit_price ?? 0,
+    unit: 'flat',
+    invoice_number: invoice?.number || '',
+    invoice_id: invoice?.id || '',
+  }, index));
+}
+
+function caseServicesToInvoiceItems(services) {
+  return (services || []).map((service, index) => {
+    const normalized = normalizeCaseService(service, index);
+    return {
+      id: normalized.id || uid('line'),
+      description: normalized.name || '',
+      quantity: Number(normalized.qty || 0),
+      unit_price: Number(normalized.price || 0),
+    };
+  });
+}
+
 function getInvoiceForCase(caseId) {
   if (!caseId) return null;
   const all = getInvoices().filter(inv => inv.case_id === caseId);
@@ -572,7 +625,18 @@ function getInvoiceForCase(caseId) {
   return all[0];
 }
 
-function upsertInvoice(invoice) {
+function syncInvoiceWithCaseServices(caseId, services, options = {}) {
+  if (!caseId) return null;
+  const linkedInvoice = getInvoiceForCase(caseId);
+  if (!linkedInvoice) return null;
+  return upsertInvoice({
+    ...linkedInvoice,
+    items: caseServicesToInvoiceItems(services),
+  }, options);
+}
+
+function upsertInvoice(invoice, options = {}) {
+  const { persistRemote = true } = options;
   const invoices = getInvoices();
   const normalized = {
     ...invoice,
@@ -596,7 +660,9 @@ function upsertInvoice(invoice) {
   if (idx >= 0) invoices[idx] = normalized;
   else invoices.unshift(normalized);
   saveInvoices(invoices);
-  persistInvoiceRemote(normalized);
+  if (persistRemote) {
+    persistInvoiceRemote(normalized);
+  }
   return normalized;
 }
 

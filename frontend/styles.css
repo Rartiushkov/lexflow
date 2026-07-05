@@ -1403,6 +1403,57 @@ a.queue-row:hover .queue-client strong {
   padding: 10px 12px;
 }
 
+.service-row {
+  padding: 8px 0;
+}
+
+.service-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 116px 32px;
+  gap: 8px;
+  align-items: end;
+}
+
+.service-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.service-field-label {
+  display: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.service-field-description {
+  min-width: 0;
+}
+
+.service-remove-btn {
+  width: 32px;
+  height: 30px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(196, 100, 90, 0.1);
+  color: var(--red);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.service-remove-btn:hover {
+  background: rgba(196, 100, 90, 0.16);
+  transform: translateY(-1px);
+}
+
 .invoice-table {
   display: grid;
   grid-template-columns: 1.1fr 1fr 120px 120px 100px 100px 120px;
@@ -3123,6 +3174,20 @@ body.auth.auth-loading .auth-loading-screen {
 
   .control-hero {
     grid-template-columns: 1fr;
+  }
+
+  .service-row-main {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .service-field-label {
+    display: block;
+  }
+
+  .service-remove-btn {
+    width: 100%;
+    height: 34px;
   }
 
   .case-doc-row,

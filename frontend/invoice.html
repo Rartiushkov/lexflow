@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=12" />
+  <link rel="stylesheet" href="./styles.css?v=13" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -263,7 +263,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=11"></script>
+  <script src="./app.js?v=12"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const invoiceId = params.get('id');
@@ -586,6 +586,7 @@
         button.addEventListener('click', (event) => {
           event.target.closest('.line-item-row').remove();
           syncPreview();
+          syncInvoiceDraftLinks({ persistRemote: false });
         });
       });
     }
@@ -793,19 +794,18 @@
 
     function syncServicesToCase(invoice) {
       const effCase = invoice.case_id || caseId;
-      if (!effCase || !invoice.items?.length) return;
+      if (!effCase) return;
       try {
-        const svcItems = invoice.items.map((it, i) => ({
-          id: it.id || ('svc-' + i),
-          name: it.description || '',
-          qty: it.quantity ?? 1,
-          price: it.unit_price ?? 0,
-          unit: 'flat',
-          invoice_number: invoice.number || '',
-          invoice_id: invoice.id || '',
-        }));
-        localStorage.setItem('lf_case_services_' + effCase, JSON.stringify(svcItems));
+        saveCaseServices(effCase, invoiceItemsToCaseServices(invoice));
       } catch {}
+    }
+
+    function syncInvoiceDraftLinks(options = {}) {
+      const current = collectInvoice();
+      const saved = upsertInvoice(current, options);
+      formState.invoice = saved;
+      syncServicesToCase(saved);
+      return saved;
     }
 
     function syncTemplatePreview() {
@@ -815,6 +815,7 @@
 
     function handleLineInput() {
       syncPreview();
+      syncInvoiceDraftLinks({ persistRemote: false });
     }
 
     function populateForm(invoice) {
@@ -1294,6 +1295,9 @@
       const defaultTemplate = getInvoiceTemplates()[0];
       populateTemplateForm(defaultTemplate);
       populateForm(invoice || createInvoiceDraft({ template_id: defaultTemplate?.id || '' }));
+      if (invoiceId || getInvoiceForCase(formState.invoice.case_id || caseId)) {
+        syncServicesToCase(formState.invoice);
+      }
     });
   </script>
 </body>

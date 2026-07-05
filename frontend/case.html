@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=12" />
+  <link rel="stylesheet" href="./styles.css?v=13" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -302,7 +302,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=11"></script>
+  <script src="./app.js?v=12"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -742,7 +742,17 @@
       renderChecklist(mergedDocs);
 
       // Invoice
-      if (c.invoice) {
+      const localInvoice = getInvoiceForCase(c.id);
+      if (localInvoice) {
+        document.getElementById('invoice-block').innerHTML = `
+          <div style="font-size:28px;font-weight:700;letter-spacing:-0.04em;margin-bottom:4px;">${formatCurrency(calculateInvoiceTotal(localInvoice), localInvoice.currency || 'EUR')}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${localInvoice.number}</div>
+          <div style="display:flex;gap:8px;">
+            <span class="badge ${invoiceStatusBadge(localInvoice.status)}">${localInvoice.status}</span>
+            <a class="btn btn-outline btn-sm" href="invoice.html?id=${localInvoice.id}&case=${caseId}">Open</a>
+          </div>
+        `;
+      } else if (c.invoice) {
         document.getElementById('invoice-block').innerHTML = `
           <div style="font-size:28px;font-weight:700;letter-spacing:-0.04em;margin-bottom:4px;">${formatCurrency(c.invoice.amount)}</div>
           <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${c.invoice.number}</div>
@@ -752,26 +762,15 @@
           </div>
         `;
       } else {
-        const localInvoice = getInvoiceForCase(c.id);
-        if (localInvoice) {
-          document.getElementById('invoice-block').innerHTML = `
-            <div style="font-size:28px;font-weight:700;letter-spacing:-0.04em;margin-bottom:4px;">${formatCurrency(calculateInvoiceTotal(localInvoice), localInvoice.currency || 'EUR')}</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${localInvoice.number}</div>
-            <div style="display:flex;gap:8px;">
-              <span class="badge ${invoiceStatusBadge(localInvoice.status)}">${localInvoice.status}</span>
-              <a class="btn btn-outline btn-sm" href="invoice.html?id=${localInvoice.id}&case=${caseId}">Open</a>
-            </div>
-          `;
-        } else {
-          document.getElementById('btn-invoice')?.addEventListener('click', () => {
-            const ex = getInvoiceForCase(caseId);
-            window.location.href = ex ? `invoice.html?id=${ex.id}&case=${caseId}` : `invoice.html?case=${caseId}`;
-          });
-        }
+        document.getElementById('btn-invoice')?.addEventListener('click', () => {
+          const ex = getInvoiceForCase(caseId);
+          window.location.href = ex ? `invoice.html?id=${ex.id}&case=${caseId}` : `invoice.html?case=${caseId}`;
+        });
       }
     }
 
     let editMode = false;
+    let serviceSyncTimer = null;
 
     function setEditMode(on) {
       editMode = on;
@@ -935,14 +934,27 @@
         { name: 'Visa application support', price: 600, unit: 'flat' },
       ];
 
-      const SVC_KEY = () => `lf_case_services_${caseId}`;
       let caseServices = [];
 
       function loadCaseServices() {
-        try { caseServices = JSON.parse(localStorage.getItem(SVC_KEY()) || '[]'); } catch { caseServices = []; }
+        caseServices = getCaseServices(caseId);
       }
-      function saveCaseServices() {
-        try { localStorage.setItem(SVC_KEY(), JSON.stringify(caseServices)); } catch {}
+      function storeCaseServices() {
+        caseServices = saveCaseServices(caseId, caseServices);
+      }
+
+      function syncServicesFromInvoice() {
+        const linkedInvoice = getInvoiceForCase(caseId);
+        if (!linkedInvoice) return false;
+        caseServices = saveCaseServices(caseId, invoiceItemsToCaseServices(linkedInvoice));
+        return true;
+      }
+
+      function queueInvoiceSync(persistRemote = true) {
+        if (serviceSyncTimer) clearTimeout(serviceSyncTimer);
+        serviceSyncTimer = setTimeout(() => {
+          syncInvoiceWithCaseServices(caseId, caseServices, { persistRemote });
+        }, persistRemote ? 120 : 0);
       }
 
       function renderServicePresets() {
@@ -957,7 +969,8 @@
           btn.textContent = p.name;
           btn.addEventListener('click', () => {
             caseServices.push({ id: Date.now(), name: p.name, qty: 1, price: p.price, unit: p.unit });
-            saveCaseServices();
+            storeCaseServices();
+            queueInvoiceSync(true);
             renderServiceRows();
           });
           host.appendChild(btn);
@@ -972,28 +985,39 @@
           return;
         }
         host.innerHTML = caseServices.map((s, i) => `
-          <div style="display:grid;grid-template-columns:1fr 60px 100px 28px;gap:6px;align-items:center;" data-svc-idx="${i}">
-            <div style="min-width:0;">
+          <div class="service-row" data-svc-idx="${i}">
+            <div class="service-row-main">
+              <label class="service-field service-field-description">
+                <span class="service-field-label">Service</span>
               <input class="form-input" style="height:30px;font-size:12px;" value="${escSvc(s.name)}" data-field="name" data-idx="${i}" />
               ${s.invoice_number ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;padding-left:2px;">Invoice: ${escSvc(s.invoice_number)}</div>` : ''}
+              </label>
+              <label class="service-field service-field-qty">
+                <span class="service-field-label">Qty</span>
+                <input class="form-input" style="height:30px;font-size:12px;text-align:center;" value="${s.qty}" type="number" min="1" data-field="qty" data-idx="${i}" />
+              </label>
+              <label class="service-field service-field-price">
+                <span class="service-field-label">Price</span>
+                <input class="form-input" style="height:30px;font-size:12px;text-align:right;" value="${s.price}" type="number" min="0" step="0.01" data-field="price" data-idx="${i}" />
+              </label>
+              <button class="service-remove-btn" data-del-svc="${i}" aria-label="Remove service">✕</button>
             </div>
-            <input class="form-input" style="height:30px;font-size:12px;text-align:center;" value="${s.qty}" type="number" min="1" data-field="qty" data-idx="${i}" />
-            <input class="form-input" style="height:30px;font-size:12px;text-align:right;" value="${s.price}" type="number" min="0" step="0.01" data-field="price" data-idx="${i}" />
-            <button style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:0;height:30px;display:flex;align-items:center;justify-content:center;" data-del-svc="${i}">✕</button>
           </div>`).join('');
 
         host.querySelectorAll('[data-field]').forEach(inp => {
           inp.addEventListener('change', () => {
             const idx = +inp.dataset.idx, field = inp.dataset.field;
             caseServices[idx][field] = field === 'name' ? inp.value : +inp.value;
-            saveCaseServices();
+            storeCaseServices();
+            queueInvoiceSync(true);
             updateSvcTotal();
           });
         });
         host.querySelectorAll('[data-del-svc]').forEach(btn => {
           btn.addEventListener('click', () => {
             caseServices.splice(+btn.dataset.delSvc, 1);
-            saveCaseServices();
+            storeCaseServices();
+            queueInvoiceSync(true);
             renderServiceRows();
           });
         });
@@ -1009,7 +1033,8 @@
 
       document.getElementById('btn-add-service').addEventListener('click', () => {
         caseServices.push({ id: Date.now(), name: 'New service', qty: 1, price: 0, unit: 'flat' });
-        saveCaseServices();
+        storeCaseServices();
+        queueInvoiceSync(true);
         renderServiceRows();
       });
 
@@ -1024,6 +1049,7 @@
       });
 
       loadCaseServices();
+      syncServicesFromInvoice();
       renderServicePresets();
       renderServiceRows();
 
