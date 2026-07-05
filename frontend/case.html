@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=19" />
+  <link rel="stylesheet" href="./styles.css?v=20" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -86,7 +86,7 @@
         <div>
           <div class="page-title" id="case-title">Case</div>
           <div class="page-subtitle" id="case-meta">Loading…</div>
-          <div id="case-priority-badge" style="margin-top:10px;"></div>
+          <div id="case-priority-badge" class="case-priority-badge"></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <label style="font-size:12px;color:var(--muted);margin-right:2px;">Stage</label>
@@ -104,7 +104,7 @@
         </div>
       </div>
 
-      <div class="case-detail-layout" style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+      <div class="case-detail-layout">
 
         <!-- LEFT COLUMN -->
         <div id="case-fields-area">
@@ -144,7 +144,7 @@
             </div>
           </div>
 
-          <div class="card" style="margin-bottom:16px;">
+          <div class="card services-card" style="margin-bottom:16px;">
             <div class="card-header"><span class="card-title">Visa &amp; permit</span></div>
             <div class="card-body">
               <div class="form-row">
@@ -220,11 +220,11 @@
                 <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:2px;">Quick add:</span>
               </div>
               <!-- Service rows -->
-              <div id="service-rows" style="display:flex;flex-direction:column;gap:6px;"></div>
+              <div id="service-rows" class="service-rows"></div>
               <!-- Totals -->
-              <div style="display:flex;justify-content:flex-end;gap:24px;padding:10px 0 4px;border-top:1px solid var(--border);margin-top:10px;">
-                <span style="font-size:12px;color:var(--muted);">Subtotal</span>
-                <span style="font-size:12px;font-weight:700;color:var(--text);min-width:80px;text-align:right;" id="svc-subtotal">€ 0.00</span>
+              <div class="service-subtotal-row">
+                <span>Subtotal</span>
+                <span id="svc-subtotal">€ 0.00</span>
               </div>
             </div>
           </div>
@@ -244,9 +244,9 @@
         </div>
 
         <!-- RIGHT COLUMN -->
-        <div>
+        <div class="case-side-stack">
           <!-- Control center -->
-          <div class="card" style="margin-bottom:16px;">
+          <div class="card control-center-card" style="margin-bottom:16px;">
             <div class="card-header">
               <div>
                 <span class="card-title">Control center</span>
@@ -309,7 +309,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=15"></script>
+  <script src="./app.js?v=16"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';

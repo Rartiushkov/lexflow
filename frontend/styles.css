@@ -226,14 +226,18 @@ body.landing .topnav a:hover { color: var(--text); }
   position: relative;
   max-width: 1120px;
   margin: 0 auto;
-  padding: 88px 32px 42px;
+  min-height: calc(100vh - var(--topbar-h) - 60px);
+  padding: 92px 32px 54px;
+  display: flex;
+  align-items: center;
 }
 
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.8fr);
   gap: 20px;
-  align-items: end;
+  align-items: center;
+  width: 100%;
 }
 
 .hero-copy {
@@ -328,6 +332,8 @@ body.landing .topnav a:hover { color: var(--text); }
   overflow: hidden;
   backdrop-filter: blur(16px);
   box-shadow: 0 28px 64px rgba(0,0,0,0.28);
+  max-width: 420px;
+  margin-left: auto;
 }
 
 .hero-panel-bar {
@@ -388,6 +394,8 @@ body.landing .topnav a:hover { color: var(--text); }
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  text-align: right;
+  max-width: 210px;
 }
 
 .hero-panel-bar-track {
@@ -411,6 +419,21 @@ body.landing .topnav a:hover { color: var(--text); }
   color: rgba(200, 164, 74, 0.92);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+body.landing::before {
+  background:
+    linear-gradient(180deg, rgba(17, 18, 15, 0.16) 0%, rgba(17, 18, 15, 0.72) 100%),
+    url("./assets/eu-hero-bg.png") 62% center / cover no-repeat;
+  transform: scale(1.04);
+}
+
+body.landing::after {
+  background:
+    radial-gradient(circle at 18% 24%, rgba(200, 164, 74, 0.12) 0%, rgba(200, 164, 74, 0) 28%),
+    radial-gradient(circle at 72% 22%, rgba(90, 159, 212, 0.12) 0%, rgba(90, 159, 212, 0) 28%),
+    linear-gradient(180deg, rgba(17, 18, 15, 0.52) 0%, rgba(17, 18, 15, 0.8) 46%, rgba(17, 18, 15, 0.94) 100%),
+    linear-gradient(90deg, rgba(17, 18, 15, 0.88) 0%, rgba(17, 18, 15, 0.34) 56%, rgba(17, 18, 15, 0.8) 100%);
 }
 
 .hero-metrics,
@@ -1335,21 +1358,23 @@ a.queue-row:hover .queue-client strong {
 .control-center-stack {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .control-hero {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .control-stat {
-  padding: 12px;
-  border-radius: 14px;
+  padding: 14px 15px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(30, 31, 38, 0.98) 0%, rgba(22, 23, 29, 0.98) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background:
+    radial-gradient(circle at top right, rgba(200, 164, 74, 0.06), transparent 40%),
+    linear-gradient(180deg, rgba(28, 30, 37, 0.98) 0%, rgba(20, 21, 27, 0.99) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 16px 32px rgba(8, 10, 16, 0.24);
   position: relative;
   overflow: hidden;
 }
@@ -1384,19 +1409,21 @@ a.queue-row:hover .queue-client strong {
 
 .control-stat-label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #8d95aa;
+  color: rgba(188, 194, 208, 0.62);
 }
 
 .control-stat-value {
   display: block;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #f3f6ff;
+  font-size: 16px;
+  line-height: 1.45;
+  color: #f5f2ea;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .control-pill-row {
@@ -1414,9 +1441,9 @@ a.queue-row:hover .queue-client strong {
 .control-section-title {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgba(188, 194, 208, 0.54);
 }
 
 .control-checklist,
@@ -1430,12 +1457,13 @@ a.queue-row:hover .queue-client strong {
 .control-feed-item {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 14px;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  background: linear-gradient(180deg, rgba(28, 29, 36, 0.98) 0%, rgba(22, 23, 29, 0.98) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  background:
+    linear-gradient(180deg, rgba(28, 29, 36, 0.98) 0%, rgba(22, 23, 29, 0.99) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 12px 26px rgba(8, 10, 16, 0.18);
 }
 
 .control-check-complete,
@@ -1479,15 +1507,15 @@ a.queue-row:hover .queue-client strong {
 
 .control-check-copy strong,
 .control-feed-copy strong {
-  font-size: 13px;
-  color: #f5f7ff;
+  font-size: 14px;
+  color: #f5f1e7;
 }
 
 .control-check-copy span,
 .control-feed-copy span {
   font-size: 12px;
   line-height: 1.55;
-  color: #98a2ba;
+  color: #9ea7bc;
 }
 
 .control-feed-compact .control-feed-item {
@@ -1501,31 +1529,65 @@ a.queue-row:hover .queue-client strong {
 .control-action-btn {
   margin-left: auto;
   flex-shrink: 0;
-  border-color: rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.02);
+  border-color: rgba(200,164,74,0.14);
+  background: rgba(18,24,33,0.74);
+  color: #ece6d8;
 }
 
 .control-action-btn:hover {
-  border-color: rgba(200,164,74,0.24);
-  background: rgba(200,164,74,0.06);
+  border-color: rgba(200,164,74,0.3);
+  background: rgba(200,164,74,0.08);
+}
+
+.case-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+.case-side-stack {
+  position: sticky;
+  top: 70px;
+}
+
+.case-priority-badge {
+  margin-top: 12px;
+}
+
+.case-priority-badge .badge {
+  padding: 7px 12px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.services-card .card-body {
+  padding-top: 14px;
+}
+
+.service-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .service-row {
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 12px;
+  border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.06);
   background:
     linear-gradient(180deg, rgba(31,31,38,0.95) 0%, rgba(24,25,31,0.98) 100%);
-  margin-bottom: 8px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+  margin-bottom: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025), 0 12px 24px rgba(8, 10, 16, 0.16);
 }
 
 .service-grid-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 82px 136px 36px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 88px 148px 40px;
+  gap: 12px;
   align-items: center;
-  padding: 0 12px 8px;
+  padding: 0 14px 10px;
 }
 
 .service-grid-head span {
@@ -1546,8 +1608,8 @@ a.queue-row:hover .queue-client strong {
 
 .service-row-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 82px 136px 36px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 88px 148px 40px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -1583,17 +1645,17 @@ a.queue-row:hover .queue-client strong {
 }
 
 .service-row-meta {
-  margin-top: 8px;
+  margin-top: 10px;
   padding-left: 2px;
   font-size: 10px;
-  color: rgba(238, 238, 240, 0.42);
+  color: rgba(238, 238, 240, 0.46);
 }
 
 .service-remove-btn {
-  width: 36px;
+  width: 40px;
   height: 38px;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(196, 100, 90, 0.1);
   color: var(--red);
   cursor: pointer;
@@ -1607,6 +1669,28 @@ a.queue-row:hover .queue-client strong {
 .service-remove-btn:hover {
   background: rgba(196, 100, 90, 0.16);
   transform: translateY(-1px);
+}
+
+.service-subtotal-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 24px;
+  padding: 12px 4px 4px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  margin-top: 12px;
+}
+
+.service-subtotal-row span:first-child {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.service-subtotal-row span:last-child {
+  min-width: 96px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4efe4;
 }
 
 .portal-invite-shell {
@@ -2486,10 +2570,16 @@ a.queue-row:hover .queue-client strong {
 .kanban-column {
   background: linear-gradient(180deg, rgba(21,22,25,0.96) 0%, rgba(16,17,19,0.98) 100%);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: var(--radius);
+  border-radius: 14px;
   padding: 14px;
   min-height: 300px;
-  transition: border-color 150ms;
+  transition: border-color 150ms, box-shadow 150ms, transform 150ms;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 18px 38px rgba(8, 10, 16, 0.18);
+}
+
+.kanban-column:hover {
+  border-color: rgba(200,164,74,0.14);
+  transform: translateY(-1px);
 }
 
 .kanban-column-body {
@@ -2519,15 +2609,16 @@ a.queue-row:hover .queue-client strong {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--muted);
+  color: rgba(188, 194, 208, 0.58);
 }
 
 .kanban-count {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(17, 22, 31, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
   font-size: 11px;
+  color: #ede7d9;
 }
 
 .kanban-card {
@@ -2589,9 +2680,10 @@ a.queue-row:hover .queue-client strong {
 
 .kanban-priority-lane {
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.015);
   padding: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
 }
 
 .kanban-priority-lane.priority-high {
@@ -2618,7 +2710,7 @@ a.queue-row:hover .queue-client strong {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgba(188, 194, 208, 0.56);
 }
 
 .kanban-priority-lane-body {
@@ -3206,7 +3298,7 @@ body.auth.auth-loading .auth-loading-screen {
 @media (max-width: 768px) {
   .topnav { display: none; }
   .topbar { padding: 0 16px; }
-  .hero-section { padding: 76px 16px 42px; }
+  .hero-section { min-height: auto; padding: 76px 16px 42px; }
   .hero-title { font-size: 40px; }
   .hero-sub { font-size: 15px; }
   body.landing .section { padding: 22px 16px; }
@@ -3216,6 +3308,14 @@ body.auth.auth-loading .auth-loading-screen {
   .system-grid,
   .stats-row,
   .form-row { grid-template-columns: 1fr; }
+  .hero-panel {
+    max-width: none;
+    width: 100%;
+  }
+  .hero-panel-row strong {
+    text-align: left;
+    max-width: none;
+  }
   .system-card-wide { grid-column: span 1; }
   body.dashboard {
     display: block;
@@ -3540,6 +3640,11 @@ body.auth.auth-loading .auth-loading-screen {
   .case-detail-layout {
     grid-template-columns: 1fr !important;
     gap: 16px !important;
+  }
+
+  .case-side-stack {
+    position: static;
+    top: auto;
   }
 
   .control-hero {

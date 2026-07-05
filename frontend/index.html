@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=19" />
+  <link rel="stylesheet" href="./styles.css?v=20" />
 </head>
 <body class="landing" data-api-base="https://lexflow-backend-y6m3.onrender.com">
 
@@ -24,7 +24,7 @@
       <a href="#billing">Billing</a>
     </nav>
     <div class="topbar-cta">
-      <a href="login.html?switch=1" class="btn btn-primary" id="landing-auth-btn">Open workspace</a>
+      <a href="login.html?switch=1" class="btn btn-primary landing-auth-link" id="landing-auth-btn">Open cabinet</a>
     </div>
   </header>
 
@@ -39,7 +39,7 @@
           <h1 class="hero-title">Operational cabinet for immigration law firms.<em>Structured. Credible. Controlled.</em></h1>
           <p class="hero-sub">LexFlow keeps case intake, protocol checks, client uploads, invoices, and document control inside one disciplined legal workspace built for daily execution.</p>
           <div class="hero-actions">
-            <a href="login.html?switch=1" class="btn btn-primary btn-lg" id="landing-hero-auth-btn">Open cabinet</a>
+            <a href="login.html?switch=1" class="btn btn-primary btn-lg landing-auth-link" id="landing-hero-auth-btn">Open cabinet</a>
             <a href="#product" class="btn btn-outline btn-lg">View workflow</a>
           </div>
           <div class="hero-trust">
@@ -154,7 +154,7 @@
             <div class="section-eyebrow">Billing</div>
             <h2 class="section-title">Billing stays inside the matter record.</h2>
             <p class="section-desc">Build the invoice, align service lines with the case, and keep payment status visible without splitting work across separate tools.</p>
-            <a href="login.html?switch=1" class="btn btn-primary btn-lg" style="margin-top:28px;display:inline-flex;">Open cabinet</a>
+            <a href="#system" class="btn btn-outline btn-lg landing-secondary-link" style="margin-top:28px;display:inline-flex;">Review system</a>
           </div>
           <div class="billing-aside">
             <div class="billing-metric"><span>Editable rows</span><strong>Yes</strong></div>
@@ -170,7 +170,7 @@
       <div class="section-inner" style="text-align:center;">
         <h2 class="section-title">Run immigration matters in one controlled system.</h2>
         <p class="section-desc" style="max-width:480px;margin:12px auto 28px;">Use one legal cabinet for intake, document control, billing, and protocol-driven case movement.</p>
-        <a href="login.html?switch=1" class="btn btn-primary btn-lg">Open cabinet</a>
+        <a href="login.html?switch=1" class="btn btn-primary btn-lg landing-auth-link" id="landing-cta-auth-btn">Open cabinet</a>
       </div>
     </section>
 
@@ -185,18 +185,15 @@
     </footer>
   </main>
 
-  <script src="./app.js?v=15"></script>
+  <script src="./app.js?v=16"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const user = await syncSessionFromSupabase();
-      const targets = [
-        document.getElementById('landing-auth-btn'),
-        document.getElementById('landing-hero-auth-btn'),
-      ].filter(Boolean);
+      const targets = Array.from(document.querySelectorAll('.landing-auth-link'));
       if (user) {
         targets.forEach((button) => {
           button.href = 'dashboard.html';
-          button.textContent = 'Run workspace';
+          button.textContent = 'Open cabinet';
         });
       } else {
         targets.forEach((button) => {
