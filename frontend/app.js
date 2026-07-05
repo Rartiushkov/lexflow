@@ -181,22 +181,45 @@ async function resetAllSessions() {
 }
 
 // ─── API helpers ─────────────────────────────────────────
+async function buildJsonHeaders() {
+  if (!getToken() || isDemoSession()) {
+    await syncSessionFromSupabase();
+  }
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${getToken() || ''}`,
+  };
+}
+
+async function fetchWithAuthRetry(url, opts, parseAsJson = true) {
+  let res = await fetch(url, opts);
+  if (res.status === 401) {
+    await syncSessionFromSupabase();
+    res = await fetch(url, {
+      ...opts,
+      headers: {
+        ...(opts.headers || {}),
+        'Authorization': `Bearer ${getToken() || ''}`,
+      },
+    });
+  }
+  const text = await res.text();
+  const data = parseAsJson && text ? JSON.parse(text) : (parseAsJson ? null : text);
+  if (!res.ok) {
+    throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
 async function api(method, path, body) {
   const url = `${API_BASE}${path}`;
   const opts = {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getToken() || ''}`,
-    },
+    headers: await buildJsonHeaders(),
   };
   if (body) opts.body = JSON.stringify(body);
   try {
-    const res = await fetch(url, opts);
-    const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!res.ok) throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
-    return data;
+    return await fetchWithAuthRetry(url, opts, true);
   } catch (err) {
     showToast(err.message || 'Network error', 'error');
     throw err;
@@ -211,15 +234,14 @@ async function upload(path, file) {
   const url = `${API_BASE}${path}`;
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(url, {
+  if (!getToken() || isDemoSession()) {
+    await syncSessionFromSupabase();
+  }
+  return await fetchWithAuthRetry(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${getToken() || ''}` },
     body: form,
-  });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
-  return data;
+  }, true);
 }
 
 // ─── UI helpers ──────────────────────────────────────────
