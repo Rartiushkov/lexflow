@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=17" />
+  <link rel="stylesheet" href="./styles.css?v=18" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -58,7 +58,10 @@
         <div style="display:flex;gap:8px;align-items:center;">
           <span style="font-size:12px;color:var(--muted);">Layout template:</span>
           <div id="template-picker" style="display:flex;gap:6px;"></div>
-          <a href="invoice-builder.html" class="btn btn-outline btn-sm" style="font-size:11px;">Open Builder →</a>
+          <a href="invoice-builder.html" class="btn btn-outline btn-sm" style="font-size:11px;">
+            Open Builder
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/><path d="M9 4l4 4-4 4"/></svg>
+          </a>
         </div>
       </div>
 
@@ -962,7 +965,7 @@
         try {
           const result = await post(`/api/invoices/${saved.id}/send`, { to, subject, body });
           const nextStatus = result.sent ? 'Invoice sent' : 'Queued (test mode)';
-          showToast(`${nextStatus} → ${to}`, result.sent ? 'success' : 'info');
+          showToast(`${nextStatus} to ${to}`, result.sent ? 'success' : 'info');
           formState.invoice = upsertInvoice({ ...saved, status: saved.status === 'draft' ? 'unpaid' : saved.status });
           populateForm(formState.invoice);
         } catch {

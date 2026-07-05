@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=17" />
+  <link rel="stylesheet" href="./styles.css?v=18" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -97,7 +97,10 @@
             <option value="review">Ready for review</option>
             <option value="submitted">Submitted</option>
           </select>
-          <button class="btn btn-outline btn-sm" id="btn-advance" style="white-space:nowrap;">Advance →</button>
+          <button class="btn btn-outline btn-sm" id="btn-advance" style="white-space:nowrap;">
+            Advance
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/><path d="M9 4l4 4-4 4"/></svg>
+          </button>
         </div>
       </div>
 
@@ -205,7 +208,10 @@
               <span class="card-title">Services &amp; pricing</span>
               <div style="display:flex;gap:8px;align-items:center;">
                 <button class="btn btn-outline btn-sm" id="btn-add-service">+ Add service</button>
-                <button class="btn btn-outline btn-sm" id="btn-create-invoice-from-services">Create invoice →</button>
+                <button class="btn btn-outline btn-sm" id="btn-create-invoice-from-services">
+                  Create invoice
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/><path d="M9 4l4 4-4 4"/></svg>
+                </button>
               </div>
             </div>
             <div class="card-body" style="padding-bottom:4px;">
@@ -1063,24 +1069,31 @@
           document.getElementById('svc-subtotal').textContent = '€ 0.00';
           return;
         }
-        host.innerHTML = caseServices.map((s, i) => `
+        host.innerHTML = `
+          <div class="service-grid-head">
+            <span>Service</span>
+            <span>Qty</span>
+            <span>Price</span>
+            <span></span>
+          </div>
+        ` + caseServices.map((s, i) => `
           <div class="service-row" data-svc-idx="${i}">
             <div class="service-row-main">
               <label class="service-field service-field-description">
                 <span class="service-field-label">Service</span>
-              <input class="form-input" style="height:30px;font-size:12px;" value="${escSvc(s.name)}" data-field="name" data-idx="${i}" />
-              ${s.invoice_number ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;padding-left:2px;">Invoice: ${escSvc(s.invoice_number)}</div>` : ''}
+                <input class="form-input" style="height:38px;font-size:12px;" value="${escSvc(s.name)}" data-field="name" data-idx="${i}" />
               </label>
               <label class="service-field service-field-qty">
                 <span class="service-field-label">Qty</span>
-                <input class="form-input" style="height:30px;font-size:12px;text-align:center;" value="${s.qty}" type="number" min="1" data-field="qty" data-idx="${i}" />
+                <input class="form-input" style="height:38px;font-size:12px;text-align:center;" value="${s.qty}" type="number" min="1" data-field="qty" data-idx="${i}" />
               </label>
               <label class="service-field service-field-price">
                 <span class="service-field-label">Price</span>
-                <input class="form-input" style="height:30px;font-size:12px;text-align:right;" value="${s.price}" type="number" min="0" step="0.01" data-field="price" data-idx="${i}" />
+                <input class="form-input" style="height:38px;font-size:12px;text-align:right;" value="${s.price}" type="number" min="0" step="0.01" data-field="price" data-idx="${i}" />
               </label>
               <button class="service-remove-btn" data-del-svc="${i}" aria-label="Remove service">✕</button>
             </div>
+            ${s.invoice_number ? `<div class="service-row-meta">Linked invoice: ${escSvc(s.invoice_number)}</div>` : ''}
           </div>`).join('');
 
         host.querySelectorAll('[data-field]').forEach(inp => {

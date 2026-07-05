@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=17" />
+  <link rel="stylesheet" href="./styles.css?v=18" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     /* ── Builder layout ── */
@@ -491,7 +491,10 @@
           <div style="font-size:32px;margin-bottom:12px;">📄</div>
           <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;">No templates yet</div>
           <div style="font-size:12px;color:var(--muted);margin-bottom:20px;">Switch to Builder tab, design your layout, then click "Save as template…"</div>
-          <button class="btn btn-primary" id="tpl-go-builder">Go to Builder →</button>
+          <button class="btn btn-primary" id="tpl-go-builder">
+            Go to Builder
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/><path d="M9 4l4 4-4 4"/></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -654,8 +657,12 @@
 
     div.innerHTML = blockHTML(blk.type, blk.data || {}) +
       `<div class="block-tools">
-        <button class="bt-btn" data-act="up">↑</button>
-        <button class="bt-btn" data-act="down">↓</button>
+        <button class="bt-btn" data-act="up" aria-label="Move block up">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12V4"/><path d="M4.5 7.5L8 4l3.5 3.5"/></svg>
+        </button>
+        <button class="bt-btn" data-act="down" aria-label="Move block down">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v8"/><path d="M4.5 8.5L8 12l3.5-3.5"/></svg>
+        </button>
         <button class="bt-btn" data-act="dup">⎘</button>
         <button class="bt-btn del" data-act="del">✕</button>
       </div>
