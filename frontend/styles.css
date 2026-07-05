@@ -5,45 +5,46 @@
   --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", monospace;
 
-  /* Render-style layered dark palette */
-  --bg:        #0f0f11;
-  --surface:   #17171a;
-  --surface-2: #1f1f24;
-  --surface-3: #27272d;
-  --surface-4: rgba(255, 255, 255, 0.04);
-  --border:    rgba(255, 255, 255, 0.08);
-  --border-2:  rgba(255, 255, 255, 0.15);
+  /* ── Surfaces: warm-neutral dark, consistent undertone ── */
+  --bg:        #0e0e10;
+  --surface:   #161618;
+  --surface-2: #1e1e21;
+  --surface-3: #262629;
+  --surface-4: rgba(255, 255, 255, 0.03);
+  --border:    rgba(255, 255, 255, 0.07);
+  --border-2:  rgba(255, 255, 255, 0.13);
 
-  --text:   #f0f0f2;
-  --text-2: #9898a6;
-  --muted:  #64647a;
-  --dim:    #3a3a48;
+  /* ── Text: warm white family ── */
+  --text:   #eeeef0;   /* warm off-white, not cold */
+  --text-2: #9494a0;   /* same hue, -40% lightness */
+  --muted:  #606070;   /* same hue, -55% lightness */
+  --dim:    #383844;   /* same hue, border level */
 
-  /* Primary action: deep navy (legal-grade) */
-  --indigo:       #2563a8;
-  --indigo-hover: #1d4e8a;
-  --indigo-soft:  rgba(37, 99, 168, 0.12);
+  /* ── Navy: deep professional blue for buttons ── */
+  --indigo:       #23527a;
+  --indigo-hover: #1c4265;
+  --indigo-soft:  rgba(35, 82, 122, 0.14);
 
-  /* Gold accent: status, active states, premium */
-  --gold:         #c9a84c;
-  --gold-hover:   #b8963d;
-  --gold-soft:    rgba(201, 168, 76, 0.10);
+  /* ── Gold: anchor accent — all others calibrated to match ── */
+  --gold:         #c8a44a;   /* warm amber, ~60% sat */
+  --gold-hover:   #b5923e;
+  --gold-soft:    rgba(200, 164, 74, 0.09);
 
-  /* Success / green */
-  --accent:       #22c55e;
-  --accent-hover: #16a34a;
-  --accent-soft:  rgba(34, 197, 94, 0.10);
+  /* ── Status colours: same saturation family as gold ── */
+  --accent:       #3db87a;   /* sage green, not acid */
+  --accent-hover: #2fa066;
+  --accent-soft:  rgba(61, 184, 122, 0.09);
 
-  --navy:       #c9d4e8;
-  --navy-light: rgba(255, 255, 255, 0.04);
-  --blue:       #60a5fa;
-  --blue-bg:    rgba(96, 165, 250, 0.10);
-  --green:      #22c55e;
-  --green-bg:   rgba(34, 197, 94, 0.10);
-  --yellow:     #f59e0b;
-  --yellow-bg:  rgba(245, 158, 11, 0.10);
-  --red:        #ef4444;
-  --red-bg:     rgba(239, 68, 68, 0.10);
+  --blue:         #5a9fd4;   /* steel blue, same sat as gold */
+  --blue-bg:      rgba(90, 159, 212, 0.09);
+  --green:        #3db87a;
+  --green-bg:     rgba(61, 184, 122, 0.09);
+  --yellow:       #c8a44a;   /* == gold, no second yellow */
+  --yellow-bg:    rgba(200, 164, 74, 0.09);
+  --red:          #c4645a;   /* muted terracotta, not neon */
+  --red-bg:       rgba(196, 100, 90, 0.09);
+  --navy:         #b8c8de;   /* cool-neutral for misc text */
+  --navy-light:   rgba(255, 255, 255, 0.03);
 
   --radius:    8px;
   --radius-sm: 6px;
@@ -94,9 +95,9 @@ button { font-family: inherit; cursor: pointer; }
 .brand-mark {
   width: 30px;
   height: 30px;
-  background: #1a2d4a;
-  border: 1px solid rgba(201,168,76,0.25);
-  color: var(--gold);
+  background: #182438;   /* same blue family as --indigo */
+  border: 1px solid rgba(200,164,74,0.20);
+  color: #c8a44a;
   border-radius: 7px;
   display: flex;
   align-items: center;
@@ -181,7 +182,7 @@ body.landing {
   position: relative;
   min-height: 100vh;
   padding-top: var(--topbar-h);
-  background: #11120f;
+  background: #0e0e10;   /* matches --bg exactly */
   color: var(--text);
 }
 
@@ -696,7 +697,7 @@ body.dashboard {
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #4a4a5a;
+  color: #48484e;        /* one step above --dim, same hue */
   padding: 16px 10px 6px;
 }
 
@@ -706,7 +707,7 @@ body.dashboard {
   gap: 10px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
-  color: #8a8a9a;
+  color: #7a7a88;        /* warm-toned grey, matches surface undertone */
   font-size: 13px;
   font-weight: 400;
   transition: background 120ms ease, color 120ms ease;
@@ -715,13 +716,13 @@ body.dashboard {
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.05);
-  color: #c8c8d8;
+  background: rgba(255,255,255,0.04);
+  color: #b8b8c4;        /* mid-point, same hue family */
 }
 
 .nav-item.active {
-  background: rgba(201,168,76,0.08);
-  color: #e8e8f0;
+  background: rgba(200,164,74,0.07);
+  color: #deded8;        /* warm white, slightly tinted */
   font-weight: 500;
 }
 
@@ -771,9 +772,9 @@ body.dashboard {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(201,168,76,0.10);
-  border: 1px solid rgba(201,168,76,0.25);
-  color: var(--gold);
+  background: rgba(200,164,74,0.09);
+  border: 1px solid rgba(200,164,74,0.22);
+  color: #c0983e;        /* slightly deeper gold, readable */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -789,12 +790,12 @@ body.dashboard {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #c8c8d8;
+  color: #c4c4cc;        /* warm-neutral, consistent with nav active */
 }
 
 .user-role {
   font-size: 11px;
-  color: #5a5a72;
+  color: #545460;        /* same hue family as --muted */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -949,10 +950,10 @@ body.dashboard {
 .stat-card:nth-child(3) { border-top: 2px solid var(--blue); }
 .stat-card:nth-child(4) { border-top: 2px solid var(--green); }
 
-.stat-card:nth-child(1) .stat-value { color: #e8d5a0; }
-.stat-card:nth-child(2) .stat-value { color: #fcd34d; }
-.stat-card:nth-child(3) .stat-value { color: #93c5fd; }
-.stat-card:nth-child(4) .stat-value { color: #86efac; }
+.stat-card:nth-child(1) .stat-value { color: #d4b060; }  /* warm gold */
+.stat-card:nth-child(2) .stat-value { color: #d4b060; }  /* same warm */
+.stat-card:nth-child(3) .stat-value { color: #78b0d8; }  /* steel blue */
+.stat-card:nth-child(4) .stat-value { color: #5ebd8e; }  /* sage green */
 
 .stat-icon {
   width: 32px;
@@ -965,10 +966,10 @@ body.dashboard {
   flex-shrink: 0;
 }
 
-.stat-icon-indigo { background: var(--gold-soft); color: var(--gold); }
-.stat-icon-yellow { background: rgba(245,158,11,0.12); color: #fcd34d; }
-.stat-icon-blue   { background: rgba(96,165,250,0.12); color: #93c5fd; }
-.stat-icon-green  { background: rgba(34,197,94,0.12);  color: #86efac; }
+.stat-icon-indigo { background: rgba(200,164,74,0.08);  color: #c8a44a; }
+.stat-icon-yellow { background: rgba(200,164,74,0.08);  color: #c8a44a; }
+.stat-icon-blue   { background: rgba(90,159,212,0.09);  color: #78b0d8; }
+.stat-icon-green  { background: rgba(61,184,122,0.09);  color: #5ebd8e; }
 
 .table-row {
   display: grid;
@@ -1027,16 +1028,16 @@ body.dashboard {
   flex-shrink: 0;
 }
 
-.badge-blue { background: rgba(96,165,250,0.10); color: #93c5fd; border-color: rgba(96,165,250,0.18); }
-.badge-blue::before { background: var(--blue); }
-.badge-yellow { background: rgba(245,158,11,0.10); color: #fcd34d; border-color: rgba(245,158,11,0.18); }
-.badge-yellow::before { background: var(--yellow); }
-.badge-green { background: rgba(34,197,94,0.10); color: #86efac; border-color: rgba(34,197,94,0.18); }
-.badge-green::before { background: var(--green); }
-.badge-red { background: rgba(239,68,68,0.10); color: #fca5a5; border-color: rgba(239,68,68,0.18); }
-.badge-red::before { background: var(--red); }
-.badge-gray { background: var(--surface-3); color: var(--text-2); border-color: var(--border); }
-.badge-gray::before { background: var(--dim); }
+.badge-blue   { background: rgba(90,159,212,0.09);  color: #7ab2d8; border-color: rgba(90,159,212,0.16); }
+.badge-blue::before   { background: #5a9fd4; }
+.badge-yellow { background: rgba(200,164,74,0.09);  color: #c8a44a; border-color: rgba(200,164,74,0.16); }
+.badge-yellow::before { background: #c8a44a; }
+.badge-green  { background: rgba(61,184,122,0.09);  color: #5ebd8e; border-color: rgba(61,184,122,0.16); }
+.badge-green::before  { background: #3db87a; }
+.badge-red    { background: rgba(196,100,90,0.09);  color: #c97a72; border-color: rgba(196,100,90,0.16); }
+.badge-red::before    { background: #c4645a; }
+.badge-gray   { background: var(--surface-3); color: var(--text-2); border-color: var(--border); }
+.badge-gray::before   { background: var(--dim); }
 
 .dashboard-shell {
   display: grid;
@@ -1090,7 +1091,7 @@ a.queue-row:hover {
 }
 
 a.queue-row:hover .queue-client strong {
-  color: #e8d5a0;
+  color: #d4b878;        /* gold family, slightly lighter than --gold */
 }
 
 .queue-client {
