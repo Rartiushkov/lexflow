@@ -467,16 +467,44 @@
       document.getElementById('doc-count').textContent = mergedDocs.length;
       const list = document.getElementById('doc-list');
       if (mergedDocs.length) {
-        list.innerHTML = mergedDocs.map(d => `
-          <div class="table-row case-doc-row" style="grid-template-columns:1fr 100px 80px 60px;">
-            <div>${d.data_url || d.url
-              ? `<a href="${d.data_url || d.url}" download="${d.name}" style="color:var(--text);font-weight:500;">${d.name}</a>`
-              : `<strong>${d.name}</strong>`}</div>
+        const _docMap = {};
+        list.innerHTML = mergedDocs.map((d, i) => {
+          const hasUrl = !!(d.data_url || d.url);
+          if (hasUrl) _docMap[i] = { url: d.data_url || d.url, name: d.name };
+          return `
+          <div class="table-row case-doc-row" style="grid-template-columns:1fr 100px 80px auto;">
+            <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${d.name}</div>
             <div style="color:var(--muted);font-size:12px;">${formatDate(d.uploaded_at)}</div>
             <div><span class="badge badge-green">${d.status}</span></div>
-            <div><button class="btn btn-outline btn-sm" type="button" data-delete-case-doc="${d.document_id || d.key || d.id || d.name}">Del</button></div>
-          </div>
-        `).join('');
+            <div style="display:flex;gap:6px;align-items:center;">
+              ${hasUrl ? `<button class="btn btn-outline btn-sm" type="button" data-preview-idx="${i}">Preview</button>` : ''}
+              <button class="btn btn-outline btn-sm" type="button" data-delete-case-doc="${d.document_id || d.key || d.id || d.name}">Del</button>
+            </div>
+          </div>`;
+        }).join('');
+
+        // Preview buttons
+        list.querySelectorAll('[data-preview-idx]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const { url, name } = _docMap[+btn.dataset.previewIdx] || {};
+            if (!url) return;
+            const isPdf = name.toLowerCase().endsWith('.pdf') || url.startsWith('data:application/pdf');
+            const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(name) || url.startsWith('data:image/');
+            if (isPdf) {
+              const w = window.open('', '_blank');
+              w.document.write(`<html><head><title>${name}</title></head><body style="margin:0;background:#111;"><embed src="${url}" type="application/pdf" width="100%" height="100%" /></body></html>`);
+            } else if (isImg) {
+              const ov = document.createElement('div');
+              ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+              ov.innerHTML = `<img src="${url}" style="max-width:90vw;max-height:90vh;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,0.6);" /><div style="position:absolute;top:18px;right:24px;color:#fff;font-size:13px;opacity:0.7;">${name} &nbsp;&#10005;</div>`;
+              ov.addEventListener('click', () => ov.remove());
+              document.body.appendChild(ov);
+            } else {
+              const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+            }
+          });
+        });
+
         list.querySelectorAll('[data-delete-case-doc]').forEach(btn => {
           btn.addEventListener('click', async () => {
             const ref = btn.dataset.deleteCaseDoc;
