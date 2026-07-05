@@ -167,9 +167,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      requireAuth();
-      await loadCasesForMatching();
-      await renderIntakeLists();
+      await requireAuth();
+        await loadCasesForMatching();
+        await renderIntakeLists();
 
       document.querySelectorAll('[data-doc-tab]').forEach(button => {
         button.addEventListener('click', () => switchDocTab(button.dataset.docTab));

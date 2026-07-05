@@ -78,10 +78,10 @@
       `).join('');
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      requireAuth();
-      renderInvoices();
-    });
+    document.addEventListener('DOMContentLoaded', async () => {
+      await requireAuth();
+        renderInvoices();
+      });
   </script>
 </body>
 </html>

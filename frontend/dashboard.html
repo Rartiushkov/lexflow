@@ -313,7 +313,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      requireAuth();
+      await requireAuth();
       try {
         const cases = await get('/api/cases');
         setCaseDirectory(cases);

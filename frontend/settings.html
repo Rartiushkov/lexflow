@@ -137,7 +137,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      requireAuth();
+      await requireAuth();
       await loadSettings();
       document.getElementById('btn-save-settings').addEventListener('click', async () => {
         await post('/api/settings/profile', {

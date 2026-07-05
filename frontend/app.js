@@ -5,6 +5,7 @@ const API_BASE = (() => {
 
 let publicConfigPromise = null;
 let supabaseClientPromise = null;
+let supabaseAuthListenerBound = false;
 
 const LS_TOKEN = 'lexflow_token';
 const LS_USER = 'lexflow_user';
@@ -12,6 +13,8 @@ const LS_INVOICES = 'lexflow_invoices';
 const LS_INVOICE_TEMPLATES = 'lexflow_invoice_templates';
 const LS_CASE_DIRECTORY = 'lexflow_case_directory';
 const LS_INCOMING_DOCUMENTS = 'lexflow_incoming_documents';
+const OAUTH_REDIRECT_FLAG_KEY = 'lexflow_oauth_redirect_started_at';
+const OAUTH_REDIRECT_FLAG_TTL_MS = 2 * 60 * 1000;
 
 // ─── Demo auth fallback ─────────────────────────────────
 function getToken() {
@@ -40,26 +43,72 @@ function getUser() {
   }
 }
 
+function isEmbeddedBrowser() {
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|Instagram|Line|wv|WebView|Telegram/i.test(ua);
+}
+
+function isAppleMobileWeb() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
+function markOAuthRedirectStart() {
+  try {
+    localStorage.setItem(OAUTH_REDIRECT_FLAG_KEY, String(Date.now()));
+  } catch {}
+}
+
+function clearOAuthRedirectStart() {
+  try {
+    localStorage.removeItem(OAUTH_REDIRECT_FLAG_KEY);
+  } catch {}
+}
+
+function hasPendingOAuthRedirect() {
+  try {
+    const raw = localStorage.getItem(OAUTH_REDIRECT_FLAG_KEY);
+    const startedAt = Number(raw || 0);
+    return Number.isFinite(startedAt) && startedAt > 0 && (Date.now() - startedAt) < OAUTH_REDIRECT_FLAG_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForSessionRecovery(timeoutMs = 10000) {
+  const startedAt = Date.now();
+  while ((Date.now() - startedAt) < timeoutMs) {
+    const user = await syncSessionFromSupabase();
+    if (user) {
+      clearOAuthRedirectStart();
+      return user;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return null;
+}
+
 function requireAuth() {
-  if (getToken()) return Promise.resolve(getUser());
   return (async () => {
     const restored = await syncSessionFromSupabase();
     if (restored) return restored;
+    const recovered = await waitForSessionRecovery(hasPendingOAuthRedirect() ? 10000 : 2500);
+    if (recovered) return recovered;
     window.location.href = 'login.html';
     return null;
   })();
 }
 
 function requireGuest() {
-  if (getToken()) {
-    window.location.href = 'dashboard.html';
-    return Promise.resolve(getUser());
-  }
   return (async () => {
     const restored = await syncSessionFromSupabase();
     if (restored) {
       window.location.href = 'dashboard.html';
       return restored;
+    }
+    const recovered = await waitForSessionRecovery(hasPendingOAuthRedirect() ? 10000 : 1500);
+    if (recovered) {
+      window.location.href = 'dashboard.html';
+      return recovered;
     }
     return null;
   })();
@@ -85,7 +134,7 @@ async function getSupabaseBrowserClient() {
         return null;
       }
       const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-      return createClient(config.supabase_url, config.supabase_anon_key, {
+      const client = createClient(config.supabase_url, config.supabase_anon_key, {
         auth: {
           flowType: 'pkce',
           autoRefreshToken: true,
@@ -93,6 +142,19 @@ async function getSupabaseBrowserClient() {
           detectSessionInUrl: false,
         },
       });
+      if (!supabaseAuthListenerBound) {
+        client.auth.onAuthStateChange((_event, session) => {
+          const user = mapSupabaseUser(session?.user);
+          if (session?.access_token && user) {
+            setSession(session.access_token, user);
+            clearOAuthRedirectStart();
+          } else if (!session) {
+            clearSession();
+          }
+        });
+        supabaseAuthListenerBound = true;
+      }
+      return client;
     })();
   }
   return supabaseClientPromise;
@@ -128,6 +190,7 @@ async function completeSupabaseOAuthIfNeeded() {
   const user = mapSupabaseUser(data?.user || data?.session?.user);
   if (data?.session?.access_token && user) {
     setSession(data.session.access_token, user);
+    clearOAuthRedirectStart();
   }
   return user;
 }
@@ -144,6 +207,7 @@ async function syncSessionFromSupabase() {
     const user = mapSupabaseUser(session?.user);
     if (!session?.access_token || !user) return null;
     setSession(session.access_token, user);
+    clearOAuthRedirectStart();
     return user;
   } catch {
     return null;
@@ -155,6 +219,7 @@ async function startGoogleLogin() {
   if (!client) {
     throw new Error('Supabase Google login is not configured');
   }
+  markOAuthRedirectStart();
   const redirectTo = `${window.location.origin}${window.location.pathname}`;
   const { error } = await client.auth.signInWithOAuth({
     provider: 'google',
@@ -173,11 +238,13 @@ async function signOutSupabaseSession() {
   try {
     await client.auth.signOut();
   } catch {}
+  clearOAuthRedirectStart();
 }
 
 async function resetAllSessions() {
   await signOutSupabaseSession();
   clearSession();
+  clearOAuthRedirectStart();
 }
 
 // ─── API helpers ─────────────────────────────────────────
@@ -718,7 +785,10 @@ function setActiveNav() {
 }
 
 // ─── Init ──────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!getToken() || isDemoSession()) {
+    await syncSessionFromSupabase();
+  }
   renderUser();
   bindSignout();
   setActiveNav();

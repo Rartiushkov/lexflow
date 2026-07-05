@@ -216,10 +216,10 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      requireAuth();
-      loadCase();
-      const input = document.getElementById('file-input');
+    document.addEventListener('DOMContentLoaded', async () => {
+      await requireAuth();
+        loadCase();
+        const input = document.getElementById('file-input');
       document.getElementById('btn-upload')?.addEventListener('click', () => input.click());
       input?.addEventListener('change', async () => {
         for (const file of input.files) {

@@ -44,7 +44,7 @@
   <script src="./app.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
-      requireAuth();
+      await requireAuth();
       const list = document.getElementById('cases-list');
       try {
         const cases = await get('/api/cases');

@@ -767,8 +767,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      requireAuth();
-      bindForm();
+      await requireAuth();
+        bindForm();
 
       let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
       if (!invoice && caseId) {

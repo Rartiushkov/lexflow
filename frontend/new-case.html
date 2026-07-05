@@ -121,8 +121,8 @@
 
   <script src="./app.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      requireAuth();
+    document.addEventListener('DOMContentLoaded', async () => {
+      await requireAuth();
       document.getElementById('case-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const body = {

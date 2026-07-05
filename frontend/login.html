@@ -72,6 +72,16 @@
         window.history.replaceState({}, document.title, next);
       }
 
+      if (isEmbeddedBrowser()) {
+        showError('If Google sign-in stalls in an in-app browser, open this page in Chrome or Safari and try again.');
+      }
+
+      if (hasPendingOAuthRedirect()) {
+        googleBtn.disabled = true;
+        googleBtn.classList.add('is-loading');
+        showError('Completing Google sign-in. If it takes too long, keep this page open for a few seconds.');
+      }
+
       await requireGuest();
       const oauthUser = await syncSessionFromSupabase();
       if (oauthUser) {
