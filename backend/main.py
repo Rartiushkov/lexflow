@@ -192,6 +192,11 @@ def mask_integration(row: dict) -> dict:
     }
 
 
+def strip_unsupported_case_fields(data: dict) -> dict:
+    unsupported = {"firm_id", "portal_url", "public_notes", "public_submission_completed_at"}
+    return {key: value for key, value in data.items() if key not in unsupported}
+
+
 async def ensure_actor_context(user: dict) -> dict:
     profile = await db_get_profile(user["id"])
     if not profile:
@@ -284,9 +289,17 @@ async def db_create_case(data: dict) -> dict:
     if USE_SUPABASE:
         try:
             res = supabase_client.table("cases").insert(data).execute()
-            return res.data[0]
+            return {**data, **res.data[0]}
         except Exception as e:
             print(f"Supabase insert failed: {e}")
+            message = str(e)
+            if "column" in message and "does not exist" in message:
+                legacy = strip_unsupported_case_fields(data)
+                try:
+                    res = supabase_client.table("cases").insert(legacy).execute()
+                    return {**data, **(res.data[0] if res.data else legacy)}
+                except Exception as inner:
+                    print(f"Supabase legacy insert failed: {inner}")
             raise HTTPException(status_code=500, detail="Failed to save case")
     memory_cases[data["id"]] = data
     return data
@@ -318,9 +331,18 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
     if USE_SUPABASE:
         try:
             res = supabase_client.table("cases").update(patch).eq("id", case_id).execute()
-            return res.data[0]
+            return res.data[0] if res.data else None
         except Exception as e:
             print(f"Supabase update failed: {e}")
+            message = str(e)
+            if "column" in message and "does not exist" in message:
+                legacy = strip_unsupported_case_fields(patch)
+                try:
+                    res = supabase_client.table("cases").update(legacy).eq("id", case_id).execute()
+                    if res.data:
+                        return {**res.data[0], **patch}
+                except Exception as inner:
+                    print(f"Supabase legacy update failed: {inner}")
             raise HTTPException(status_code=500, detail="Failed to update case")
     case = memory_cases.get(case_id)
     if case:
