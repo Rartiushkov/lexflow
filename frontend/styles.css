@@ -2078,10 +2078,11 @@ a.queue-row:hover .queue-client strong {
   padding: 14px;
   margin-bottom: 8px;
   cursor: grab;
-  transition: border-color 150ms, background 150ms, opacity 150ms, box-shadow 150ms;
+  transition: border-color 150ms, background 150ms, box-shadow 150ms;
   display: block;
   text-decoration: none;
   user-select: none;
+  will-change: transform;
 }
 
 .kanban-card:hover {
@@ -2090,10 +2091,8 @@ a.queue-row:hover .queue-client strong {
 }
 
 .kanban-card-dragging {
-  opacity: 0.45;
+  opacity: 0;
   cursor: grabbing;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-  border-color: rgba(200,164,74,0.5);
 }
 
 .kanban-card-title {

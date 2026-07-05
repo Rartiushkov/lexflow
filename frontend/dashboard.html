@@ -319,6 +319,23 @@
             card.addEventListener('dragstart', e => {
               e.dataTransfer.setData('text/plain', c.id);
               e.dataTransfer.setData('from-stage', c.stage);
+              e.dataTransfer.effectAllowed = 'move';
+              // Custom drag ghost — solid opaque clone
+              const ghost = card.cloneNode(true);
+              ghost.style.cssText = `
+                position:fixed; top:-9999px; left:-9999px;
+                width:${card.offsetWidth}px;
+                background:var(--surface-3);
+                border:1px solid rgba(200,164,74,0.6);
+                border-radius:var(--radius-sm);
+                padding:14px;
+                opacity:1;
+                box-shadow:0 8px 32px rgba(0,0,0,0.5);
+                pointer-events:none;
+              `;
+              document.body.appendChild(ghost);
+              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, 20);
+              setTimeout(() => ghost.remove(), 0);
               card.classList.add('kanban-card-dragging');
             });
             card.addEventListener('dragend', () => card.classList.remove('kanban-card-dragging'));
