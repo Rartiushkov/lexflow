@@ -1189,33 +1189,37 @@
 
       let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
 
-      // If no explicit prefill but case param given — auto-load services from that case
-      if (!prefill && caseId) {
+      // Derive caseId from the invoice itself if not in URL
+      const effectiveCaseId = caseId || invoice?.case_id || null;
+
+      // If no explicit prefill but case is known — auto-load services from that case
+      if (!prefill && effectiveCaseId) {
         try {
-          const svcRaw = localStorage.getItem(`lf_case_services_${caseId}`);
+          const svcRaw = localStorage.getItem(`lf_case_services_${effectiveCaseId}`);
           const svcs = svcRaw ? JSON.parse(svcRaw) : [];
           if (svcs.length) {
             prefill = {
-              case_id: caseId,
+              case_id: effectiveCaseId,
               items: svcs.map(s => ({ description: s.name, quantity: s.qty, unit_price: s.price })),
             };
           }
         } catch {}
       }
 
-      // If existing invoice opened AND there's a prefill from services — merge items in
+      // If existing invoice opened AND there's services prefill — replace items with services
       if (invoice && prefill && prefill.items?.length) {
-        const merged = [
-          ...(invoice.items || []).filter(it => !it._from_services),
-          ...(prefill.items || []).map(it => ({
-            id: uid('line'),
-            description: it.description,
-            quantity: it.quantity ?? 1,
-            unit_price: it.unit_price ?? 0,
-            _from_services: true,
-          })),
-        ];
-        invoice = { ...invoice, items: merged };
+        const serviceItems = prefill.items.map(it => ({
+          id: uid('line'),
+          description: it.description,
+          quantity: it.quantity ?? 1,
+          unit_price: it.unit_price ?? 0,
+          _from_services: true,
+        }));
+        // Keep any manually added items (not placeholders), replace the rest
+        const manual = (invoice.items || []).filter(it =>
+          !it._from_services && it.description && it.description !== `${invoice.notes?.split(' · ')[0]} legal service`
+        );
+        invoice = { ...invoice, items: [...serviceItems, ...manual] };
         upsertInvoice(invoice);
         prefill = null;
       }
