@@ -1321,6 +1321,36 @@ a.queue-row:hover .queue-client strong {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(30, 31, 38, 0.98) 0%, rgba(22, 23, 29, 0.98) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.control-stat::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  opacity: 0.9;
+}
+
+.control-stat.tone-gold::after {
+  background: linear-gradient(90deg, rgba(200,164,74,0.72), rgba(200,164,74,0.08));
+}
+
+.control-stat.tone-red::after {
+  background: linear-gradient(90deg, rgba(196,100,90,0.7), rgba(196,100,90,0.08));
+}
+
+.control-stat.tone-blue::after {
+  background: linear-gradient(90deg, rgba(90,159,212,0.72), rgba(90,159,212,0.08));
+}
+
+.control-stat.tone-green::after {
+  background: linear-gradient(90deg, rgba(61,184,122,0.72), rgba(61,184,122,0.08));
+}
+
+.control-stat.tone-neutral::after {
+  background: linear-gradient(90deg, rgba(148,148,160,0.4), rgba(148,148,160,0.04));
 }
 
 .control-stat-label {
@@ -1379,6 +1409,24 @@ a.queue-row:hover .queue-client strong {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
+.control-check-complete,
+.control-feed-low {
+  border-color: rgba(61,184,122,0.14);
+  background: linear-gradient(180deg, rgba(24,31,28,0.96) 0%, rgba(22,24,27,0.98) 100%);
+}
+
+.control-check-missing,
+.control-feed-high {
+  border-color: rgba(196,100,90,0.16);
+  background: linear-gradient(180deg, rgba(35,27,29,0.96) 0%, rgba(24,23,27,0.98) 100%);
+}
+
+.control-check-needs_review,
+.control-feed-medium {
+  border-color: rgba(200,164,74,0.16);
+  background: linear-gradient(180deg, rgba(35,32,25,0.96) 0%, rgba(24,23,27,0.98) 100%);
+}
+
 .control-feed-link {
   text-decoration: none;
   color: inherit;
@@ -1424,14 +1472,23 @@ a.queue-row:hover .queue-client strong {
 .control-action-btn {
   margin-left: auto;
   flex-shrink: 0;
+  border-color: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.02);
+}
+
+.control-action-btn:hover {
+  border-color: rgba(200,164,74,0.24);
+  background: rgba(200,164,74,0.06);
 }
 
 .service-row {
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.06);
-  background: linear-gradient(180deg, rgba(30,31,38,0.92) 0%, rgba(24,25,31,0.98) 100%);
+  background:
+    linear-gradient(180deg, rgba(31,31,38,0.95) 0%, rgba(24,25,31,0.98) 100%);
   margin-bottom: 8px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
 }
 
 .service-row-main {
@@ -1459,6 +1516,16 @@ a.queue-row:hover .queue-client strong {
 
 .service-field-description {
   min-width: 0;
+}
+
+.service-field .form-input {
+  background: rgba(255,255,255,0.018);
+  border-color: rgba(255,255,255,0.07);
+}
+
+.service-field .form-input:focus {
+  border-color: rgba(200,164,74,0.42);
+  box-shadow: 0 0 0 3px rgba(200,164,74,0.08);
 }
 
 .service-remove-btn {
@@ -1492,7 +1559,8 @@ a.queue-row:hover .queue-client strong {
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   background:
-    radial-gradient(circle at top right, rgba(61, 184, 122, 0.08), transparent 35%),
+    radial-gradient(circle at top right, rgba(200, 164, 74, 0.08), transparent 32%),
+    radial-gradient(circle at top left, rgba(90, 159, 212, 0.05), transparent 28%),
     linear-gradient(180deg, rgba(30,31,38,0.96) 0%, rgba(20,21,27,0.98) 100%);
   box-shadow: 0 20px 50px rgba(9, 11, 17, 0.35);
 }
@@ -1509,8 +1577,9 @@ a.queue-row:hover .queue-client strong {
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #3b82f6 0%, #2453d8 100%);
-  color: #fff;
+  background: linear-gradient(180deg, #182438 0%, #132033 100%);
+  border: 1px solid rgba(200,164,74,0.16);
+  color: var(--gold);
   align-items: center;
   justify-content: center;
   font-size: 14px;
@@ -1539,12 +1608,12 @@ a.queue-row:hover .queue-client strong {
 .portal-invite-link {
   font-size: 12px;
   background: rgba(13,17,28,0.55);
-  border: 1px solid rgba(76,123,255,0.18);
+  border: 1px solid rgba(200,164,74,0.14);
   border-radius: 14px;
   padding: 11px 12px;
   margin-bottom: 10px;
   word-break: break-word;
-  color: #7ea6ff;
+  color: #d7c18b;
 }
 
 .portal-invite-recipient-row {
@@ -1568,9 +1637,9 @@ a.queue-row:hover .queue-client strong {
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(76,123,255,0.12);
-  border: 1px solid rgba(76,123,255,0.24);
-  color: #7ea6ff;
+  background: rgba(90,159,212,0.08);
+  border: 1px solid rgba(90,159,212,0.18);
+  color: #8bb8dc;
   font-size: 12px;
   font-weight: 600;
 }
@@ -1584,7 +1653,7 @@ a.queue-row:hover .queue-client strong {
   font: inherit;
   font-size: 13px;
   line-height: 1.6;
-  background: rgba(13,17,28,0.42);
+  background: rgba(255,255,255,0.018);
   color: #f4f6ff;
   margin-bottom: 12px;
 }

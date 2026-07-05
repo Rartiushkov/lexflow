@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=15" />
+  <link rel="stylesheet" href="./styles.css?v=16" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -303,7 +303,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=14"></script>
+  <script src="./app.js?v=15"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -433,6 +433,15 @@
       return map[severity] || 'badge-gray';
     }
 
+    function statTone(label) {
+      const key = String(label || '').toLowerCase();
+      if (key.includes('route')) return 'tone-gold';
+      if (key.includes('priority')) return 'tone-red';
+      if (key.includes('stage')) return 'tone-blue';
+      if (key.includes('next')) return 'tone-green';
+      return 'tone-neutral';
+    }
+
     function actionMeta(action, state) {
       const label = (action?.label || '').toLowerCase();
       if (label.includes('request missing documents')) return { cta: 'Draft message', mode: 'message' };
@@ -511,7 +520,7 @@
         <div class="control-center-stack">
           <div class="control-hero">
             ${stats.map(item => `
-              <div class="control-stat">
+              <div class="control-stat ${statTone(item.label)}">
                 <span class="control-stat-label">${escapeHtml(item.label)}</span>
                 <strong class="control-stat-value">${escapeHtml(item.value)}</strong>
               </div>
@@ -529,7 +538,7 @@
             <div class="control-section-title">Route checklist</div>
             <div class="control-checklist">
               ${requirements.length ? requirements.map(item => `
-                <div class="control-check">
+                <div class="control-check control-check-${item.state}">
                   <div class="control-check-copy">
                     <strong>${escapeHtml(item.label)}</strong>
                     <span>${item.blocker ? 'Blocking requirement' : 'Supporting requirement'}</span>
@@ -548,7 +557,7 @@
             <div class="control-section-title">Recommended actions</div>
             <div class="control-feed">
               ${actions.length ? actions.map((item, index) => `
-                <div class="control-feed-item control-feed-item-action">
+                <div class="control-feed-item control-feed-item-action control-feed-${escapeHtml(item.priority || 'info')}">
                   <span class="badge ${severityBadge(item.priority)}">${escapeHtml(item.priority || 'info')}</span>
                   <div class="control-feed-copy">
                     <strong>${escapeHtml(item.label)}</strong>
@@ -564,7 +573,7 @@
             <div class="control-section-title">Risk flags</div>
             <div class="control-feed">
               ${risks.length ? risks.map(item => `
-                <div class="control-feed-item">
+                <div class="control-feed-item control-feed-${escapeHtml(item.severity || 'info')}">
                   <span class="badge ${severityBadge(item.severity)}">${escapeHtml(item.severity || 'info')}</span>
                   <div class="control-feed-copy">
                     <strong>${escapeHtml((item.code || 'risk').replace(/[_:]/g, ' '))}</strong>
@@ -579,7 +588,7 @@
             <div class="control-section-title">Recent alerts</div>
             <div class="control-feed">
               ${notifications.length ? notifications.slice(0, 4).map(item => `
-                <div class="control-feed-item">
+                <div class="control-feed-item control-feed-${escapeHtml(item.severity || 'info')}">
                   <span class="badge ${severityBadge(item.severity)}">${escapeHtml(item.kind || 'notice')}</span>
                   <div class="control-feed-copy">
                     <strong>${escapeHtml(item.title)}</strong>
