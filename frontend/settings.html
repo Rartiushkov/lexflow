@@ -67,6 +67,14 @@
           </div>
         </div>
         <div class="card-body">
+          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:600;">Recommended: Gmail OAuth</div>
+              <div class="panel-subtitle">Connect the inbox without storing a permanent Gmail app password.</div>
+            </div>
+            <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
+          </div>
+          <div class="auth-divider" style="margin:0 0 18px 0;"><span>fallback manual IMAP</span></div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Provider</label>
@@ -109,15 +117,18 @@
   <script src="./app.js"></script>
   <script>
     async function loadSettings() {
+      const appConfig = await get('/api/config');
       const profile = await get('/api/settings/profile');
       document.getElementById('firm-name').value = profile.firm?.name || '';
       document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
       document.getElementById('full-name').value = profile.profile?.full_name || '';
+      document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
       const integrations = await get('/api/email-integrations');
       document.getElementById('gmail-integrations').innerHTML = integrations.length
         ? integrations.map(item => `
-          <div class="table-row" style="grid-template-columns:1.2fr 120px 120px;">
+          <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
             <span><strong>${item.email}</strong></span>
+            <span>${item.auth_type === 'oauth' ? 'Google OAuth' : 'App password'}</span>
             <span>${item.mailbox}</span>
             <span><span class="badge ${item.active ? 'badge-green' : 'badge-gray'}">${item.active ? 'active' : 'inactive'}</span></span>
           </div>
@@ -135,6 +146,10 @@
           full_name: document.getElementById('full-name').value,
         });
         showToast('Settings saved', 'success');
+      });
+      document.getElementById('btn-connect-google-gmail').addEventListener('click', async () => {
+        const result = await post('/api/email-integrations/google/start', {});
+        window.location.href = result.auth_url;
       });
       document.getElementById('btn-save-gmail').addEventListener('click', async () => {
         await post('/api/email-integrations', {
@@ -154,6 +169,14 @@
         const result = await post('/api/gmail/poll', {});
         showToast(`Processed ${result.count} email batch(es)`, 'success');
       });
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('gmail_connected') === '1') {
+        showToast('Google work email connected', 'success');
+        params.delete('gmail_connected');
+        const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, document.title, next);
+        await loadSettings();
+      }
     });
   </script>
 </body>

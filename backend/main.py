@@ -1,6 +1,7 @@
 import base64
 import email
 import hashlib
+import hmac
 import imaplib
 import io
 import json
@@ -11,13 +12,14 @@ import uuid
 from datetime import date, datetime, timezone
 from email.message import EmailMessage, Message
 from email.utils import parseaddr
+from urllib.parse import urlencode
 from typing import Optional
 from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from local_ocr import has_tesseract, run_local_ocr
@@ -49,6 +51,10 @@ GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 GMAIL_MAILBOX = os.environ.get("GMAIL_MAILBOX", "INBOX")
 GMAIL_POLL_LIMIT = int(os.environ.get("GMAIL_POLL_LIMIT", "10") or "10")
+BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL", "http://localhost:8000")
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_STATE_SECRET = os.environ.get("GOOGLE_OAUTH_STATE_SECRET", SUPABASE_SERVICE_KEY or "dev-google-oauth-state-secret")
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
@@ -158,6 +164,41 @@ def parse_date(value: str) -> Optional[date]:
     return None
 
 
+def google_oauth_callback_url() -> str:
+    return f"{BACKEND_PUBLIC_URL.rstrip('/')}/api/email-integrations/google/callback"
+
+
+def sign_google_state(payload: dict) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+    signature = hmac.new(GOOGLE_OAUTH_STATE_SECRET.encode("utf-8"), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{encoded}.{signature}"
+
+
+def verify_google_state(state: str) -> dict:
+    try:
+        encoded, signature = state.split(".", 1)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+    expected = hmac.new(GOOGLE_OAUTH_STATE_SECRET.encode("utf-8"), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state signature")
+    padded = encoded + "=" * (-len(encoded) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+    if payload.get("exp", 0) < int(datetime.now(timezone.utc).timestamp()):
+        raise HTTPException(status_code=400, detail="OAuth state expired")
+    return payload
+
+
+def mask_integration(row: dict) -> dict:
+    return {
+        **row,
+        "app_password": "********" if row.get("app_password") else "",
+        "refresh_token": "********" if row.get("refresh_token") else "",
+        "access_token": "",
+    }
+
+
 async def ensure_actor_context(user: dict) -> dict:
     profile = await db_get_profile(user["id"])
     if not profile:
@@ -213,8 +254,8 @@ class UpdateSettingsRequest(BaseModel):
 class EmailIntegrationRequest(BaseModel):
     id: Optional[str] = ""
     provider: str = "gmail"
-    email: str
-    app_password: str
+    email: Optional[str] = ""
+    app_password: Optional[str] = ""
     imap_host: Optional[str] = "imap.gmail.com"
     mailbox: Optional[str] = "INBOX"
     poll_limit: Optional[int] = 10
@@ -854,16 +895,18 @@ async def update_settings_profile(req: UpdateSettingsRequest, user: dict = Depen
 async def list_email_integrations(user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
     rows = await db_get_email_integrations(firm_id=actor["firm"]["id"])
-    return [{**row, "app_password": "********" if row.get("app_password") else ""} for row in rows]
+    return [mask_integration(row) for row in rows]
 
 
 @app.post("/api/email-integrations")
 async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
+    if not req.app_password:
+        raise HTTPException(status_code=400, detail="App password is required for manual IMAP mode")
     integration = {
         "id": req.id or str(uuid.uuid4()),
         "provider": req.provider,
-        "email": req.email.lower().strip(),
+        "email": (req.email or "").lower().strip(),
         "app_password": req.app_password,
         "imap_host": req.imap_host or "imap.gmail.com",
         "mailbox": req.mailbox or "INBOX",
@@ -872,13 +915,39 @@ async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = De
         "lawyer_id": user["id"],
         "firm_id": actor["firm"]["id"],
         "auth_type": "app_password",
+        "refresh_token": "",
+        "access_token": "",
+        "token_expires_at": None,
         "created_at": utc_now(),
         "updated_at": utc_now(),
         "last_polled_at": None,
         "last_processed_message_id": "",
     }
     saved = await db_upsert_email_integration(integration)
-    return {**saved, "app_password": "********"}
+    return mask_integration(saved)
+
+
+@app.post("/api/email-integrations/google/start")
+async def start_google_email_integration(user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    if not GOOGLE_OAUTH_CLIENT_ID or not GOOGLE_OAUTH_CLIENT_SECRET:
+        raise HTTPException(status_code=400, detail="Google OAuth is not configured on the backend")
+    state = sign_google_state({
+        "user_id": user["id"],
+        "firm_id": actor["firm"]["id"],
+        "next": f"{FRONTEND_URL.rstrip('/')}/settings.html",
+        "exp": int(datetime.now(timezone.utc).timestamp()) + 600,
+    })
+    query = urlencode({
+        "client_id": GOOGLE_OAUTH_CLIENT_ID,
+        "redirect_uri": google_oauth_callback_url(),
+        "response_type": "code",
+        "access_type": "offline",
+        "prompt": "consent",
+        "scope": "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify",
+        "state": state,
+    })
+    return {"auth_url": f"https://accounts.google.com/o/oauth2/v2/auth?{query}"}
 
 
 # ─── Cases ─────────────────────────────────────────────
@@ -1372,6 +1441,90 @@ async def email_webhook(payload: EmailWebhook):
     return await process_email_payload(payload)
 
 
+async def exchange_google_code(code: str) -> dict:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post("https://oauth2.googleapis.com/token", data={
+            "code": code,
+            "client_id": GOOGLE_OAUTH_CLIENT_ID,
+            "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
+            "redirect_uri": google_oauth_callback_url(),
+            "grant_type": "authorization_code",
+        })
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to exchange Google OAuth code")
+    return response.json()
+
+
+async def refresh_google_access_token(refresh_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post("https://oauth2.googleapis.com/token", data={
+            "refresh_token": refresh_token,
+            "client_id": GOOGLE_OAUTH_CLIENT_ID,
+            "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+        })
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to refresh Google access token")
+    return response.json()
+
+
+async def fetch_google_user_email(access_token: str) -> str:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to fetch Google user profile")
+    return (response.json().get("email") or "").lower().strip()
+
+
+@app.get("/api/email-integrations/google/callback")
+async def google_email_integration_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL.rstrip('/')}/settings.html?gmail_connected=0&reason={error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing Google OAuth callback parameters")
+    payload = verify_google_state(state)
+    token_data = await exchange_google_code(code)
+    access_token = token_data.get("access_token", "")
+    refresh_token = token_data.get("refresh_token", "")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="Google OAuth token response did not include an access token")
+    email_address = await fetch_google_user_email(access_token)
+    integration = {
+        "id": str(uuid.uuid4()),
+        "provider": "gmail",
+        "auth_type": "oauth",
+        "email": email_address,
+        "app_password": "",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_expires_at": (
+            datetime.now(timezone.utc).timestamp() + int(token_data.get("expires_in") or 3600)
+        ),
+        "imap_host": "imap.gmail.com",
+        "mailbox": "INBOX",
+        "poll_limit": 10,
+        "active": True,
+        "lawyer_id": payload["user_id"],
+        "firm_id": payload["firm_id"],
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "last_polled_at": None,
+        "last_processed_message_id": "",
+    }
+    existing = await db_get_email_integrations(lawyer_id=payload["user_id"], firm_id=payload["firm_id"])
+    matched = next((item for item in existing if item.get("provider") == "gmail" and item.get("email") == email_address), None)
+    if matched:
+        integration["id"] = matched["id"]
+        integration["created_at"] = matched.get("created_at", utc_now())
+        if not refresh_token:
+            integration["refresh_token"] = matched.get("refresh_token", "")
+    await db_upsert_email_integration(integration)
+    return RedirectResponse(f"{payload.get('next', FRONTEND_URL.rstrip('/') + '/settings.html')}?gmail_connected=1")
+
+
 def extract_gmail_attachments(message: Message) -> list[EmailAttachment]:
     attachments = []
     for part in message.walk():
@@ -1387,8 +1540,124 @@ def extract_gmail_attachments(message: Message) -> list[EmailAttachment]:
     return attachments
 
 
+def decode_gmail_base64(value: str) -> bytes:
+    padded = value + "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(padded.encode("utf-8"))
+
+
+async def gmail_api_get_json(path: str, access_token: str, *, params: Optional[dict] = None) -> dict:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.get(
+            f"https://gmail.googleapis.com/gmail/v1/users/me/{path.lstrip('/')}",
+            params=params,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Gmail API request failed")
+    return response.json()
+
+
+async def gmail_api_post_json(path: str, access_token: str, *, body: Optional[dict] = None) -> dict:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(
+            f"https://gmail.googleapis.com/gmail/v1/users/me/{path.lstrip('/')}",
+            json=body or {},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Gmail API write request failed")
+    return response.json() if response.text else {}
+
+
+async def ensure_google_integration_access_token(integration: dict) -> dict:
+    expires_at = float(integration.get("token_expires_at") or 0)
+    if integration.get("access_token") and expires_at > datetime.now(timezone.utc).timestamp() + 60:
+        return integration
+    if not integration.get("refresh_token"):
+        raise HTTPException(status_code=400, detail=f"Google OAuth refresh token missing for {integration.get('email')}")
+    token_data = await refresh_google_access_token(integration["refresh_token"])
+    updated = {
+        **integration,
+        "access_token": token_data.get("access_token", ""),
+        "token_expires_at": datetime.now(timezone.utc).timestamp() + int(token_data.get("expires_in") or 3600),
+        "updated_at": utc_now(),
+    }
+    if token_data.get("refresh_token"):
+        updated["refresh_token"] = token_data["refresh_token"]
+    await db_upsert_email_integration(updated)
+    return updated
+
+
+async def gmail_message_to_attachments(access_token: str, message_id: str) -> tuple[str, str, list[EmailAttachment]]:
+    message = await gmail_api_get_json(f"messages/{message_id}", access_token, params={"format": "full"})
+    headers = {item.get("name", "").lower(): item.get("value", "") for item in message.get("payload", {}).get("headers", [])}
+    attachments: list[EmailAttachment] = []
+
+    async def walk_parts(part: dict):
+        filename = part.get("filename") or ""
+        body = part.get("body") or {}
+        if filename:
+            content = b""
+            if body.get("data"):
+                content = decode_gmail_base64(body["data"])
+            elif body.get("attachmentId"):
+                attachment = await gmail_api_get_json(
+                    f"messages/{message_id}/attachments/{body['attachmentId']}",
+                    access_token,
+                )
+                content = decode_gmail_base64(attachment.get("data", ""))
+            attachments.append(EmailAttachment(
+                filename=filename,
+                content_base64=base64.b64encode(content).decode("utf-8"),
+                content_type=part.get("mimeType") or "application/octet-stream",
+            ))
+        for child in part.get("parts", []) or []:
+            await walk_parts(child)
+
+    await walk_parts(message.get("payload", {}))
+    return headers.get("from", ""), headers.get("subject", ""), attachments
+
+
 async def process_email_integration(integration: dict) -> dict:
     processed = []
+    if integration.get("provider") == "gmail" and integration.get("auth_type") == "oauth":
+        ready = await ensure_google_integration_access_token(integration)
+        access_token = ready["access_token"]
+        listing = await gmail_api_get_json(
+            "messages",
+            access_token,
+            params={
+                "q": "is:unread has:attachment",
+                "maxResults": int(ready.get("poll_limit") or 10),
+            },
+        )
+        for item in listing.get("messages", []) or []:
+            message_id = item.get("id")
+            if not message_id:
+                continue
+            from_header, subject, attachments = await gmail_message_to_attachments(access_token, message_id)
+            if not attachments:
+                await gmail_api_post_json(f"messages/{message_id}/modify", access_token, body={"removeLabelIds": ["UNREAD"]})
+                continue
+            sender = parseaddr(from_header)[1]
+            result = await process_email_payload(EmailWebhook(
+                **{"from": sender, "subject": subject, "attachments": attachments}
+            ), owner_user_id=ready.get("lawyer_id"))
+            await gmail_api_post_json(f"messages/{message_id}/modify", access_token, body={"removeLabelIds": ["UNREAD"]})
+            processed.append({
+                "integration_id": ready["id"],
+                "message_id": message_id,
+                "from": sender,
+                "subject": subject,
+                **result,
+            })
+        await db_upsert_email_integration({
+            **ready,
+            "last_polled_at": utc_now(),
+            "updated_at": utc_now(),
+        })
+        return {"integration_id": ready["id"], "email": ready["email"], "processed": processed, "count": len(processed)}
+
     with imaplib.IMAP4_SSL(integration.get("imap_host") or "imap.gmail.com") as mailbox:
         mailbox.login(integration["email"], integration["app_password"])
         mailbox.select(integration.get("mailbox") or "INBOX")
@@ -1537,4 +1806,5 @@ async def public_config():
     return {
         "supabase_url": SUPABASE_URL,
         "supabase_anon_key": SUPABASE_ANON_KEY,
+        "google_email_oauth_enabled": bool(GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET),
     }

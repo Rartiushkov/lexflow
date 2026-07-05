@@ -452,3 +452,28 @@ def test_cases_are_isolated_per_firm_in_memory_mode():
     assert second.status_code == 200
     assert [item["id"] for item in first.json()] == [case1["id"]]
     assert [item["id"] for item in second.json()] == [case2["id"]]
+
+
+def test_google_oauth_state_roundtrip():
+    payload = {"user_id": "user_1", "firm_id": "firm_user_1", "exp": 4102444800}
+    state = main.sign_google_state(payload)
+    decoded = main.verify_google_state(state)
+    assert decoded["user_id"] == "user_1"
+    assert decoded["firm_id"] == "firm_user_1"
+
+
+def test_google_email_integration_start_returns_auth_url():
+    reset_state()
+    original_client_id = main.GOOGLE_OAUTH_CLIENT_ID
+    original_client_secret = main.GOOGLE_OAUTH_CLIENT_SECRET
+    try:
+        main.GOOGLE_OAUTH_CLIENT_ID = "client-id"
+        main.GOOGLE_OAUTH_CLIENT_SECRET = "client-secret"
+        response = client.post("/api/email-integrations/google/start", headers=AUTH)
+        assert response.status_code == 200
+        data = response.json()
+        assert "accounts.google.com" in data["auth_url"]
+        assert "state=" in data["auth_url"]
+    finally:
+        main.GOOGLE_OAUTH_CLIENT_ID = original_client_id
+        main.GOOGLE_OAUTH_CLIENT_SECRET = original_client_secret

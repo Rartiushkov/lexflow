@@ -109,7 +109,10 @@ CREATE TABLE IF NOT EXISTS public.email_integrations (
     provider TEXT NOT NULL DEFAULT 'gmail',
     auth_type TEXT NOT NULL DEFAULT 'app_password',
     email TEXT NOT NULL,
-    app_password TEXT NOT NULL,
+    app_password TEXT,
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expires_at DOUBLE PRECISION,
     imap_host TEXT DEFAULT 'imap.gmail.com',
     mailbox TEXT DEFAULT 'INBOX',
     poll_limit INTEGER DEFAULT 10,
@@ -119,6 +122,11 @@ CREATE TABLE IF NOT EXISTS public.email_integrations (
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.email_integrations ADD COLUMN IF NOT EXISTS access_token TEXT;
+ALTER TABLE public.email_integrations ADD COLUMN IF NOT EXISTS refresh_token TEXT;
+ALTER TABLE public.email_integrations ADD COLUMN IF NOT EXISTS token_expires_at DOUBLE PRECISION;
+ALTER TABLE public.email_integrations ALTER COLUMN app_password DROP NOT NULL;
 
 ALTER TABLE public.firms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
