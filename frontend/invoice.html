@@ -1182,6 +1182,38 @@
       } catch {}
 
       let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
+
+      // If no explicit prefill but case param given — auto-load services from that case
+      if (!prefill && caseId) {
+        try {
+          const svcRaw = localStorage.getItem(`lf_case_services_${caseId}`);
+          const svcs = svcRaw ? JSON.parse(svcRaw) : [];
+          if (svcs.length) {
+            prefill = {
+              case_id: caseId,
+              items: svcs.map(s => ({ description: s.name, quantity: s.qty, unit_price: s.price })),
+            };
+          }
+        } catch {}
+      }
+
+      // If existing invoice opened AND there's a prefill from services — merge items in
+      if (invoice && prefill && prefill.items?.length) {
+        const merged = [
+          ...(invoice.items || []).filter(it => !it._from_services),
+          ...(prefill.items || []).map(it => ({
+            id: uid('line'),
+            description: it.description,
+            quantity: it.quantity ?? 1,
+            unit_price: it.unit_price ?? 0,
+            _from_services: true,
+          })),
+        ];
+        invoice = { ...invoice, items: merged };
+        upsertInvoice(invoice);
+        prefill = null;
+      }
+
       if (!invoice && prefill) {
         const effCaseId = prefill.case_id || caseId;
         try {

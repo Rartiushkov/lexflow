@@ -499,7 +499,7 @@
           <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${c.invoice.number}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Awaiting payment'}</span>
-            <a class="btn btn-outline btn-sm" href="invoice.html?id=${c.invoice.id || c.invoice.number}">Open</a>
+            <a class="btn btn-outline btn-sm" href="invoice.html?id=${c.invoice.id || c.invoice.number}&case=${caseId}">Open</a>
           </div>
         `;
       } else {
@@ -510,7 +510,7 @@
             <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${localInvoice.number}</div>
             <div style="display:flex;gap:8px;">
               <span class="badge ${invoiceStatusBadge(localInvoice.status)}">${localInvoice.status}</span>
-              <a class="btn btn-outline btn-sm" href="invoice.html?id=${localInvoice.id}">Open</a>
+              <a class="btn btn-outline btn-sm" href="invoice.html?id=${localInvoice.id}&case=${caseId}">Open</a>
             </div>
           `;
         } else {
@@ -726,7 +726,10 @@
         if (!caseServices.length) { showToast('Add at least one service first', 'error'); return; }
         const items = caseServices.map(s => ({ description: s.name, quantity: s.qty, unit_price: s.price }));
         localStorage.setItem('lf_prefill_invoice', JSON.stringify({ case_id: caseId, items }));
-        window.location.href = `invoice.html?case=${caseId}`;
+        const existing = getInvoices().find(inv => inv.case_id === caseId);
+        window.location.href = existing
+          ? `invoice.html?id=${existing.id}&case=${caseId}`
+          : `invoice.html?case=${caseId}`;
       });
 
       loadCaseServices();
