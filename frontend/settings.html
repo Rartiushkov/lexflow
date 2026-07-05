@@ -83,15 +83,18 @@
             </div>
           </div>
 
-          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
-            <div>
+          <div id="gmail-oauth-panel" style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
+            <div style="min-width:240px;">
               <div style="font-weight:600;">Recommended: Gmail OAuth</div>
               <div class="panel-subtitle">Connect the inbox without storing a permanent Gmail app password.</div>
             </div>
-            <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
+              <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run Gmail poll</button>
+            </div>
           </div>
 
-          <label class="settings-toggle">
+          <label class="settings-toggle" id="manual-imap-toggle-row">
             <input type="checkbox" id="toggle-manual-imap" />
             <span>Show manual IMAP settings</span>
           </label>
@@ -128,9 +131,8 @@
               <input class="form-input" id="gmail-poll-limit" type="number" min="1" max="100" value="10" />
             </div>
           </div>
-          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;">
+          <div style="display:flex;gap:10px;align-items:center;justify-content:flex-start;">
             <button class="btn btn-primary" id="btn-save-gmail" type="button">Save Gmail connection</button>
-            <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run Gmail poll</button>
           </div>
           </div>
           <div id="gmail-integrations" style="margin-top:16px;"></div>
@@ -182,6 +184,39 @@
       }
     }
 
+    function syncEmailIntegrationPanels(integrations) {
+      const live = integrations?.find(item => item.active);
+      const cached = readWorkEmailCache();
+      const current = live || cached;
+      const isOauth = current?.auth_type === 'oauth' && current?.active !== false;
+      const hasConnection = !!current && current.active !== false;
+      const toggleRow = document.getElementById('manual-imap-toggle-row');
+      const toggle = document.getElementById('toggle-manual-imap');
+      const manualPanel = document.getElementById('manual-imap-panel');
+      const oauthPanel = document.getElementById('gmail-oauth-panel');
+      const connectBtn = document.getElementById('btn-connect-google-gmail');
+      const pollBtn = document.getElementById('btn-poll-gmail');
+
+      if (toggleRow) {
+        toggleRow.style.display = isOauth ? 'none' : 'flex';
+      }
+      if (toggle && isOauth) {
+        toggle.checked = false;
+      }
+      if (manualPanel) {
+        manualPanel.style.display = !isOauth && toggle?.checked ? 'block' : 'none';
+      }
+      if (oauthPanel) {
+        oauthPanel.style.marginBottom = isOauth ? '0' : '18px';
+      }
+      if (connectBtn) {
+        connectBtn.textContent = isOauth ? 'Reconnect Google' : 'Connect with Google';
+      }
+      if (pollBtn) {
+        pollBtn.disabled = !hasConnection;
+      }
+    }
+
     function restoreManualImapDraft() {
       const cached = readWorkEmailCache();
       if (!cached) return;
@@ -226,6 +261,7 @@
           active: first.active,
         });
       }
+      syncEmailIntegrationPanels(integrations);
       document.getElementById('gmail-integrations').innerHTML = integrations.length
         ? integrations.map(item => `
           <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
@@ -243,8 +279,9 @@
       restoreManualImapDraft();
       bindManualImapDraftAutosave();
       document.getElementById('toggle-manual-imap').addEventListener('change', (event) => {
-        document.getElementById('manual-imap-panel').style.display = event.target.checked ? 'block' : 'none';
+        syncEmailIntegrationPanels([]);
       });
+      syncEmailIntegrationPanels([]);
       await loadSettings();
       document.getElementById('btn-save-settings').addEventListener('click', async () => {
         await post('/api/settings/profile', {
