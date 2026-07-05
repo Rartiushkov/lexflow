@@ -3,8 +3,8 @@ const API_BASE = (() => {
   return el?.dataset.apiBase || 'http://localhost:8000';
 })();
 
-const SUPABASE_URL = 'https://placeholder.supabase.co';
-const SUPABASE_ANON = 'placeholder';
+let publicConfigPromise = null;
+let supabaseClientPromise = null;
 
 const LS_TOKEN = 'lexflow_token';
 const LS_USER = 'lexflow_user';
@@ -41,15 +41,138 @@ function getUser() {
 }
 
 function requireAuth() {
-  if (!getToken()) {
+  if (getToken()) return Promise.resolve(getUser());
+  return (async () => {
+    const restored = await syncSessionFromSupabase();
+    if (restored) return restored;
     window.location.href = 'login.html';
-  }
+    return null;
+  })();
 }
 
 function requireGuest() {
   if (getToken()) {
     window.location.href = 'dashboard.html';
+    return Promise.resolve(getUser());
   }
+  return (async () => {
+    const restored = await syncSessionFromSupabase();
+    if (restored) {
+      window.location.href = 'dashboard.html';
+      return restored;
+    }
+    return null;
+  })();
+}
+
+async function getPublicConfig() {
+  if (!publicConfigPromise) {
+    publicConfigPromise = fetch(`${API_BASE}/api/config`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Config request failed: HTTP ${res.status}`);
+        return res.json();
+      })
+      .catch(() => ({ supabase_url: '', supabase_anon_key: '' }));
+  }
+  return publicConfigPromise;
+}
+
+async function getSupabaseBrowserClient() {
+  if (!supabaseClientPromise) {
+    supabaseClientPromise = (async () => {
+      const config = await getPublicConfig();
+      if (!config?.supabase_url || !config?.supabase_anon_key) {
+        return null;
+      }
+      const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+      return createClient(config.supabase_url, config.supabase_anon_key, {
+        auth: {
+          flowType: 'pkce',
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: false,
+        },
+      });
+    })();
+  }
+  return supabaseClientPromise;
+}
+
+function mapSupabaseUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email || '',
+    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'User',
+  };
+}
+
+function clearAuthCodeFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('code');
+  url.searchParams.delete('error');
+  url.searchParams.delete('error_code');
+  url.searchParams.delete('error_description');
+  window.history.replaceState({}, document.title, url.toString());
+}
+
+async function completeSupabaseOAuthIfNeeded() {
+  const client = await getSupabaseBrowserClient();
+  if (!client) return null;
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  if (!code) return null;
+  const { data, error } = await client.auth.exchangeCodeForSession(code);
+  if (error) throw error;
+  clearAuthCodeFromUrl();
+  const user = mapSupabaseUser(data?.user || data?.session?.user);
+  if (data?.session?.access_token && user) {
+    setSession(data.session.access_token, user);
+  }
+  return user;
+}
+
+async function syncSessionFromSupabase() {
+  try {
+    const exchanged = await completeSupabaseOAuthIfNeeded();
+    if (exchanged) return exchanged;
+    const client = await getSupabaseBrowserClient();
+    if (!client) return null;
+    const { data, error } = await client.auth.getSession();
+    if (error) throw error;
+    const session = data?.session;
+    const user = mapSupabaseUser(session?.user);
+    if (!session?.access_token || !user) return null;
+    setSession(session.access_token, user);
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+async function startGoogleLogin() {
+  const client = await getSupabaseBrowserClient();
+  if (!client) {
+    throw new Error('Supabase Google login is not configured');
+  }
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await client.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+      queryParams: { prompt: 'select_account' },
+      scopes: 'openid email profile',
+    },
+  });
+  if (error) throw error;
+}
+
+async function signOutSupabaseSession() {
+  const client = await getSupabaseBrowserClient();
+  if (!client) return;
+  try {
+    await client.auth.signOut();
+  } catch {}
 }
 
 // ─── API helpers ─────────────────────────────────────────
@@ -552,7 +675,8 @@ function bindSignout() {
   const ids = ['btn-signout', 'btn-signout-mobile'];
   ids.forEach(id => {
     const btn = document.getElementById(id);
-    if (btn) btn.addEventListener('click', () => {
+    if (btn) btn.addEventListener('click', async () => {
+      await signOutSupabaseSession();
       clearSession();
       window.location.href = 'login.html';
     });
