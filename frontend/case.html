@@ -75,8 +75,8 @@
           <div class="page-title" id="case-title">Case</div>
           <div class="page-subtitle" id="case-meta">Loading…</div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <label style="font-size:12px;color:var(--muted);margin-right:4px;">Stage</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <label style="font-size:12px;color:var(--muted);margin-right:2px;">Stage</label>
           <select id="stage-select" class="form-select" style="height:32px;font-size:13px;padding:0 10px;min-width:160px;">
             <option value="documents">Documents</option>
             <option value="payment">Payment</option>
@@ -84,6 +84,7 @@
             <option value="review">Ready for review</option>
             <option value="submitted">Submitted</option>
           </select>
+          <button class="btn btn-primary btn-sm" id="btn-save-stage" style="height:32px;padding:0 14px;font-size:13px;">Save stage</button>
         </div>
       </div>
 
@@ -481,12 +482,21 @@
       await requireAuth();
       loadCase();
 
-      // Stage change via dropdown → PATCH immediately
-      document.getElementById('stage-select')?.addEventListener('change', async (e) => {
+      // Stage select — mark dirty, don't auto-save
+      const stageSaveBtn = document.getElementById('btn-save-stage');
+      document.getElementById('stage-select')?.addEventListener('change', () => {
+        stageSaveBtn.textContent = 'Save stage ●';
+        stageSaveBtn.style.opacity = '1';
+      });
+
+      // Explicit save stage
+      stageSaveBtn?.addEventListener('click', async () => {
+        const sel = document.getElementById('stage-select');
         try {
-          await patch(`/api/cases/${caseId}`, { stage: e.target.value });
-          showToast(`Stage set to: ${e.target.options[e.target.selectedIndex].text}`, 'success');
-        } catch { showToast('Could not update stage', 'error'); }
+          await patch(`/api/cases/${caseId}`, { stage: sel.value });
+          stageSaveBtn.textContent = 'Save stage';
+          showToast(`Stage: ${sel.options[sel.selectedIndex].text}`, 'success');
+        } catch { showToast('Could not update stage — check connection', 'error'); }
       });
 
       // Save EU fields
@@ -530,9 +540,9 @@
         const idx = stages.indexOf(sel.value);
         if (idx < stages.length - 1) {
           sel.value = stages[idx + 1];
-          sel.dispatchEvent(new Event('change'));
+          stageSaveBtn?.click();
         } else {
-          showToast('Already at final stage', 'success');
+          showToast('Already at final stage', 'info');
         }
       });
     });

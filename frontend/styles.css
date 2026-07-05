@@ -723,14 +723,20 @@ body.dashboard .dashboard-main {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 0 10px;
+  height: 34px;
+  min-height: 34px;
   border-radius: var(--radius-sm);
-  color: #7a7a88;        /* warm-toned grey, matches surface undertone */
+  color: #7a7a88;
   font-size: 13px;
   font-weight: 400;
+  line-height: 1;
   transition: background 120ms ease, color 120ms ease;
   position: relative;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-item:hover {
@@ -757,9 +763,11 @@ body.dashboard .dashboard-main {
 }
 
 .nav-item svg {
-  display: flex;
+  display: block;
   width: 15px;
   height: 15px;
+  min-width: 15px;
+  min-height: 15px;
   flex-shrink: 0;
   opacity: 0.45;
   transition: opacity 120ms, color 120ms;
@@ -825,12 +833,12 @@ body.dashboard .dashboard-main {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: transparent;
 }
 
 .dashboard-topbar {
   height: var(--topbar-h);
-  background: var(--bg);
+  background: rgba(14,14,16,0.82);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
