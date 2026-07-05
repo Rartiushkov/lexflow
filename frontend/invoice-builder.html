@@ -462,6 +462,7 @@
   const TEMPLATES_KEY = 'lf_invoice_templates_v2';
   let blocks = [];       // { id, type, x, y, w, data, fontSize, color }
   let selectedId = null;
+  let activeTemplateId = null;  // id of currently loaded template
 
   // ── Default template data ──
   const DEFAULTS = {
@@ -744,7 +745,10 @@
   document.getElementById('img-upload').addEventListener('change', e => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => { addBlock('image', { data: { src: reader.result, imgW: 150 }, w: 180 }); };
+    reader.onload = () => {
+      const src = reader.result;
+      addBlock('image', { data: { src, imgW: 150 }, src, w: 180 });
+    };
     reader.readAsDataURL(file);
     e.target.value = '';
   });
@@ -799,18 +803,36 @@
     const empty = document.getElementById('tpl-empty');
     if (!tpls.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
     empty.style.display = 'none';
-    list.innerHTML = tpls.map(t => `
-      <div class="tpl-item" data-tid="${t.id}">
+    list.innerHTML = tpls.map(t => {
+      const isActive = t.id === activeTemplateId;
+      return `
+      <div class="tpl-item" data-tid="${t.id}" style="${isActive ? 'border-color:rgba(200,164,74,0.5);background:rgba(200,164,74,0.04);' : ''}">
         <div style="width:36px;height:36px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c8a44a" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 5h8M4 8h8M4 11h5"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="${isActive ? '#c8a44a' : '#666'}" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 5h8M4 8h8M4 11h5"/></svg>
         </div>
         <div style="flex:1;min-width:0;">
-          <div class="tpl-item-name">${escHtml(t.name)}</div>
+          <div class="tpl-item-name" style="${isActive ? 'color:var(--gold);' : ''}">${escHtml(t.name)}${isActive ? ' <span style="font-size:10px;color:var(--muted);font-weight:400;">(active)</span>' : ''}</div>
           <div class="tpl-item-meta">${t.blocks.length} block${t.blocks.length !== 1 ? 's' : ''} &middot; Saved ${new Date(t.savedAt).toLocaleDateString('en-GB')}</div>
         </div>
-        <button class="btn btn-outline btn-sm" data-load-tpl="${t.id}">Load to canvas</button>
+        ${isActive ? `<button class="btn btn-primary btn-sm" data-update-tpl="${t.id}">Save changes</button>` : `<button class="btn btn-outline btn-sm" data-load-tpl="${t.id}">Load to canvas</button>`}
         <button class="tpl-del-btn" data-del-tpl="${t.id}" title="Delete template">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
+    list.querySelectorAll('[data-update-tpl]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.updateTpl;
+        const tpls2 = getTemplates();
+        const idx = tpls2.findIndex(t => t.id === id);
+        if (idx >= 0) {
+          tpls2[idx].blocks = JSON.parse(JSON.stringify(blocks));
+          tpls2[idx].savedAt = new Date().toISOString();
+          saveTemplates(tpls2);
+          showToast(`Template "${tpls2[idx].name}" updated`, 'success');
+          renderTemplatesList();
+        }
+      });
+    });
     list.querySelectorAll('[data-load-tpl]').forEach(btn => {
       btn.addEventListener('click', e => { e.stopPropagation(); loadTemplate(btn.dataset.loadTpl); });
     });
@@ -830,6 +852,7 @@
     if (!t) return;
     blocks = t.blocks.map(b => ({ ...b, id: genId() }));
     selectedId = null;
+    activeTemplateId = id;
     saveBlocks();
     switchTab('builder');
     renderBlocks();
@@ -849,7 +872,9 @@
   function openSaveTplModal() {
     const modal = document.getElementById('save-tpl-modal');
     modal.style.display = 'flex';
-    document.getElementById('tpl-name-input').value = '';
+    const existing = activeTemplateId ? getTemplates().find(t => t.id === activeTemplateId) : null;
+    document.getElementById('tpl-name-input').value = existing ? existing.name : '';
+    document.getElementById('tpl-modal-save').textContent = existing ? 'Update template' : 'Save as new';
     setTimeout(() => document.getElementById('tpl-name-input').focus(), 80);
   }
   document.getElementById('tpl-modal-cancel').addEventListener('click', () => {
@@ -859,10 +884,21 @@
     const name = document.getElementById('tpl-name-input').value.trim();
     if (!name) { document.getElementById('tpl-name-input').focus(); return; }
     const tpls = getTemplates();
-    tpls.unshift({ id: 'tpl-' + Date.now(), name, blocks: JSON.parse(JSON.stringify(blocks)), savedAt: new Date().toISOString() });
-    saveTemplates(tpls);
+    const existingIdx = activeTemplateId ? tpls.findIndex(t => t.id === activeTemplateId) : -1;
+    if (existingIdx >= 0) {
+      tpls[existingIdx].name = name;
+      tpls[existingIdx].blocks = JSON.parse(JSON.stringify(blocks));
+      tpls[existingIdx].savedAt = new Date().toISOString();
+      saveTemplates(tpls);
+      showToast('Template updated', 'success');
+    } else {
+      const newId = 'tpl-' + Date.now();
+      tpls.unshift({ id: newId, name, blocks: JSON.parse(JSON.stringify(blocks)), savedAt: new Date().toISOString() });
+      activeTemplateId = newId;
+      saveTemplates(tpls);
+      showToast('Template saved', 'success');
+    }
     document.getElementById('save-tpl-modal').style.display = 'none';
-    showToast(`Template “${name}” saved`, 'success');
   });
   document.getElementById('save-tpl-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';

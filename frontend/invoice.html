@@ -324,13 +324,13 @@
     function builderTplToInvoiceTpl(bt) {
       const base = getInvoiceTemplates()[0] || {};
       const blocks = bt.blocks || [];
-      const imgBlock = blocks.find(b => b.type === 'image' && b.data?.src);
+      const imgBlock = blocks.find(b => b.type === 'image' && (b.data?.src || b.src));
       const headerBlock = blocks.find(b => b.type === 'header');
       return {
         ...base,
         id: bt.id,
         name: bt.name,
-        logo_data_url: imgBlock ? imgBlock.data.src : (base.logo_data_url || null),
+        logo_data_url: imgBlock ? (imgBlock.data?.src || imgBlock.src) : (base.logo_data_url || null),
         accent: headerBlock?.color || bt.accent || base.accent || '#c8a44a',
         _from_builder: true,
         _builder_blocks: blocks,
