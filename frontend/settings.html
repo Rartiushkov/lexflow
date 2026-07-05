@@ -67,6 +67,15 @@
           </div>
         </div>
         <div class="card-body">
+          <div class="integration-status-card" id="work-email-status-card">
+            <div>
+              <div class="integration-status-label">Work email status</div>
+              <div class="integration-status-value" id="work-email-status-value">Not connected</div>
+              <div class="panel-subtitle" id="work-email-status-note">Connect a Gmail inbox to route documents automatically.</div>
+            </div>
+            <span class="badge badge-gray" id="work-email-status-badge">offline</span>
+          </div>
+
           <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
             <div>
               <div style="font-weight:600;">Recommended: Gmail OAuth</div>
@@ -74,6 +83,13 @@
             </div>
             <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
           </div>
+
+          <label class="settings-toggle">
+            <input type="checkbox" id="toggle-manual-imap" />
+            <span>Show manual IMAP settings</span>
+          </label>
+
+          <div id="manual-imap-panel" style="display:none;">
           <div class="auth-divider" style="margin:0 0 18px 0;"><span>fallback manual IMAP</span></div>
           <div class="form-row">
             <div class="form-group">
@@ -109,6 +125,7 @@
             <button class="btn btn-primary" id="btn-save-gmail" type="button">Save Gmail connection</button>
             <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run Gmail poll</button>
           </div>
+          </div>
           <div id="gmail-integrations" style="margin-top:16px;"></div>
         </div>
       </div>
@@ -116,6 +133,66 @@
   </div>
   <script src="./app.js"></script>
   <script>
+    const WORK_EMAIL_CACHE_KEY = 'lexflow_work_email_cache';
+
+    function readWorkEmailCache() {
+      try {
+        return JSON.parse(localStorage.getItem(WORK_EMAIL_CACHE_KEY) || 'null');
+      } catch {
+        return null;
+      }
+    }
+
+    function writeWorkEmailCache(value) {
+      localStorage.setItem(WORK_EMAIL_CACHE_KEY, JSON.stringify(value));
+    }
+
+    function renderWorkEmailStatus(integrations) {
+      const badge = document.getElementById('work-email-status-badge');
+      const value = document.getElementById('work-email-status-value');
+      const note = document.getElementById('work-email-status-note');
+      const live = integrations?.find(item => item.active);
+      const cached = readWorkEmailCache();
+      const current = live || cached;
+      if (!current) {
+        badge.className = 'badge badge-gray';
+        badge.textContent = 'offline';
+        value.textContent = 'Not connected';
+        note.textContent = 'Connect a Gmail inbox to route documents automatically.';
+        return;
+      }
+      badge.className = 'badge badge-green';
+      badge.textContent = current.active === false ? 'inactive' : 'connected';
+      value.textContent = current.email || 'Connected inbox';
+      note.textContent = current.auth_type === 'oauth'
+        ? 'Google OAuth is active for this workspace.'
+        : 'Manual IMAP fallback is saved for this workspace.';
+    }
+
+    function restoreManualImapDraft() {
+      const cached = readWorkEmailCache();
+      if (!cached) return;
+      if (cached.email) document.getElementById('gmail-email').value = cached.email;
+      if (cached.imap_host) document.getElementById('gmail-host').value = cached.imap_host;
+      if (cached.mailbox) document.getElementById('gmail-mailbox').value = cached.mailbox;
+      if (cached.poll_limit) document.getElementById('gmail-poll-limit').value = cached.poll_limit;
+    }
+
+    function bindManualImapDraftAutosave() {
+      ['gmail-email', 'gmail-host', 'gmail-mailbox', 'gmail-poll-limit'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('input', () => {
+          const prev = readWorkEmailCache() || {};
+          writeWorkEmailCache({
+            ...prev,
+            email: document.getElementById('gmail-email').value,
+            imap_host: document.getElementById('gmail-host').value,
+            mailbox: document.getElementById('gmail-mailbox').value,
+            poll_limit: Number(document.getElementById('gmail-poll-limit').value || 10),
+          });
+        });
+      });
+    }
+
     async function loadSettings() {
       const appConfig = await get('/api/config');
       const profile = await get('/api/settings/profile');
@@ -124,6 +201,18 @@
       document.getElementById('full-name').value = profile.profile?.full_name || '';
       document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
       const integrations = await get('/api/email-integrations');
+      renderWorkEmailStatus(integrations);
+      if (integrations.length) {
+        const first = integrations[0];
+        writeWorkEmailCache({
+          email: first.email,
+          auth_type: first.auth_type,
+          mailbox: first.mailbox,
+          imap_host: first.imap_host || 'imap.gmail.com',
+          poll_limit: first.poll_limit || 10,
+          active: first.active,
+        });
+      }
       document.getElementById('gmail-integrations').innerHTML = integrations.length
         ? integrations.map(item => `
           <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
@@ -138,6 +227,11 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
+      restoreManualImapDraft();
+      bindManualImapDraftAutosave();
+      document.getElementById('toggle-manual-imap').addEventListener('change', (event) => {
+        document.getElementById('manual-imap-panel').style.display = event.target.checked ? 'block' : 'none';
+      });
       await loadSettings();
       document.getElementById('btn-save-settings').addEventListener('click', async () => {
         await post('/api/settings/profile', {
@@ -148,11 +242,13 @@
         showToast('Settings saved', 'success');
       });
       document.getElementById('btn-connect-google-gmail').addEventListener('click', async () => {
+        const prev = readWorkEmailCache() || {};
+        writeWorkEmailCache({ ...prev, auth_type: 'oauth', active: true });
         const result = await post('/api/email-integrations/google/start', {});
         window.location.href = result.auth_url;
       });
       document.getElementById('btn-save-gmail').addEventListener('click', async () => {
-        await post('/api/email-integrations', {
+        const payload = {
           provider: 'gmail',
           email: document.getElementById('gmail-email').value,
           app_password: document.getElementById('gmail-password').value,
@@ -160,7 +256,9 @@
           mailbox: document.getElementById('gmail-mailbox').value,
           poll_limit: Number(document.getElementById('gmail-poll-limit').value || 10),
           active: true,
-        });
+        };
+        await post('/api/email-integrations', payload);
+        writeWorkEmailCache({ ...payload, auth_type: 'app_password' });
         document.getElementById('gmail-password').value = '';
         showToast('Gmail integration saved', 'success');
         await loadSettings();
