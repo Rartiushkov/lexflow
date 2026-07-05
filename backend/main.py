@@ -2234,13 +2234,97 @@ class EmailWebhook(BaseModel):
     attachments: list[EmailAttachment]
 
 
+IMPORTANT_EMAIL_ATTACHMENT_HINTS = (
+    "passport",
+    "reisepass",
+    "idcard",
+    "identity",
+    "visa",
+    "permit",
+    "aufenthalt",
+    "contract",
+    "arbeitsvertrag",
+    "employment",
+    "job_offer",
+    "job-offer",
+    "insurance",
+    "kranken",
+    "diploma",
+    "degree",
+    "qualification",
+    "recognition",
+    "anerkennung",
+    "marriage",
+    "heirat",
+    "birth",
+    "geburt",
+    "questionnaire",
+    "vollmacht",
+    "power_of_attorney",
+    "bank_statement",
+    "bank-statement",
+    "payslip",
+    "salary",
+)
+
+IGNORED_EMAIL_ATTACHMENT_HINTS = (
+    "logo",
+    "signature",
+    "image001",
+    "image002",
+    "smime",
+    "winmail",
+    "facebook",
+    "instagram",
+    "linkedin",
+    "whatsapp",
+    "telegram",
+    "banner",
+    "icon",
+)
+
+SUPPORTED_INTAKE_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".tif", ".tiff"}
+
+
+def is_relevant_email_attachment(filename: str, content_type: str = "", subject: str = "") -> tuple[bool, str]:
+    lower_name = (filename or "").lower().strip()
+    lower_type = (content_type or "").lower().strip()
+    lower_subject = (subject or "").lower().strip()
+
+    if not lower_name:
+        return False, "missing_filename"
+
+    if any(hint in lower_name for hint in IGNORED_EMAIL_ATTACHMENT_HINTS):
+        return False, "ignored_inline_asset"
+
+    ext = os.path.splitext(lower_name)[1]
+    if ext and ext not in SUPPORTED_INTAKE_EXTENSIONS:
+        if any(hint in lower_name or hint in lower_subject for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS):
+            return True, "important_keyword"
+        return False, f"unsupported_extension:{ext}"
+
+    if lower_type.startswith("image/") or lower_type == "application/pdf":
+        if any(hint in lower_name or hint in lower_subject for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS):
+            return True, "important_keyword"
+        if lower_name.startswith(("scan", "document", "attachment", "file")):
+            return True, "generic_scan"
+        return True, "supported_document"
+
+    return False, "unsupported_content_type"
+
+
 async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optional[str] = None) -> dict:
     from_email = payload.from_.lower().strip()
     matched = []
     created = []
     documents = []
     duplicates = 0
+    ignored = []
     for att in payload.attachments:
+        allowed, reason = is_relevant_email_attachment(att.filename, att.content_type or "", payload.subject)
+        if not allowed:
+            ignored.append({"filename": att.filename, "reason": reason})
+            continue
         content = base64.b64decode(att.content_base64)
         result = await route_incoming_document(
             filename=att.filename,
@@ -2262,6 +2346,9 @@ async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optiona
         "matched_cases": sorted(set(matched)),
         "created_cases": sorted(set(created)),
         "attachments_processed": len(payload.attachments),
+        "attachments_accepted": len(documents),
+        "attachments_ignored": len(ignored),
+        "ignored": ignored,
         "duplicates": duplicates,
         "documents": documents,
     }
@@ -2384,7 +2471,10 @@ async def gmail_api_get_json(path: str, access_token: str, *, params: Optional[d
             headers={"Authorization": f"Bearer {access_token}"},
         )
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="Gmail API request failed")
+        detail = response.text.strip()
+        if len(detail) > 300:
+            detail = detail[:300] + "..."
+        raise HTTPException(status_code=502, detail=f"Gmail API request failed: HTTP {response.status_code} {detail}")
     return response.json()
 
 
@@ -2396,7 +2486,10 @@ async def gmail_api_post_json(path: str, access_token: str, *, body: Optional[di
             headers={"Authorization": f"Bearer {access_token}"},
         )
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="Gmail API write request failed")
+        detail = response.text.strip()
+        if len(detail) > 300:
+            detail = detail[:300] + "..."
+        raise HTTPException(status_code=502, detail=f"Gmail API write request failed: HTTP {response.status_code} {detail}")
     return response.json() if response.text else {}
 
 

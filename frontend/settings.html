@@ -314,8 +314,12 @@
         await loadSettings();
       });
       document.getElementById('btn-poll-gmail').addEventListener('click', async () => {
-        const result = await post('/api/gmail/poll', {});
-        showToast(`Processed ${result.count} email batch(es)`, 'success');
+        try {
+          const result = await post('/api/gmail/poll', {});
+          showToast(`Processed ${result.count} email batch(es)`, 'success');
+        } catch (err) {
+          showToast(err?.message || 'Gmail poll failed', 'error');
+        }
       });
       document.getElementById('btn-disconnect-email')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-disconnect-email');

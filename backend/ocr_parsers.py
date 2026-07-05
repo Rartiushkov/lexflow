@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 DOCUMENT_RULES = {
     "passport": {
-        "keywords": ("passport", "reisepass", "travel document", "document no"),
+        "keywords": ("passport", "passport scan", "passport copy", "reisepass", "travel document", "document no", "identity document", "id page"),
         "required": ("full_name", "passport_number", "date_of_birth"),
     },
     "marriage_certificate": {
@@ -20,15 +20,15 @@ DOCUMENT_RULES = {
         "required": ("invoice_number", "invoice_total"),
     },
     "residence_permit": {
-        "keywords": ("residence permit", "aufenthaltstitel", "permit", "blue card"),
+        "keywords": ("residence permit", "aufenthaltstitel", "residence card", "permit", "blue card", "aufenthaltserlaubnis"),
         "required": ("full_name", "date_of_birth"),
     },
     "employment": {
-        "keywords": ("employment", "employer", "arbeitsvertrag", "salary", "position"),
+        "keywords": ("employment", "employment contract", "job offer", "offer letter", "employer", "arbeitsvertrag", "salary", "position"),
         "required": ("full_name", "employer"),
     },
     "qualification": {
-        "keywords": ("diploma", "degree", "zeugnis", "qualification", "transcript"),
+        "keywords": ("diploma", "degree", "certificate", "zeugnis", "qualification", "transcript"),
         "required": ("full_name",),
     },
     "recognition_notice": {
@@ -36,11 +36,11 @@ DOCUMENT_RULES = {
         "required": (),
     },
     "health_insurance": {
-        "keywords": ("health insurance", "krankenversicherung", "insurance certificate", "coverage"),
+        "keywords": ("health insurance", "krankenversicherung", "insurance certificate", "coverage", "insurance policy", "versicherung"),
         "required": (),
     },
     "financial_proof": {
-        "keywords": ("blocked account", "bank statement", "declaration of commitment", "proof of funds"),
+        "keywords": ("blocked account", "bank statement", "declaration of commitment", "proof of funds", "payslip", "salary statement", "account statement"),
         "required": (),
     },
     "language_certificate": {

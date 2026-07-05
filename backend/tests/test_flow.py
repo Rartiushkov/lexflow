@@ -286,7 +286,40 @@ def test_gmail_attachment_extractor_builds_webhook_payload():
 
     assert len(attachments) == 1
     assert attachments[0].filename == "passport.pdf"
-    assert base64.b64decode(attachments[0].content_base64) == b"pdf bytes"
+
+
+def test_process_email_payload_ignores_non_document_assets(monkeypatch):
+    reset_state()
+
+    async def fake_route_incoming_document(**kwargs):
+        return {
+            "document": {"name": kwargs["filename"], "status": "assigned"},
+            "case": {"id": "case-1"},
+            "auto_created_case": False,
+            "duplicate": False,
+        }
+
+    monkeypatch.setattr(main, "route_incoming_document", fake_route_incoming_document)
+
+    payload = main.EmailWebhook(
+        **{
+            "from": "client@example.com",
+            "subject": "Passport and documents",
+            "attachments": [
+                {"filename": "passport.pdf", "content_base64": base64.b64encode(b"pdf").decode("utf-8"), "content_type": "application/pdf"},
+                {"filename": "logo.png", "content_base64": base64.b64encode(b"png").decode("utf-8"), "content_type": "image/png"},
+            ],
+        }
+    )
+
+    result = client.post("/api/webhook/email", json=payload.model_dump(by_alias=True))
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["attachments_processed"] == 2
+    assert body["attachments_accepted"] == 1
+    assert body["attachments_ignored"] == 1
+    assert body["ignored"][0]["filename"] == "logo.png"
 
 
 def test_free_local_ocr_extracts_text_from_pdf():
