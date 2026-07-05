@@ -317,20 +317,51 @@
       });
     }
 
+    function getBuilderTemplates() {
+      try { return JSON.parse(localStorage.getItem('lf_invoice_templates_v2') || '[]'); } catch { return []; }
+    }
+
+    function builderTplToInvoiceTpl(bt) {
+      const base = getInvoiceTemplates()[0] || {};
+      return {
+        ...base,
+        id: bt.id,
+        name: bt.name,
+        _from_builder: true,
+      };
+    }
+
     function renderTemplatePicker(activeId) {
       const host = document.getElementById('template-picker');
       if (!host) return;
-      const templates = getInvoiceTemplates();
-      host.innerHTML = templates.map(t => `
-        <button type="button" data-tpl-id="${t.id}" style="
-          padding:5px 12px;font-size:12px;font-weight:600;border-radius:var(--radius-sm);
-          border:1px solid ${t.id === activeId ? 'rgba(200,164,74,0.6)' : 'var(--border)'};
-          background:${t.id === activeId ? 'rgba(200,164,74,0.08)' : 'var(--surface-2)'};
-          color:${t.id === activeId ? 'var(--gold)' : 'var(--text-2)'};
-          cursor:pointer;transition:all 120ms;
-        ">${t.name}</button>
-      `).join('');
-      host.querySelectorAll('[data-tpl-id]').forEach(btn => {
+      const builtIn = getInvoiceTemplates();
+      const myLayouts = getBuilderTemplates();
+
+      const btnStyle = (id) => `
+        padding:4px 11px;font-size:12px;font-weight:600;border-radius:var(--radius-sm);
+        border:1px solid ${id === activeId ? 'rgba(200,164,74,0.6)' : 'var(--border)'};
+        background:${id === activeId ? 'rgba(200,164,74,0.08)' : 'var(--surface-2)'};
+        color:${id === activeId ? 'var(--gold)' : 'var(--text-2)'};
+        cursor:pointer;transition:all 120ms;white-space:nowrap;
+      `;
+
+      let html = builtIn.map(t =>
+        `<button type="button" data-tpl-id="${t.id}" data-tpl-src="builtin" style="${btnStyle(t.id)}">${t.name}</button>`
+      ).join('');
+
+      if (myLayouts.length) {
+        html += `<span style="font-size:11px;color:var(--dim);margin:0 4px;align-self:center;">|</span>`;
+        html += `<span style="font-size:11px;color:var(--muted);align-self:center;white-space:nowrap;">My layouts:</span>`;
+        html += myLayouts.map(t =>
+          `<button type="button" data-tpl-id="${t.id}" data-tpl-src="builder" style="${btnStyle(t.id)}">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:middle;"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 5h8M4 8h8M4 11h5"/></svg>${t.name}
+          </button>`
+        ).join('');
+      }
+
+      host.innerHTML = html;
+
+      host.querySelectorAll('[data-tpl-src="builtin"]').forEach(btn => {
         btn.addEventListener('click', () => {
           const tpl = getInvoiceTemplateById(btn.dataset.tplId);
           if (tpl) {
@@ -340,6 +371,22 @@
             renderTemplatePicker(tpl.id);
             syncPreview();
           }
+        });
+      });
+
+      host.querySelectorAll('[data-tpl-src="builder"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const bt = getBuilderTemplates().find(t => t.id === btn.dataset.tplId);
+          if (!bt) return;
+          const converted = builderTplToInvoiceTpl(bt);
+          upsertInvoiceTemplate(converted);
+          populateTemplateForm(converted);
+          setFieldValue('invoice-template', converted.id);
+          formState.invoice.template_id = converted.id;
+          renderTemplatePicker(converted.id);
+          renderTemplateSelects(converted.id);
+          syncPreview();
+          showToast(`Layout "${bt.name}" applied`, 'success');
         });
       });
     }
