@@ -249,6 +249,50 @@
       border-radius: var(--radius);
     }
     .field-dialog.visible { display: flex; }
+
+    /* ── Tab system ── */
+    .bldr-tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 3px;
+    }
+    .bldr-tab {
+      padding: 6px 18px;
+      border-radius: calc(var(--radius) - 2px);
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    .bldr-tab.active {
+      background: var(--surface-3);
+      color: var(--text);
+    }
+
+    /* ── Templates list ── */
+    .tpl-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface-3);
+      cursor: pointer;
+      transition: border-color 120ms;
+    }
+    .tpl-item:hover { border-color: rgba(200,164,74,0.4); }
+    .tpl-item.active-tpl { border-color: rgba(200,164,74,0.7); background: rgba(200,164,74,0.06); }
+    .tpl-item-name { flex: 1; font-size: 12px; font-weight: 600; color: var(--text); }
+    .tpl-item-meta { font-size: 11px; color: var(--muted); }
+    .tpl-del-btn { background: none; border: none; cursor: pointer; color: var(--red); font-size: 13px; padding: 2px 5px; border-radius: 3px; }
+    .tpl-del-btn:hover { background: rgba(196,100,90,0.12); }
   </style>
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -278,11 +322,20 @@
       <div class="topbar-breadcrumb">
         <span>Workspace</span><span class="sep">/</span><strong>Invoice Builder</strong>
       </div>
-      <div class="topbar-actions">
-        <button class="btn btn-outline" id="btn-clear-canvas">Clear all</button>
-        <button class="btn btn-outline" id="btn-load-default">Load default</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="bldr-tabs">
+          <button class="bldr-tab active" id="tab-builder">Builder</button>
+          <button class="bldr-tab" id="tab-templates">Templates</button>
+        </div>
+      </div>
+      <div class="topbar-actions" id="builder-actions">
+        <button class="btn btn-outline" id="btn-clear-canvas">Clear</button>
+        <button class="btn btn-outline" id="btn-load-default">Reset default</button>
         <button class="btn btn-outline" id="btn-export-pdf">Export PDF</button>
-        <button class="btn btn-primary" id="btn-save-layout">Save layout</button>
+        <button class="btn btn-primary" id="btn-save-as-template">Save as template…</button>
+      </div>
+      <div class="topbar-actions" id="templates-actions" style="display:none;">
+        <button class="btn btn-primary" id="btn-new-template">+ New template</button>
       </div>
     </div>
 
@@ -358,9 +411,44 @@
       <div class="builder-canvas-area" id="canvas-area">
         <div class="canvas-toolbar">
           <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#888;">Canvas</span>
-          <span style="flex:1;font-size:11px;color:#555;" id="canvas-hint">Click a block to select · Drag to move · Double-click text to edit · ⌦ to delete selected</span>
+          <span style="flex:1;font-size:11px;color:#555;">Click a block to select · Drag to move · Double-click text to edit · ⌦ Delete</span>
         </div>
         <div id="a4-paper"></div>
+      </div>
+    </div>
+
+    <!-- TEMPLATES panel -->
+    <div id="templates-panel" style="display:none;padding:28px;overflow-y:auto;">
+      <div style="max-width:760px;margin:0 auto;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+          <div style="flex:1;">
+            <div style="font-size:18px;font-weight:700;color:var(--text);">My templates</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Save canvas layouts as reusable named templates. Load to edit or apply.</div>
+          </div>
+        </div>
+        <div id="tpl-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div id="tpl-empty" style="display:none;padding:60px 0;text-align:center;">
+          <div style="font-size:32px;margin-bottom:12px;">📄</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;">No templates yet</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:20px;">Switch to Builder tab, design your layout, then click "Save as template…"</div>
+          <button class="btn btn-primary" id="tpl-go-builder">Go to Builder →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save-as-template modal -->
+  <div id="save-tpl-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border-2);border-radius:var(--radius);width:420px;max-width:95vw;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Save as template</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;">The current canvas layout will be saved as a reusable template.</div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label class="form-label">Template name</label>
+        <input class="form-input" id="tpl-name-input" placeholder="e.g. EU Blue Card standard" />
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-outline" id="tpl-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="tpl-modal-save">Save template</button>
       </div>
     </div>
   </div>
@@ -368,9 +456,10 @@
   <script src="./app.js?v=10"></script>
   <script>
   /* ═══════════════════════════════════════════
-     INVOICE BUILDER — full WYSIWYG canvas
+     INVOICE BUILDER — Builder + Templates tabs
   ═══════════════════════════════════════════ */
   const SAVE_KEY = 'lf_builder_blocks';
+  const TEMPLATES_KEY = 'lf_invoice_templates_v2';
   let blocks = [];       // { id, type, x, y, w, data, fontSize, color }
   let selectedId = null;
 
@@ -680,6 +769,105 @@
     if (e.target === e.currentTarget) { selectedId = null; document.querySelectorAll('.paper-block').forEach(el => el.classList.remove('selected')); updatePropPanel(); }
   });
 
+  // ── Templates storage ──
+  function getTemplates() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '[]'); } catch { return []; }
+  }
+  function saveTemplates(tpls) {
+    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(tpls)); } catch {}
+  }
+
+  // ── Tab switching ──
+  let activeTab = 'builder';
+  function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tab-builder').classList.toggle('active', tab === 'builder');
+    document.getElementById('tab-templates').classList.toggle('active', tab === 'templates');
+    document.querySelector('.builder-layout').style.display = tab === 'builder' ? 'grid' : 'none';
+    document.getElementById('templates-panel').style.display = tab === 'templates' ? 'block' : 'none';
+    document.getElementById('builder-actions').style.display = tab === 'builder' ? 'flex' : 'none';
+    document.getElementById('templates-actions').style.display = tab === 'templates' ? 'flex' : 'none';
+    if (tab === 'templates') renderTemplatesList();
+  }
+  document.getElementById('tab-builder').addEventListener('click', () => switchTab('builder'));
+  document.getElementById('tab-templates').addEventListener('click', () => switchTab('templates'));
+
+  // ── Render templates list ──
+  function renderTemplatesList() {
+    const tpls = getTemplates();
+    const list = document.getElementById('tpl-list');
+    const empty = document.getElementById('tpl-empty');
+    if (!tpls.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    list.innerHTML = tpls.map(t => `
+      <div class="tpl-item" data-tid="${t.id}">
+        <div style="width:36px;height:36px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c8a44a" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="1"/><path d="M4 5h8M4 8h8M4 11h5"/></svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div class="tpl-item-name">${escHtml(t.name)}</div>
+          <div class="tpl-item-meta">${t.blocks.length} block${t.blocks.length !== 1 ? 's' : ''} &middot; Saved ${new Date(t.savedAt).toLocaleDateString('en-GB')}</div>
+        </div>
+        <button class="btn btn-outline btn-sm" data-load-tpl="${t.id}">Load to canvas</button>
+        <button class="tpl-del-btn" data-del-tpl="${t.id}" title="Delete template">✕</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-load-tpl]').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); loadTemplate(btn.dataset.loadTpl); });
+    });
+    list.querySelectorAll('[data-del-tpl]').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); deleteTemplate(btn.dataset.delTpl); });
+    });
+    list.querySelectorAll('.tpl-item').forEach(el => {
+      el.addEventListener('click', () => loadTemplate(el.dataset.tid));
+    });
+  }
+
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function loadTemplate(id) {
+    const tpls = getTemplates();
+    const t = tpls.find(x => x.id === id);
+    if (!t) return;
+    blocks = t.blocks.map(b => ({ ...b, id: genId() }));
+    selectedId = null;
+    saveBlocks();
+    switchTab('builder');
+    renderBlocks();
+    updatePropPanel();
+    showToast(`Template “${t.name}” loaded`, 'success');
+  }
+
+  function deleteTemplate(id) {
+    if (!confirm('Delete this template?')) return;
+    const tpls = getTemplates().filter(t => t.id !== id);
+    saveTemplates(tpls);
+    renderTemplatesList();
+    showToast('Template deleted', 'info');
+  }
+
+  // ── Save-as-template modal ──
+  function openSaveTplModal() {
+    const modal = document.getElementById('save-tpl-modal');
+    modal.style.display = 'flex';
+    document.getElementById('tpl-name-input').value = '';
+    setTimeout(() => document.getElementById('tpl-name-input').focus(), 80);
+  }
+  document.getElementById('tpl-modal-cancel').addEventListener('click', () => {
+    document.getElementById('save-tpl-modal').style.display = 'none';
+  });
+  document.getElementById('tpl-modal-save').addEventListener('click', () => {
+    const name = document.getElementById('tpl-name-input').value.trim();
+    if (!name) { document.getElementById('tpl-name-input').focus(); return; }
+    const tpls = getTemplates();
+    tpls.unshift({ id: 'tpl-' + Date.now(), name, blocks: JSON.parse(JSON.stringify(blocks)), savedAt: new Date().toISOString() });
+    saveTemplates(tpls);
+    document.getElementById('save-tpl-modal').style.display = 'none';
+    showToast(`Template “${name}” saved`, 'success');
+  });
+  document.getElementById('save-tpl-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+
   // ── Toolbar buttons ──
   document.getElementById('btn-clear-canvas').addEventListener('click', () => {
     if (confirm('Remove all blocks from canvas?')) { blocks = []; selectedId = null; saveBlocks(); renderBlocks(); updatePropPanel(); }
@@ -693,31 +881,23 @@
     updatePropPanel();
   });
 
-  document.getElementById('btn-save-layout').addEventListener('click', () => {
-    saveBlocks();
-    // Show brief feedback
-    const btn = document.getElementById('btn-save-layout');
-    const orig = btn.textContent;
-    btn.textContent = 'Saved ✓';
-    btn.disabled = true;
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+  document.getElementById('btn-save-as-template').addEventListener('click', () => {
+    if (!blocks.length) { showToast('Canvas is empty — add some blocks first', 'error'); return; }
+    openSaveTplModal();
   });
 
+  document.getElementById('btn-new-template').addEventListener('click', () => switchTab('builder'));
+
   document.getElementById('btn-export-pdf').addEventListener('click', () => {
-    const paper = document.getElementById('a4-paper');
-    // Remove selection chrome
     document.querySelectorAll('.paper-block').forEach(el => el.classList.remove('selected'));
     selectedId = null;
     updatePropPanel();
+    const paper = document.getElementById('a4-paper');
     const clone = paper.cloneNode(true);
     clone.querySelectorAll('.block-tools, .resize-handle').forEach(el => el.remove());
-    clone.querySelectorAll('.paper-block').forEach(el => {
-      el.style.border = 'none';
-      el.style.boxShadow = 'none';
-    });
+    clone.querySelectorAll('.paper-block').forEach(el => { el.style.border = 'none'; el.style.boxShadow = 'none'; });
     html2pdf().set({
-      margin: 0,
-      filename: 'invoice-layout.pdf',
+      margin: 0, filename: 'invoice-layout.pdf',
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait' }
@@ -732,11 +912,11 @@
       blocks = saved;
       renderBlocks();
     } else {
-      // Auto-load default layout on first visit
       blocks = DEFAULT_LAYOUT.map(d => ({ id: genId(), data: {}, ...d }));
       saveBlocks();
       renderBlocks();
     }
+    document.getElementById('tpl-go-builder')?.addEventListener('click', () => switchTab('builder'));
   });
   </script>
 </body>

@@ -55,13 +55,10 @@
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div class="builder-tabs">
-          <button class="builder-tab active" type="button" data-tab="invoice">Invoice</button>
-          <button class="builder-tab" type="button" data-tab="template">Templates</button>
-        </div>
         <div style="display:flex;gap:8px;align-items:center;">
-          <span style="font-size:12px;color:var(--muted);">Template:</span>
+          <span style="font-size:12px;color:var(--muted);">Layout template:</span>
           <div id="template-picker" style="display:flex;gap:6px;"></div>
+          <a href="invoice-builder.html" class="btn btn-outline btn-sm" style="font-size:11px;">Open Builder →</a>
         </div>
       </div>
 
@@ -240,109 +237,6 @@
         </aside>
       </div>
 
-      <div class="invoice-workspace" data-panel="template" style="display:none;">
-        <section class="card invoice-builder-card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Template</div>
-              <div class="panel-subtitle">Seller identity, tax fields, payment terms, and logo.</div>
-            </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btn-save-template">Save template</button>
-          </div>
-          <div class="card-body">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="template-select">Saved template</label>
-                <select class="form-select" id="template-select"></select>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="template-name">Template name</label>
-                <input class="form-input" id="template-name" />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="issuer-name">Seller legal name</label>
-                <input class="form-input" id="issuer-name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="issuer-address">Seller address</label>
-                <input class="form-input" id="issuer-address" />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="issuer-email">Seller email</label>
-                <input class="form-input" id="issuer-email" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="issuer-phone">Seller phone</label>
-                <input class="form-input" id="issuer-phone" />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="issuer-vat-id">VAT ID</label>
-                <input class="form-input" id="issuer-vat-id" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="issuer-tax-number">Tax number</label>
-                <input class="form-input" id="issuer-tax-number" />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="issuer-iban">IBAN</label>
-                <input class="form-input" id="issuer-iban" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="issuer-bic">BIC</label>
-                <input class="form-input" id="issuer-bic" />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="default-vat-rate">Default VAT %</label>
-                <input class="form-input" type="number" id="default-vat-rate" min="0" step="0.01" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="template-accent">Accent color</label>
-                <input class="form-input" type="color" id="template-accent" />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="payment-terms">Payment terms</label>
-              <input class="form-input" id="payment-terms" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="footer-note">Footer note</label>
-              <textarea class="form-textarea" id="footer-note"></textarea>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="template-logo">Logo / image</label>
-              <input class="form-input" type="file" id="template-logo" accept="image/*" />
-            </div>
-          </div>
-        </section>
-
-        <aside class="card invoice-preview-card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Template preview</div>
-              <div class="panel-subtitle">Saved branding and mandatory seller fields.</div>
-            </div>
-          </div>
-          <div class="invoice-preview" id="template-preview"></div>
-        </aside>
-      </div>
     </div>
   </div>
 
@@ -1220,8 +1114,34 @@
         if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
       });
 
+      // Prefill from Services builder on case page
+      let prefill = null;
+      try {
+        const raw = localStorage.getItem('lf_prefill_invoice');
+        if (raw) { prefill = JSON.parse(raw); localStorage.removeItem('lf_prefill_invoice'); }
+      } catch {}
+
       let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
-      if (!invoice && caseId) {
+      if (!invoice && prefill) {
+        const effCaseId = prefill.case_id || caseId;
+        try {
+          const c = await get(`/api/cases/${effCaseId}`);
+          invoice = createInvoiceDraft({
+            case_id: c.id,
+            client_name: c.client_name,
+            client_email: c.client_email,
+            notes: `${c.case_type} · ${c.destination}`,
+            items: (prefill.items || []).map(it => ({
+              id: uid('line'),
+              description: it.description,
+              quantity: it.quantity ?? 1,
+              unit_price: it.unit_price ?? 0,
+            })),
+          });
+        } catch {
+          invoice = createInvoiceDraft({ case_id: effCaseId });
+        }
+      } else if (!invoice && caseId) {
         try {
           const c = await get(`/api/cases/${caseId}`);
           invoice = createInvoiceDraft({

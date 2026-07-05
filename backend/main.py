@@ -572,6 +572,17 @@ async def db_upsert_email_integration(data: dict) -> dict:
     return data
 
 
+async def db_delete_email_integration(integration_id: str) -> bool:
+    if USE_SUPABASE:
+        try:
+            supabase_client.table("email_integrations").delete().eq("id", integration_id).execute()
+            return True
+        except Exception as e:
+            print(f"Supabase email integration delete failed: {e}")
+    memory_email_integrations.pop(integration_id, None)
+    return True
+
+
 async def db_get_email_integrations(*, lawyer_id: Optional[str] = None, firm_id: Optional[str] = None, active_only: bool = False) -> list:
     if USE_SUPABASE:
         try:
@@ -957,6 +968,17 @@ async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = De
     return mask_integration(saved)
 
 
+@app.delete("/api/email-integrations/{integration_id}")
+async def delete_email_integration(integration_id: str, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    integrations = await db_get_email_integrations(firm_id=actor["firm"]["id"])
+    match = next((i for i in integrations if i["id"] == integration_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    await db_delete_email_integration(integration_id)
+    return {"deleted": True, "id": integration_id}
+
+
 @app.post("/api/email-integrations/google/start")
 async def start_google_email_integration(user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
@@ -1054,6 +1076,30 @@ async def get_case(case_id: str, user: dict = Depends(get_current_user)):
     if not case or not record_belongs_to_actor(case, actor):
         raise HTTPException(status_code=404, detail="Case not found")
     return case
+
+
+class UpdateCase(BaseModel):
+    client_name: Optional[str] = None
+    client_email: Optional[str] = None
+    case_type: Optional[str] = None
+    destination: Optional[str] = None
+    stage: Optional[str] = None
+    notes: Optional[str] = None
+    extracted: Optional[dict] = None
+    invoice_paid: Optional[bool] = None
+    public_notes: Optional[str] = None
+
+
+@app.patch("/api/cases/{case_id}")
+async def update_case(case_id: str, req: UpdateCase, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    case = await db_get_case(case_id)
+    if not case or not record_belongs_to_actor(case, actor):
+        raise HTTPException(status_code=404, detail="Case not found")
+    patch_data = {k: v for k, v in req.model_dump().items() if v is not None}
+    patch_data["updated_at"] = utc_now()
+    updated = await db_update_case(case_id, patch_data)
+    return updated or {**case, **patch_data}
 
 
 @app.get("/api/cases/{case_id}/public")
