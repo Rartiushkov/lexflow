@@ -140,9 +140,10 @@
       </div>
     </div>
   </div>
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=18"></script>
   <script>
     const WORK_EMAIL_CACHE_KEY = 'lexflow_work_email_cache';
+    const WORK_EMAIL_LIST_CACHE_KEY = 'lexflow_work_email_integrations_cache';
 
     function readWorkEmailCache() {
       try {
@@ -154,6 +155,19 @@
 
     function writeWorkEmailCache(value) {
       localStorage.setItem(WORK_EMAIL_CACHE_KEY, JSON.stringify(value));
+    }
+
+    function readWorkEmailListCache() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(WORK_EMAIL_LIST_CACHE_KEY) || '[]');
+        return Array.isArray(raw) ? raw : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function writeWorkEmailListCache(items) {
+      localStorage.setItem(WORK_EMAIL_LIST_CACHE_KEY, JSON.stringify(Array.isArray(items) ? items : []));
     }
 
     function renderWorkEmailStatus(integrations) {
@@ -217,6 +231,29 @@
       }
     }
 
+    function renderIntegrationTable(integrations) {
+      document.getElementById('gmail-integrations').innerHTML = integrations.length
+        ? integrations.map(item => `
+          <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
+            <span><strong>${item.email}</strong></span>
+            <span>${item.auth_type === 'oauth' ? 'Google OAuth' : 'App password'}</span>
+            <span>${item.mailbox || 'INBOX'}</span>
+            <span><span class="badge ${item.active ? 'badge-green' : 'badge-gray'}">${item.active ? 'active' : 'inactive'}</span></span>
+          </div>
+        `).join('')
+        : '<div class="kanban-empty">No work email connected yet.</div>';
+    }
+
+    function renderSettingsFromCache() {
+      const cachedIntegrations = readWorkEmailListCache();
+      const cachedSingle = readWorkEmailCache();
+      const fallback = cachedSingle ? [cachedSingle] : [];
+      const integrations = cachedIntegrations.length ? cachedIntegrations : fallback;
+      renderWorkEmailStatus(integrations);
+      syncEmailIntegrationPanels(integrations);
+      renderIntegrationTable(integrations);
+    }
+
     function restoreManualImapDraft() {
       const cached = readWorkEmailCache();
       if (!cached) return;
@@ -242,17 +279,21 @@
     }
 
     async function loadSettings() {
-      const appConfig = await get('/api/config');
-      const profile = await get('/api/settings/profile');
+      const [appConfig, profile, integrations] = await Promise.all([
+        get('/api/config', { toastOnError: false }),
+        get('/api/settings/profile', { toastOnError: false }),
+        get('/api/email-integrations', { toastOnError: false }),
+      ]);
       document.getElementById('firm-name').value = profile.firm?.name || '';
       document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
       document.getElementById('full-name').value = profile.profile?.full_name || '';
       document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
-      const integrations = await get('/api/email-integrations');
+      writeWorkEmailListCache(integrations);
       renderWorkEmailStatus(integrations);
       if (integrations.length) {
         const first = integrations[0];
         writeWorkEmailCache({
+          id: first.id,
           email: first.email,
           auth_type: first.auth_type,
           mailbox: first.mailbox,
@@ -262,27 +303,23 @@
         });
       }
       syncEmailIntegrationPanels(integrations);
-      document.getElementById('gmail-integrations').innerHTML = integrations.length
-        ? integrations.map(item => `
-          <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
-            <span><strong>${item.email}</strong></span>
-            <span>${item.auth_type === 'oauth' ? 'Google OAuth' : 'App password'}</span>
-            <span>${item.mailbox}</span>
-            <span><span class="badge ${item.active ? 'badge-green' : 'badge-gray'}">${item.active ? 'active' : 'inactive'}</span></span>
-          </div>
-        `).join('')
-        : '<div class="kanban-empty">No work email connected yet.</div>';
+      renderIntegrationTable(integrations);
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       restoreManualImapDraft();
       bindManualImapDraftAutosave();
+      renderSettingsFromCache();
       document.getElementById('toggle-manual-imap').addEventListener('change', (event) => {
         syncEmailIntegrationPanels([]);
       });
       syncEmailIntegrationPanels([]);
-      await loadSettings();
+      try {
+        await loadSettings();
+      } catch {
+        renderSettingsFromCache();
+      }
       document.getElementById('btn-save-settings').addEventListener('click', async () => {
         await post('/api/settings/profile', {
           firm_name: document.getElementById('firm-name').value,
@@ -308,7 +345,7 @@
           active: true,
         };
         await post('/api/email-integrations', payload);
-        writeWorkEmailCache({ ...payload, auth_type: 'app_password' });
+        writeWorkEmailCache({ ...payload, auth_type: 'app_password', id: `manual-${Date.now()}` });
         document.getElementById('gmail-password').value = '';
         showToast('Gmail integration saved', 'success');
         await loadSettings();
@@ -327,10 +364,12 @@
         try {
           if (integrationId) await api('DELETE', `/api/email-integrations/${integrationId}`);
           localStorage.removeItem(WORK_EMAIL_CACHE_KEY);
+          localStorage.removeItem(WORK_EMAIL_LIST_CACHE_KEY);
           showToast('Work email disconnected', 'success');
           await loadSettings();
         } catch {
           localStorage.removeItem(WORK_EMAIL_CACHE_KEY);
+          localStorage.removeItem(WORK_EMAIL_LIST_CACHE_KEY);
           showToast('Disconnected locally', 'success');
           await loadSettings();
         }
