@@ -197,34 +197,58 @@ def strip_unsupported_case_fields(data: dict) -> dict:
     return {key: value for key, value in data.items() if key not in unsupported}
 
 
-async def ensure_actor_context(user: dict) -> dict:
-    profile = await db_get_profile(user["id"])
-    if not profile:
-        firm_id = f"firm_{user['id']}"
-        firm = await db_upsert_firm({
-            "id": firm_id,
-            "name": f"{user.get('name') or user.get('email')} Office",
-            "created_at": utc_now(),
-            "updated_at": utc_now(),
-        })
-        profile = await db_upsert_profile({
-            "id": user["id"],
-            "email": user.get("email", ""),
-            "full_name": user.get("name") or user.get("email", ""),
-            "firm_id": firm["id"],
-            "firm_name": firm["name"],
-            "created_at": utc_now(),
-            "updated_at": utc_now(),
-        })
-    firm = await db_get_firm(profile["firm_id"])
-    if not firm:
-        firm = await db_upsert_firm({
-            "id": profile["firm_id"],
-            "name": profile.get("firm_name") or f"{user.get('name') or user.get('email')} Office",
-            "created_at": utc_now(),
-            "updated_at": utc_now(),
-        })
+def is_schema_compat_error(message: str) -> bool:
+    text = (message or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "does not exist",
+            "schema cache",
+            "could not find the table",
+            "could not find the '",
+            "pgrst204",
+            "pgrst205",
+        )
+    )
+
+
+def build_default_actor_context(user: dict) -> dict:
+    firm_id = f"firm_{user['id']}"
+    display_name = user.get("name") or user.get("email") or "LexFlow user"
+    profile = {
+        "id": user["id"],
+        "email": user.get("email", ""),
+        "full_name": display_name,
+        "firm_id": firm_id,
+        "firm_name": f"{display_name} Office",
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    firm = {
+        "id": firm_id,
+        "name": profile["firm_name"],
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
     return {"user": user, "profile": profile, "firm": firm}
+
+
+async def ensure_actor_context(user: dict) -> dict:
+    actor = build_default_actor_context(user)
+    profile = await db_get_profile(user["id"])
+    if profile:
+        actor["profile"] = {**actor["profile"], **profile}
+    actor["profile"]["firm_id"] = actor["profile"].get("firm_id") or actor["firm"]["id"]
+    actor["profile"]["firm_name"] = actor["profile"].get("firm_name") or actor["firm"]["name"]
+    firm = await db_get_firm(actor["profile"]["firm_id"])
+    if firm:
+        actor["firm"] = {**actor["firm"], **firm}
+    else:
+        actor["firm"]["id"] = actor["profile"]["firm_id"]
+        actor["firm"]["name"] = actor["profile"].get("firm_name") or actor["firm"]["name"]
+    memory_profiles[user["id"]] = actor["profile"]
+    memory_firms[actor["firm"]["id"]] = actor["firm"]
+    return actor
 
 
 def record_belongs_to_actor(record: dict, actor: dict) -> bool:
@@ -293,7 +317,7 @@ async def db_create_case(data: dict) -> dict:
         except Exception as e:
             print(f"Supabase insert failed: {e}")
             message = str(e)
-            if "column" in message and "does not exist" in message:
+            if is_schema_compat_error(message):
                 legacy = strip_unsupported_case_fields(data)
                 try:
                     res = supabase_client.table("cases").insert(legacy).execute()
@@ -335,7 +359,7 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
         except Exception as e:
             print(f"Supabase update failed: {e}")
             message = str(e)
-            if "column" in message and "does not exist" in message:
+            if is_schema_compat_error(message):
                 legacy = strip_unsupported_case_fields(patch)
                 try:
                     res = supabase_client.table("cases").update(legacy).eq("id", case_id).execute()

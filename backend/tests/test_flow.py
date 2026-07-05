@@ -72,6 +72,12 @@ def test_case_creation_appears_in_case_list():
     assert case["stage"] == "documents"
 
 
+def test_schema_compat_error_matches_legacy_supabase_messages():
+    assert main.is_schema_compat_error("Could not find the 'firm_id' column of 'cases' in the schema cache")
+    assert main.is_schema_compat_error("Could not find the table 'public.firms' in the schema cache")
+    assert main.is_schema_compat_error("column invoices.updated_at does not exist")
+
+
 def test_case_upload_creates_document_and_delete_removes_it():
     reset_state()
     case = create_case()

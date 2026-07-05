@@ -1614,6 +1614,11 @@ body.auth {
   padding: 24px;
 }
 
+body.auth.auth-loading {
+  background:
+    linear-gradient(180deg, rgba(8, 11, 18, 0.98) 0%, rgba(8, 11, 18, 1) 100%);
+}
+
 .portal-card,
 .auth-card {
   width: 100%;
@@ -1625,7 +1630,56 @@ body.auth {
 }
 
 .portal-card { max-width: 560px; overflow: hidden; }
-.auth-card { max-width: 400px; padding: 32px; }
+.auth-card {
+  max-width: 400px;
+  padding: 32px;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+body.auth.auth-loading .auth-card {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.auth-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+body.auth.auth-loading .auth-loading-screen {
+  opacity: 1;
+}
+
+.auth-loading-mark {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+
+.auth-loading-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.auth-loading-copy {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
 
 .portal-header {
   background: rgba(255, 255, 255, 0.03);

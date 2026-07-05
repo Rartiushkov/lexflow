@@ -9,7 +9,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body class="auth" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+<body class="auth auth-loading" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <div class="auth-loading-screen" id="auth-loading-screen" aria-live="polite">
+    <span class="brand-mark auth-loading-mark">Lf</span>
+    <div class="auth-loading-title" id="auth-loading-title">Opening workspace</div>
+    <div class="auth-loading-copy" id="auth-loading-copy">Checking your session and preparing sign-in.</div>
+  </div>
   <div class="auth-card">
     <div style="text-align:center;margin-bottom:20px;">
       <span class="brand-mark" style="margin:0 auto 12px;display:inline-flex;">Lf</span>
@@ -56,6 +61,13 @@
       const params = new URLSearchParams(window.location.search);
       const googleBtn = document.getElementById('btn-google');
       const errorBox = document.getElementById('auth-error');
+      const loadingTitle = document.getElementById('auth-loading-title');
+      const loadingCopy = document.getElementById('auth-loading-copy');
+      const setAuthLoading = (active, title = 'Opening workspace', copy = 'Checking your session and preparing sign-in.') => {
+        document.body.classList.toggle('auth-loading', active);
+        loadingTitle.textContent = title;
+        loadingCopy.textContent = copy;
+      };
       const showError = (message) => {
         errorBox.textContent = message;
         errorBox.classList.add('visible');
@@ -79,26 +91,30 @@
       if (hasPendingOAuthRedirect()) {
         googleBtn.disabled = true;
         googleBtn.classList.add('is-loading');
-        showError('Completing Google sign-in. If it takes too long, keep this page open for a few seconds.');
+        setAuthLoading(true, 'Completing sign-in', 'Restoring your Google session and opening the workspace.');
       }
 
       await requireGuest();
       const oauthUser = await syncSessionFromSupabase();
       if (oauthUser) {
+        setAuthLoading(true, 'Opening workspace', 'Your account is ready. Redirecting now.');
         showToast('Signed in with Google', 'success');
         window.location.href = 'dashboard.html';
         return;
       }
+      setAuthLoading(false);
 
       googleBtn.addEventListener('click', async () => {
         clearError();
         googleBtn.disabled = true;
         googleBtn.classList.add('is-loading');
+        setAuthLoading(true, 'Redirecting to Google', 'Choose your account to continue into LexFlow.');
         try {
           await startGoogleLogin();
         } catch (err) {
           googleBtn.disabled = false;
           googleBtn.classList.remove('is-loading');
+          setAuthLoading(false);
           showError(err.message || 'Google sign-in failed.');
         }
       });
@@ -108,12 +124,14 @@
         clearError();
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
+        setAuthLoading(true, 'Signing in', 'Verifying your credentials and loading the workspace.');
         try {
           const data = await post('/api/auth/login', { email, password });
           setSession(data.token, data.user);
           showToast('Welcome back', 'success');
           window.location.href = 'dashboard.html';
         } catch (err) {
+          setAuthLoading(false);
           showError(err.message || 'Sign-in failed.');
         }
       });
