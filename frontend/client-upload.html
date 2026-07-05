@@ -7,77 +7,90 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=4" />
 </head>
-<body class="portal" data-api-base="https://lexflow-backend-y6m3.onrender.com">
-  <div class="portal-card">
-    <div class="portal-header">
-      <span class="brand-mark" style="margin:0 auto 12px;display:inline-flex;background:#fff;color:var(--navy);">Lf</span>
-      <h1>Client portal</h1>
-      <p>Secure document upload for your immigration case</p>
-    </div>
+<body class="portal-v2" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <main class="portal-v2-card">
+    <header class="portal-v2-header">
+      <div class="portal-v2-brand">
+        <span class="portal-v2-brand-mark">Lf</span>
+        <span class="portal-v2-brand-name">LexFlow</span>
+      </div>
+      <div class="portal-v2-title-block">
+        <h1>Client portal</h1>
+        <p>Secure document upload for your immigration case</p>
+      </div>
+    </header>
 
-    <div class="portal-body">
-      <div style="margin-bottom:24px;">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Case</div>
-        <div style="font-weight:600;" id="case-title">Loading…</div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="portal-client-name">Client name</label>
-        <input class="form-input" id="portal-client-name" type="text" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="portal-client-email">Client email</label>
-        <input class="form-input" id="portal-client-email" type="email" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="portal-notes">Notes</label>
-        <textarea class="form-textarea" id="portal-notes" placeholder="Optional notes for your legal team"></textarea>
+    <div class="portal-v2-body">
+      <div class="portal-v2-case">
+        <span class="portal-v2-case-label">Case</span>
+        <strong class="portal-v2-case-value" id="case-title">Loading…</strong>
       </div>
 
-      <div class="checklist" id="checklist">
-        <div class="checklist-item" data-doc="passport">
-          <div class="checklist-icon">✓</div>
-          <div class="checklist-text">Passport scan</div>
+      <div class="portal-v2-form">
+        <div class="portal-v2-form-group">
+          <label class="portal-v2-label" for="portal-client-name">Client name</label>
+          <input class="portal-v2-input" id="portal-client-name" type="text" placeholder="Enter full name" />
         </div>
-        <div class="checklist-item" data-doc="contract">
-          <div class="checklist-icon">✓</div>
-          <div class="checklist-text">Employment contract</div>
+        <div class="portal-v2-form-group">
+          <label class="portal-v2-label" for="portal-client-email">Client email</label>
+          <input class="portal-v2-input" id="portal-client-email" type="email" placeholder="name@example.com" />
         </div>
-        <div class="checklist-item" data-doc="degree">
-          <div class="checklist-icon">✓</div>
-          <div class="checklist-text">Degree certificate</div>
+        <div class="portal-v2-form-group">
+          <label class="portal-v2-label" for="portal-notes">Notes</label>
+          <textarea class="portal-v2-textarea" id="portal-notes" placeholder="Optional notes for your legal team"></textarea>
         </div>
       </div>
 
-      <div class="dropzone" id="dropzone">
-        <div class="dropzone-title">Drop files here or click to upload</div>
-        <div class="dropzone-hint">Accepted: PDF, JPG, PNG — max 10 MB per file</div>
-        <input type="file" id="file-input" multiple accept=".pdf,image/*" style="display:none;" />
+      <div class="portal-v2-checklist" id="checklist">
+        <div class="portal-v2-checklist-item" data-doc="passport">
+          <div class="portal-v2-checklist-marker"></div>
+          <div class="portal-v2-checklist-text">Passport scan</div>
+        </div>
+        <div class="portal-v2-checklist-item" data-doc="contract">
+          <div class="portal-v2-checklist-marker"></div>
+          <div class="portal-v2-checklist-text">Employment contract</div>
+        </div>
+        <div class="portal-v2-checklist-item" data-doc="degree">
+          <div class="portal-v2-checklist-marker"></div>
+          <div class="portal-v2-checklist-text">Degree certificate</div>
+        </div>
       </div>
 
-      <div id="uploaded-list" style="margin-top:16px;"></div>
-      <button class="btn btn-primary" style="width:100%;margin-top:16px;" id="btn-submit-portal" type="button">Submit documents</button>
+      <div class="portal-v2-dropzone" id="dropzone">
+        <div class="portal-v2-dropzone-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        </div>
+        <div class="portal-v2-dropzone-title">Drop files here or click to upload</div>
+        <div class="portal-v2-dropzone-hint">PDF, JPG, PNG — max 10 MB per file</div>
+        <input type="file" id="file-input" multiple accept=".pdf,image/*" />
+      </div>
 
-      <div id="payment-block" style="display:none;margin-top:24px;padding-top:24px;border-top:1px solid var(--border);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div id="uploaded-list" class="portal-v2-uploads"></div>
+
+      <button class="portal-v2-submit" id="btn-submit-portal" type="button">Submit documents</button>
+
+      <div id="payment-block" class="portal-v2-payment">
+        <div class="portal-v2-payment-header">
           <div>
-            <div style="font-weight:600;">Invoice</div>
-            <div style="font-size:12px;color:var(--muted);">Pay securely to proceed</div>
+            <div class="portal-v2-payment-title">Invoice</div>
+            <div class="portal-v2-payment-subtitle">Pay securely to proceed</div>
           </div>
-          <div style="font-size:20px;font-weight:700;" id="invoice-amount">€0,00</div>
+          <div class="portal-v2-payment-amount" id="invoice-amount">€0,00</div>
         </div>
-        <button class="btn btn-primary" style="width:100%;" id="btn-pay">Pay with card</button>
+        <button class="portal-v2-payment-btn" id="btn-pay">Pay with card</button>
       </div>
     </div>
 
-    <div class="portal-footer">
-      This portal is protected by LexFlow. Documents are processed within the EU.
-    </div>
-  </div>
+    <footer class="portal-v2-footer">
+      <span>This portal is protected by LexFlow</span>
+      <span class="portal-v2-footer-dot"></span>
+      <span>Documents processed within the EU</span>
+    </footer>
+  </main>
 
-  <script src="./app.js"></script>
+  <script src="./app.js?v=4"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id');
@@ -107,17 +120,26 @@
       const list = document.getElementById('uploaded-list');
       for (const file of files) {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface-2);border-radius:var(--radius-sm);margin-bottom:8px;';
-        row.innerHTML = `<span>${file.name}</span><span class="badge badge-blue">uploading</span>`;
+        row.className = 'portal-v2-upload-row';
+        row.innerHTML = `
+          <span class="portal-v2-upload-name">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line></svg>
+            ${file.name}
+          </span>
+          <span class="portal-v2-status portal-v2-status-pending">Uploading</span>
+        `;
         list.appendChild(row);
         try {
           const uploaded = await upload(`/api/cases/${caseId}/upload`, file);
           row.dataset.documentRef = uploaded.document_id || uploaded.key || '';
           row.innerHTML = `
-            <span>${file.name}</span>
-            <span class="table-actions">
-              <span class="badge badge-green">uploaded</span>
-              <button class="btn btn-outline btn-sm" type="button" data-delete-upload>Delete</button>
+            <span class="portal-v2-upload-name">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line></svg>
+              ${file.name}
+            </span>
+            <span class="portal-v2-upload-actions">
+              <span class="portal-v2-status portal-v2-status-success">Uploaded</span>
+              <button class="portal-v2-delete" type="button" data-delete-upload>Delete</button>
             </span>
           `;
           row.querySelector('[data-delete-upload]').addEventListener('click', async () => {
@@ -130,7 +152,13 @@
             showToast(`${file.name} deleted`, 'success');
           });
         } catch (err) {
-          row.innerHTML = `<span>${file.name}</span><span class="badge badge-red">failed</span>`;
+          row.innerHTML = `
+            <span class="portal-v2-upload-name">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line></svg>
+              ${file.name}
+            </span>
+            <span class="portal-v2-status portal-v2-status-error">Failed</span>
+          `;
           showToast(`${file.name} upload failed`, 'error');
           continue;
         }

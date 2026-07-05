@@ -7,57 +7,64 @@
   <meta name="description" content="Operational workspace for European immigration law teams, client files, and invoices." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css?v=3" />
 </head>
-<body class="landing" data-api-base="https://lexflow-backend-y6m3.onrender.com">
-  <header class="topbar">
-    <a class="brand" href="/index.html">
+<body class="landing-v2" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <div class="landing-v2-aurora" aria-hidden="true"></div>
+
+  <header class="landing-v2-topbar">
+    <a class="landing-v2-brand" href="/index.html">
       <span class="brand-mark">Lf</span>
-      <span class="brand-name">LexFlow</span>
+      <span class="landing-v2-brand-name">LexFlow</span>
     </a>
-    <nav class="topnav">
+    <nav class="landing-v2-nav">
       <a href="#workflow">Workflow</a>
       <a href="#system">System</a>
       <a href="#billing">Billing</a>
     </nav>
-    <div class="topbar-cta">
+    <div class="landing-v2-cta">
       <a href="login.html?switch=1" class="btn btn-primary" id="landing-auth-btn">Open workspace</a>
     </div>
   </header>
 
-  <main>
-    <section class="hero-section">
-      <div class="hero-grid">
-        <div class="hero-copy">
-          <div class="hero-badge">Legal operations workspace</div>
-          <h1 class="hero-title">
-            LexFlow
-            <em>for immigration casework.</em>
-          </h1>
-          <p class="hero-sub">
-            Case intake, client documents, invoices, and release tracking in one focused cabinet for European immigration teams.
-          </p>
-          <div class="hero-actions">
-            <a href="login.html?switch=1" class="btn btn-primary btn-lg" id="landing-hero-auth-btn">Enter workspace</a>
-            <a href="#system" class="btn btn-outline btn-lg">View structure</a>
-          </div>
-        </div>
+  <main class="landing-v2-main">
+    <section class="landing-v2-hero">
+      <div class="landing-v2-hero-badge">
+        <span class="landing-v2-hero-badge-dot"></span>
+        Legal operations workspace
+      </div>
+      <h1 class="landing-v2-hero-title">
+        LexFlow
+        <span>for immigration casework.</span>
+      </h1>
+      <p class="landing-v2-hero-sub">
+        Case intake, client documents, invoices, and release tracking in one focused cabinet for European immigration teams.
+      </p>
+      <div class="landing-v2-hero-actions">
+        <a href="login.html?switch=1" class="btn btn-primary btn-lg" id="landing-hero-auth-btn">Enter workspace</a>
+        <a href="#system" class="landing-v2-secondary-btn">View structure</a>
+      </div>
 
-        <div class="hero-panel">
-          <div class="hero-panel-row">
+      <div class="landing-v2-hero-stage">
+        <div class="landing-v2-hero-stage-bar">
+          <span></span><span></span><span></span>
+          <span class="landing-v2-hero-stage-title">LexFlow workspace</span>
+        </div>
+        <div class="landing-v2-hero-stage-grid">
+          <div class="landing-v2-hero-stage-card">
             <span>Cases</span>
             <strong>Opened, tracked, reviewed</strong>
           </div>
-          <div class="hero-panel-row">
+          <div class="landing-v2-hero-stage-card landing-v2-hero-stage-card-accent">
             <span>Documents</span>
-            <strong>Uploaded, reviewed, and attached to the case</strong>
+            <strong>Uploaded & attached</strong>
           </div>
-          <div class="hero-panel-row">
+          <div class="landing-v2-hero-stage-card">
             <span>Invoices</span>
-            <strong>Drafted and adjusted line by line</strong>
+            <strong>Drafted line by line</strong>
           </div>
-          <div class="hero-panel-row">
+          <div class="landing-v2-hero-stage-card landing-v2-hero-stage-card-wide">
             <span>Output</span>
             <strong>Prepared for release with a clear record</strong>
           </div>
@@ -65,103 +72,113 @@
       </div>
     </section>
 
-    <section class="section" id="workflow">
-      <div class="section-inner">
-        <div class="section-kicker">Workflow</div>
-        <div class="section-band">
-          <div class="section-heading">
-            <h2 class="section-title">A strict operational path from opening to release.</h2>
-            <p class="section-desc">Every step stays visible, compact, and reviewable across files, billing, and status changes.</p>
+    <section class="landing-v2-section" id="workflow">
+      <div class="landing-v2-section-inner">
+        <span class="landing-v2-section-label">Workflow</span>
+        <h2 class="landing-v2-section-title">A strict operational path from opening to release.</h2>
+        <p class="landing-v2-section-desc">Every step stays visible, compact, and reviewable across files, billing, and status changes.</p>
+        <div class="landing-v2-steps">
+          <div class="landing-v2-step">
+            <div class="landing-v2-step-num">01</div>
+            <strong>Open matter</strong>
+            <p>Create a case and assign the route.</p>
           </div>
-          <div class="workflow-strip">
-            <div class="workflow-step">
-              <span>01</span>
-              <strong>Open matter</strong>
-              <p>Create a case and assign the route.</p>
-            </div>
-            <div class="workflow-step">
-              <span>02</span>
-              <strong>Collect records</strong>
-              <p>Use one client portal for files.</p>
-            </div>
-            <div class="workflow-step">
-              <span>03</span>
-              <strong>Prepare billing</strong>
-              <p>Issue the invoice and track payment.</p>
-            </div>
-            <div class="workflow-step">
-              <span>04</span>
-              <strong>Review release</strong>
-              <p>Check the file and move it forward.</p>
-            </div>
+          <div class="landing-v2-step">
+            <div class="landing-v2-step-num">02</div>
+            <strong>Collect records</strong>
+            <p>Use one client portal for files.</p>
+          </div>
+          <div class="landing-v2-step">
+            <div class="landing-v2-step-num">03</div>
+            <strong>Prepare billing</strong>
+            <p>Issue the invoice and track payment.</p>
+          </div>
+          <div class="landing-v2-step">
+            <div class="landing-v2-step-num">04</div>
+            <strong>Review release</strong>
+            <p>Check the file and move it forward.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section" id="system">
-      <div class="section-inner">
-        <div class="section-kicker">System</div>
-        <div class="system-grid">
-          <article class="system-card system-card-wide">
-            <div class="system-label">Cabinet</div>
+    <section class="landing-v2-section" id="system">
+      <div class="landing-v2-section-inner">
+        <span class="landing-v2-section-label">System</span>
+        <h2 class="landing-v2-section-title">Built for focused legal operations.</h2>
+        <div class="landing-v2-cards">
+          <article class="landing-v2-card landing-v2-card-wide">
+            <div class="landing-v2-card-label">Cabinet</div>
             <h3>Operational dashboard</h3>
             <p>Main queue, stage load, and focus actions stay in one restrained workspace built for daily legal operations.</p>
           </article>
-          <article class="system-card">
-            <div class="system-label">Portal</div>
+          <article class="landing-v2-card">
+            <div class="landing-v2-card-label">Portal</div>
             <h3>Client upload flow</h3>
             <p>One controlled entry point for scans, contracts, and supporting records.</p>
           </article>
-          <article class="system-card">
-            <div class="system-label">Billing</div>
+          <article class="landing-v2-card">
+            <div class="landing-v2-card-label">Billing</div>
             <h3>Invoice constructor</h3>
             <p>Editable line items, dates, totals, and document preview in one billing screen.</p>
           </article>
-          <article class="system-card">
-            <div class="system-label">Control</div>
+          <article class="landing-v2-card">
+            <div class="landing-v2-card-label">Control</div>
             <h3>Clear status logic</h3>
-            <p>Documents, payment, processing, review, and submitted status remain explicit and compact.</p>
+            <p>Documents, payment, processing, review, and submitted status remain explicit.</p>
+          </article>
+          <article class="landing-v2-card landing-v2-card-wide">
+            <div class="landing-v2-card-label">Security</div>
+            <h3>EU-processed data</h3>
+            <p>Client documents and case records are handled within the EU data boundary.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section class="section" id="billing">
-      <div class="section-inner">
-        <div class="section-kicker">Billing</div>
-        <div class="billing-band">
-          <div class="billing-copy">
-            <h2 class="section-title">Invoices belong inside the case system, not beside it.</h2>
-            <p class="section-desc">Build the invoice, add or remove lines, store draft versions, and open the record directly from the workspace.</p>
+    <section class="landing-v2-section" id="billing">
+      <div class="landing-v2-section-inner">
+        <div class="landing-v2-billing">
+          <div class="landing-v2-billing-copy">
+            <span class="landing-v2-section-label">Billing</span>
+            <h2 class="landing-v2-section-title">Invoices belong inside the case system, not beside it.</h2>
+            <p class="landing-v2-section-desc">Build the invoice, add or remove lines, store draft versions, and open the record directly from the workspace.</p>
+            <a href="login.html?switch=1" class="btn btn-primary btn-lg">Enter workspace</a>
           </div>
-          <div class="billing-aside">
-            <div class="billing-metric">
+          <div class="landing-v2-billing-aside">
+            <div class="landing-v2-billing-metric">
               <span>Editable rows</span>
               <strong>Yes</strong>
             </div>
-            <div class="billing-metric">
+            <div class="landing-v2-billing-metric">
               <span>Draft or paid states</span>
               <strong>Tracked</strong>
             </div>
-            <div class="billing-metric">
+            <div class="landing-v2-billing-metric">
               <span>Direct invoice page</span>
               <strong>Openable</strong>
+            </div>
+            <div class="landing-v2-billing-metric">
+              <span>Document preview</span>
+              <strong>Built-in</strong>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <footer class="footer">
-      <div class="footer-inner">
-        <span class="brand-mark">Lf</span>
-        <span>LexFlow</span>
+    <footer class="landing-v2-footer">
+      <div class="landing-v2-footer-inner">
+        <div class="landing-v2-brand">
+          <span class="brand-mark">Lf</span>
+          <span class="landing-v2-brand-name">LexFlow</span>
+        </div>
+        <span class="landing-v2-footer-copy">Documents processed within the EU.</span>
       </div>
     </footer>
   </main>
 
-  <script src="./app.js"></script>
+  <script src="./app.js?v=3"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const user = await syncSessionFromSupabase();
