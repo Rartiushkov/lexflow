@@ -775,20 +775,23 @@
         row.querySelector('.line-total').textContent = formatCurrency(qty * price);
       });
       renderPreview(formState.invoice);
-      // Sync items back to case services so case page stays in sync
-      const effCase = formState.invoice.case_id || caseId;
-      if (effCase && formState.invoice.items?.length) {
-        try {
-          const svcItems = formState.invoice.items.map((it, i) => ({
-            id: it.id || ('svc-' + i),
-            name: it.description || '',
-            qty: it.quantity ?? 1,
-            price: it.unit_price ?? 0,
-            unit: 'flat',
-          }));
-          localStorage.setItem(`lf_case_services_${effCase}`, JSON.stringify(svcItems));
-        } catch {}
-      }
+    }
+
+    function syncServicesToCase(invoice) {
+      const effCase = invoice.case_id || caseId;
+      if (!effCase || !invoice.items?.length) return;
+      try {
+        const svcItems = invoice.items.map((it, i) => ({
+          id: it.id || ('svc-' + i),
+          name: it.description || '',
+          qty: it.quantity ?? 1,
+          price: it.unit_price ?? 0,
+          unit: 'flat',
+          invoice_number: invoice.number || '',
+          invoice_id: invoice.id || '',
+        }));
+        localStorage.setItem('lf_case_services_' + effCase, JSON.stringify(svcItems));
+      } catch {}
     }
 
     function syncTemplatePreview() {
@@ -884,6 +887,7 @@
       });
       document.getElementById('btn-save-invoice').addEventListener('click', () => {
         const saved = upsertInvoice(collectInvoice());
+        syncServicesToCase(saved);
         showToast('Invoice saved', 'success');
         window.location.href = `invoice.html?id=${saved.id}`;
       });
