@@ -49,8 +49,15 @@
       </div>
       <div class="topbar-actions">
         <a href="cases.html" class="btn btn-outline">All matters</a>
-        <button class="btn btn-outline" id="btn-save-fields">Save fields</button>
-        <button class="btn btn-primary" id="btn-run-ai">
+        <button class="btn btn-outline" id="btn-edit-toggle">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
+          Edit
+        </button>
+        <button class="btn btn-primary" id="btn-save-all" style="display:none;">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8l3 3 7-7"/></svg>
+          Save
+        </button>
+        <button class="btn btn-outline" id="btn-run-ai">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
           Extract from docs
         </button>
@@ -77,21 +84,20 @@
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <label style="font-size:12px;color:var(--muted);margin-right:2px;">Stage</label>
-          <select id="stage-select" class="form-select" style="height:32px;font-size:13px;padding:0 10px;min-width:160px;">
+          <select id="stage-select" class="form-select" style="height:32px;font-size:13px;padding:0 10px;min-width:160px;" disabled>
             <option value="documents">Documents</option>
             <option value="payment">Payment</option>
             <option value="processing">Processing</option>
             <option value="review">Ready for review</option>
             <option value="submitted">Submitted</option>
           </select>
-          <button class="btn btn-primary btn-sm" id="btn-save-stage" style="height:32px;padding:0 14px;font-size:13px;">Save stage</button>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
 
         <!-- LEFT COLUMN -->
-        <div>
+        <div id="case-fields-area">
 
           <!-- EU Migration Fields -->
           <div class="card" style="margin-bottom:16px;">
@@ -478,33 +484,49 @@
       }
     }
 
+    let editMode = false;
+
+    function setEditMode(on) {
+      editMode = on;
+      const stageSelect = document.getElementById('stage-select');
+      const editBtn = document.getElementById('btn-edit-toggle');
+      const saveBtn = document.getElementById('btn-save-all');
+      // Toggle field editability
+      document.querySelectorAll('#case-fields-area input, #case-fields-area select, #case-fields-area textarea').forEach(el => {
+        el.disabled = !on;
+      });
+      stageSelect.disabled = !on;
+      editBtn.style.display = on ? 'none' : '';
+      saveBtn.style.display = on ? '' : 'none';
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       loadCase();
 
-      // Stage select — mark dirty, don't auto-save
-      const stageSaveBtn = document.getElementById('btn-save-stage');
-      document.getElementById('stage-select')?.addEventListener('change', () => {
-        stageSaveBtn.textContent = 'Save stage ●';
-        stageSaveBtn.style.opacity = '1';
-      });
+      // Edit toggle
+      document.getElementById('btn-edit-toggle')?.addEventListener('click', () => setEditMode(true));
 
-      // Explicit save stage
-      stageSaveBtn?.addEventListener('click', async () => {
+      // Unified Save — saves stage + all EU fields in one PATCH
+      document.getElementById('btn-save-all')?.addEventListener('click', async () => {
         const sel = document.getElementById('stage-select');
+        const saveBtn = document.getElementById('btn-save-all');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
         try {
-          await patch(`/api/cases/${caseId}`, { stage: sel.value });
-          stageSaveBtn.textContent = 'Save stage';
-          showToast(`Stage: ${sel.options[sel.selectedIndex].text}`, 'success');
-        } catch { showToast('Could not update stage — check connection', 'error'); }
-      });
-
-      // Save EU fields
-      document.getElementById('btn-save-fields')?.addEventListener('click', async () => {
-        try {
-          await patch(`/api/cases/${caseId}`, { extracted: collectFields(), notes: document.getElementById('f-notes').value });
-          showToast('Fields saved', 'success');
-        } catch { showToast('Save failed', 'error'); }
+          await patch(`/api/cases/${caseId}`, {
+            stage: sel.value,
+            extracted: collectFields(),
+            notes: document.getElementById('f-notes').value,
+          });
+          showToast('Case saved', 'success');
+          setEditMode(false);
+        } catch (err) {
+          showToast('Save failed — ' + (err?.message || 'check connection'), 'error');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8l3 3 7-7"/></svg> Save';
+        }
       });
 
       // File upload
@@ -533,14 +555,15 @@
         window.open(`${API_BASE}/api/cases/${caseId}/form`, '_blank');
       });
 
-      // Advance stage
+      // Advance stage (still works via setEditMode path)
       document.getElementById('btn-advance')?.addEventListener('click', async () => {
         const stages = ['documents','payment','processing','review','submitted'];
         const sel = document.getElementById('stage-select');
         const idx = stages.indexOf(sel.value);
         if (idx < stages.length - 1) {
+          setEditMode(true);
           sel.value = stages[idx + 1];
-          stageSaveBtn?.click();
+          document.getElementById('btn-save-all')?.click();
         } else {
           showToast('Already at final stage', 'info');
         }
