@@ -738,3 +738,40 @@ def test_google_email_integration_start_returns_auth_url():
     finally:
         main.GOOGLE_OAUTH_CLIENT_ID = original_client_id
         main.GOOGLE_OAUTH_CLIENT_SECRET = original_client_secret
+
+
+def test_poll_gmail_uses_oauth_integration_even_without_active_flag(monkeypatch):
+    reset_state()
+    actor = asyncio.run(main.ensure_actor_context({"id": "user_1", "email": "user_1@example.com", "name": "User One"}))
+    main.memory_email_integrations["oauth-1"] = {
+        "id": "oauth-1",
+        "provider": "gmail",
+        "auth_type": "oauth",
+        "email": "firm@gmail.com",
+        "app_password": "",
+        "access_token": "token",
+        "refresh_token": "refresh",
+        "token_expires_at": None,
+        "imap_host": "imap.gmail.com",
+        "mailbox": "INBOX",
+        "poll_limit": 10,
+        "active": False,
+        "lawyer_id": "user_1",
+        "firm_id": actor["firm"]["id"],
+        "created_at": main.utc_now(),
+        "updated_at": main.utc_now(),
+        "last_polled_at": None,
+        "last_processed_message_id": "",
+    }
+
+    async def fake_process(integration):
+        return {"integration_id": integration["id"], "email": integration["email"], "processed": [], "count": 0}
+
+    monkeypatch.setattr(main, "process_email_integration", fake_process)
+
+    response = client.post("/api/gmail/poll", headers=AUTH)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 0
+    assert payload["runs"][0]["integration_id"] == "oauth-1"

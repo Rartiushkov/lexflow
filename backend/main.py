@@ -194,6 +194,15 @@ def mask_integration(row: dict) -> dict:
     }
 
 
+def is_usable_email_integration(row: dict) -> bool:
+    if not row or row.get("provider") != "gmail":
+        return False
+    auth_type = row.get("auth_type") or "app_password"
+    if auth_type == "oauth":
+        return bool(row.get("email")) and bool(row.get("refresh_token") or row.get("access_token"))
+    return bool(row.get("email")) and bool(row.get("app_password"))
+
+
 def strip_unsupported_case_fields(data: dict) -> dict:
     unsupported = {
         "firm_id",
@@ -2645,6 +2654,9 @@ async def process_email_integration(integration: dict) -> dict:
 async def poll_gmail(user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
     integrations = await db_get_email_integrations(firm_id=actor["firm"]["id"], active_only=True)
+    if not integrations:
+        all_integrations = await db_get_email_integrations(firm_id=actor["firm"]["id"])
+        integrations = [item for item in all_integrations if is_usable_email_integration(item)]
     if not integrations and USE_GMAIL:
         integrations = [{
             "id": "env-fallback",
@@ -2658,7 +2670,10 @@ async def poll_gmail(user: dict = Depends(get_current_user)):
             "active": True,
         }]
     if not integrations:
-        raise HTTPException(status_code=400, detail="No active Gmail integrations configured")
+        raise HTTPException(
+            status_code=400,
+            detail="No usable Gmail integration found for this workspace. Reconnect Google work email or save manual Gmail settings."
+        )
     runs = []
     for integration in integrations:
         try:
