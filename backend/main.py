@@ -1102,6 +1102,31 @@ async def update_case(case_id: str, req: UpdateCase, user: dict = Depends(get_cu
     return updated or {**case, **patch_data}
 
 
+@app.delete("/api/cases/{case_id}")
+async def delete_case(case_id: str, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    case = await db_get_case(case_id)
+    if not case or not record_belongs_to_actor(case, actor):
+        raise HTTPException(status_code=404, detail="Case not found")
+    # Delete associated documents from R2 + DB
+    for doc in case.get("docs", []):
+        doc_id = doc.get("document_id")
+        key = doc.get("key", "")
+        if key:
+            delete_r2_object(key)
+        if doc_id:
+            await db_delete_document(doc_id)
+    # Delete the case itself
+    if USE_SUPABASE:
+        try:
+            supabase_client.table("cases").delete().eq("id", case_id).execute()
+        except Exception as e:
+            print(f"Supabase case delete failed: {e}")
+    else:
+        memory_cases.pop(case_id, None)
+    return {"deleted": True, "id": case_id}
+
+
 @app.get("/api/cases/{case_id}/public")
 async def get_case_public(case_id: str):
     case = await db_get_case(case_id)

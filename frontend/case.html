@@ -62,6 +62,10 @@
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
           Extract from docs
         </button>
+        <button class="btn btn-outline" id="btn-delete-case" style="color:var(--red,#e05252);border-color:rgba(224,82,82,0.3);">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="2 4 14 4"/><path d="M5 4V2h6v2M6 7v5M10 7v5"/><path d="M3 4l1 10h8l1-10"/></svg>
+          Delete case
+        </button>
       </div>
     </div>
 
@@ -544,6 +548,32 @@
 
       // Edit toggle
       document.getElementById('btn-edit-toggle')?.addEventListener('click', () => setEditMode(true));
+
+      // Delete case — cascade remove all related data
+      document.getElementById('btn-delete-case')?.addEventListener('click', async () => {
+        if (!confirm('Delete this case and ALL related data (invoices, services, documents)? This cannot be undone.')) return;
+        try {
+          await api('DELETE', `/api/cases/${caseId}`);
+        } catch {}
+        // Remove all localStorage data for this case
+        try {
+          // Invoices
+          const invs = JSON.parse(localStorage.getItem('lexflow_invoices') || '[]');
+          localStorage.setItem('lexflow_invoices', JSON.stringify(invs.filter(i => i.case_id !== caseId)));
+          // Services
+          localStorage.removeItem('lf_case_services_' + caseId);
+          // Application form
+          localStorage.removeItem('lf_case_form_' + caseId);
+          // Incoming documents
+          const docs = JSON.parse(localStorage.getItem('lexflow_incoming_documents') || '[]');
+          localStorage.setItem('lexflow_incoming_documents', JSON.stringify(docs.filter(d => d.case_id !== caseId)));
+          // Case directory
+          const dir = JSON.parse(localStorage.getItem('lexflow_case_directory') || '[]');
+          localStorage.setItem('lexflow_case_directory', JSON.stringify(dir.filter(c => c.id !== caseId)));
+        } catch {}
+        showToast('Case and all related data deleted', 'success');
+        setTimeout(() => { window.location.href = 'cases.html'; }, 800);
+      });
 
       // Unified Save — saves stage + all EU fields in one PATCH
       document.getElementById('btn-save-all')?.addEventListener('click', async () => {
