@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=14" />
+  <link rel="stylesheet" href="./styles.css?v=15" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -303,10 +303,11 @@
     </div>
   </div>
 
-  <script src="./app.js?v=13"></script>
+  <script src="./app.js?v=14"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
+    let currentCase = null;
 
     const EU_CHECKLIST = [
       'Valid passport (6+ months)',
@@ -432,6 +433,64 @@
       return map[severity] || 'badge-gray';
     }
 
+    function actionMeta(action, state) {
+      const label = (action?.label || '').toLowerCase();
+      if (label.includes('request missing documents')) return { cta: 'Draft message', mode: 'message' };
+      if (label.includes('questionnaire')) return { cta: 'Draft questionnaire', mode: 'questionnaire' };
+      if (label.includes('invoice')) return { cta: 'Open invoice', mode: 'invoice' };
+      if (label.includes('duplicate') || label.includes('manual review')) return { cta: 'Review docs', mode: 'documents' };
+      return { cta: 'Use action', mode: 'copy' };
+    }
+
+    function focusPortalComposer(message) {
+      const area = document.getElementById('portal-invite-message');
+      if (!area) return;
+      if (message) area.value = message;
+      area.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      area.focus();
+      showToast('Client message drafted', 'success');
+    }
+
+    function focusDocuments() {
+      document.getElementById('doc-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast('Documents section opened', 'info');
+    }
+
+    function openInvoiceFromCase() {
+      const invoice = getInvoiceForCase(caseId);
+      window.location.href = invoice ? `invoice.html?id=${invoice.id}&case=${caseId}` : `invoice.html?case=${caseId}`;
+    }
+
+    function runRecommendedAction(action, state) {
+      const meta = actionMeta(action, state);
+      const missingLabels = (state.requirements || [])
+        .filter(item => state.blocking_missing_codes?.includes(item.code) || state.missing_codes?.includes(item.code))
+        .map(item => item.label);
+      if (meta.mode === 'message') {
+        const intro = currentCase?.client_name ? `Hello ${currentCase.client_name},` : 'Hello,';
+        const body = `${intro}\n\nPlease upload the following items so we can continue your case:\n- ${missingLabels.join('\n- ') || 'Missing documents from your checklist'}\n\nOnce uploaded, we will continue immediately.\n\nBest regards,\nLexFlow`;
+        focusPortalComposer(body);
+        return;
+      }
+      if (meta.mode === 'questionnaire') {
+        const intro = currentCase?.client_name ? `Hello ${currentCase.client_name},` : 'Hello,';
+        const body = `${intro}\n\nPlease complete the client questionnaire in your secure portal. We need it before the legal team can proceed.\n\nBest regards,\nLexFlow`;
+        focusPortalComposer(body);
+        return;
+      }
+      if (meta.mode === 'invoice') {
+        openInvoiceFromCase();
+        return;
+      }
+      if (meta.mode === 'documents') {
+        focusDocuments();
+        return;
+      }
+      navigator.clipboard.writeText(`${action.label}: ${action.message}`).then(() => {
+        showToast('Action copied', 'success');
+      });
+    }
+
     function renderControlCenter(center) {
       const host = document.getElementById('control-center-block');
       const state = center?.control_state || {};
@@ -488,13 +547,14 @@
           <div class="control-section">
             <div class="control-section-title">Recommended actions</div>
             <div class="control-feed">
-              ${actions.length ? actions.map(item => `
-                <div class="control-feed-item">
+              ${actions.length ? actions.map((item, index) => `
+                <div class="control-feed-item control-feed-item-action">
                   <span class="badge ${severityBadge(item.priority)}">${escapeHtml(item.priority || 'info')}</span>
                   <div class="control-feed-copy">
                     <strong>${escapeHtml(item.label)}</strong>
                     <span>${escapeHtml(item.message)}</span>
                   </div>
+                  <button class="btn btn-outline btn-sm control-action-btn" type="button" data-action-index="${index}">${escapeHtml(actionMeta(item, state).cta)}</button>
                 </div>
               `).join('') : '<div class="kanban-empty">No pending recommendations.</div>'}
             </div>
@@ -536,6 +596,12 @@
         const sel = document.getElementById('stage-select');
         if (sel) sel.value = center.case.stage;
       }
+      host.querySelectorAll('[data-action-index]').forEach(button => {
+        button.addEventListener('click', () => {
+          const action = actions[Number(button.dataset.actionIndex)];
+          if (action) runRecommendedAction(action, state);
+        });
+      });
     }
 
     async function checkDuplicate(clientEmail, clientName) {
@@ -581,6 +647,7 @@
     }
 
     function render(c) {
+      currentCase = c;
       document.getElementById('case-title').textContent = c.client_name;
       document.getElementById('breadcrumb-name').textContent = c.client_name;
       document.getElementById('case-meta').textContent =
@@ -599,29 +666,29 @@
       const portalUrl = c.portal_url || `${window.location.origin}/client-upload.html?id=${c.id}`;
       const clientEmail = c.client_email || '';
       document.getElementById('portal-block').innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div style="padding:14px;border:1px solid #dbe5f1;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-              <span style="display:inline-flex;width:34px;height:34px;border-radius:12px;background:#2563eb;color:#fff;align-items:center;justify-content:center;font-size:14px;font-weight:800;">Lf</span>
+        <div class="portal-invite-shell">
+          <div class="portal-invite-card">
+            <div class="portal-invite-head">
+              <span class="portal-invite-mark">Lf</span>
               <div>
-                <div style="font-size:13px;font-weight:700;color:#0f172a;">Client upload invite</div>
-                <div style="font-size:12px;color:#64748b;">Light email template in LexFlow portal style</div>
+                <div class="portal-invite-title">Client upload invite</div>
+                <div class="portal-invite-subtitle">Client-facing secure upload in the LexFlow visual language</div>
               </div>
             </div>
-            <div style="font-size:12px;color:#475569;line-height:1.6;margin-bottom:10px;">
+            <div class="portal-invite-copy">
               Send a secure upload button straight to the client's inbox. The message uses the same clean light theme as the portal page.
             </div>
-            <div style="font-size:12px;background:#fff;border:1px solid #dbe5f1;border-radius:14px;padding:10px 12px;margin-bottom:10px;word-break:break-word;color:#1d4ed8;">${portalUrl}</div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-              <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;">Recipient</span>
-              <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:12px;font-weight:600;">${clientEmail || 'No client email yet'}</span>
+            <div class="portal-invite-link">${portalUrl}</div>
+            <div class="portal-invite-recipient-row">
+              <span class="portal-invite-label">Recipient</span>
+              <span class="portal-invite-chip">${clientEmail || 'No client email yet'}</span>
             </div>
-            <textarea id="portal-invite-message" rows="4" placeholder="Optional note for the client" style="width:100%;resize:vertical;border:1px solid #dbe5f1;border-radius:14px;padding:10px 12px;font:inherit;font-size:13px;line-height:1.6;background:#fff;color:var(--text);margin-bottom:12px;"></textarea>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <textarea id="portal-invite-message" rows="4" placeholder="Optional note for the client" class="portal-invite-textarea"></textarea>
+            <div class="portal-invite-actions">
               <button class="btn btn-primary btn-sm" type="button" id="btn-send-portal-invite" ${clientEmail ? '' : 'disabled'}>Send to client</button>
               <button class="btn btn-outline btn-sm" type="button" id="btn-copy-portal-link">Copy link</button>
             </div>
-            <div id="portal-invite-status" style="display:none;font-size:12px;color:#64748b;margin-top:10px;"></div>
+            <div id="portal-invite-status" class="portal-invite-status" style="display:none;"></div>
           </div>
         </div>
       `;
