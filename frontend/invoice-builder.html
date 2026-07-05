@@ -840,7 +840,10 @@
       btn.addEventListener('click', e => { e.stopPropagation(); deleteTemplate(btn.dataset.delTpl); });
     });
     list.querySelectorAll('.tpl-item').forEach(el => {
-      el.addEventListener('click', () => loadTemplate(el.dataset.tid));
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        loadTemplate(el.dataset.tid);
+      });
     });
   }
 

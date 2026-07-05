@@ -1206,8 +1206,8 @@
       // Derive caseId from the invoice itself if not in URL
       const effectiveCaseId = caseId || invoice?.case_id || null;
 
-      // If no explicit prefill but case is known — auto-load services from that case
-      if (!prefill && effectiveCaseId) {
+      // Auto-load services only when invoice exists but has NO items yet (first open after case services set)
+      if (!prefill && effectiveCaseId && invoice && !(invoice.items?.length)) {
         try {
           const svcRaw = localStorage.getItem(`lf_case_services_${effectiveCaseId}`);
           const svcs = svcRaw ? JSON.parse(svcRaw) : [];

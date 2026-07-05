@@ -670,7 +670,6 @@ body.dashboard::before {
   pointer-events: none;
 }
 
-body.dashboard .sidebar,
 body.dashboard .dashboard-main {
   position: relative;
   z-index: 1;
