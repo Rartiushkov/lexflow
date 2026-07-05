@@ -309,7 +309,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=16"></script>
+  <script src="./app.js?v=17"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -621,7 +621,7 @@
 
     async function checkDuplicate(clientEmail, clientName) {
       try {
-        const allCases = await get('/api/cases');
+        const allCases = await get('/api/cases', { toastOnError: false });
         const dup = allCases.find(c =>
           c.id !== caseId && (
             (clientEmail && c.client_email && c.client_email.toLowerCase() === clientEmail.toLowerCase()) ||
@@ -640,20 +640,30 @@
     }
 
     async function loadCase() {
+      const cached = getCachedCaseDetail(caseId);
+      if (cached) {
+        render(cached);
+        renderControlCenter({ case: cached, control_state: cached.control_state || {}, notifications: cached.notifications || [] });
+        checkDuplicate(cached.client_email, cached.client_name);
+      }
       try {
-        const center = await get(`/api/cases/${caseId}/control-center`);
-        const c = center.case || await get(`/api/cases/${caseId}`);
+        const center = await get(`/api/cases/${caseId}/control-center`, { toastOnError: false });
+        const c = center.case || await get(`/api/cases/${caseId}`, { toastOnError: false });
+        cacheCaseDetail({ ...c, control_state: center.control_state || c.control_state || {}, notifications: center.notifications || [] });
+        upsertLocalCase(c);
         render(c);
         renderControlCenter(center);
         checkDuplicate(c.client_email, c.client_name);
       } catch (err) {
         try {
-          const c = await get(`/api/cases/${caseId}`);
+          const c = await get(`/api/cases/${caseId}`, { toastOnError: false });
+          cacheCaseDetail(c);
+          upsertLocalCase(c);
           render(c);
           renderControlCenter({ case: c, control_state: c.control_state || {}, notifications: [] });
           checkDuplicate(c.client_email, c.client_name);
         } catch {
-          showToast(err.message || 'Unable to load case', 'error');
+          if (!cached) showToast(err.message || 'Unable to load case', 'error');
           document.getElementById('case-title').textContent = 'Case unavailable';
           document.getElementById('breadcrumb-name').textContent = 'Case';
           document.getElementById('case-meta').textContent = 'This case could not be loaded.';
@@ -663,6 +673,8 @@
 
     function render(c) {
       currentCase = c;
+      cacheCaseDetail(c);
+      upsertLocalCase(c);
       document.getElementById('case-title').textContent = c.client_name;
       document.getElementById('breadcrumb-name').textContent = c.client_name;
       document.getElementById('case-meta').textContent =
@@ -911,11 +923,16 @@
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving…';
         try {
-          await patch(`/api/cases/${caseId}`, {
+          const updated = await patch(`/api/cases/${caseId}`, {
             stage: sel.value,
             extracted: collectFields(),
             notes: document.getElementById('f-notes').value,
           });
+          if (updated) {
+            cacheCaseDetail(updated);
+            upsertLocalCase(updated);
+            render(updated);
+          }
           showToast('Case saved', 'success');
           setEditMode(false);
         } catch (err) {

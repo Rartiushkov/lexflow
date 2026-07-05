@@ -45,7 +45,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=16"></script>
+  <script src="./app.js?v=17"></script>
   <script>
     function priorityBadge(priority) {
       const map = {
@@ -59,9 +59,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       const list = document.getElementById('cases-list');
-      try {
-        const cases = await get('/api/cases');
-        setCaseDirectory(cases);
+      const renderCases = (cases) => {
         list.innerHTML = cases.map(c => `
           <div class="table-row clickable case-list-row case-list-row-${(c.priority || c.control_state?.auto_priority || 'medium').toLowerCase()}" onclick="window.location='case.html?id=${c.id}'">
             <span><strong>${c.client_name}</strong></span>
@@ -72,8 +70,19 @@
             <span>${formatDate(c.created_at)}</span>
           </div>
         `).join('');
+      };
+      const cached = getCaseDirectory();
+      if (cached.length) {
+        renderCases(cached);
+      }
+      try {
+        const cases = await get('/api/cases', { toastOnError: false });
+        setCaseDirectory(cases);
+        renderCases(cases);
       } catch (err) {
-        list.innerHTML = `<div class="table-row"><span>Unable to load cases.</span><span></span><span></span><span></span><span></span><span></span></div>`;
+        if (!cached.length) {
+          list.innerHTML = `<div class="table-row"><span>Unable to load cases.</span><span></span><span></span><span></span><span></span><span></span></div>`;
+        }
       }
     });
   </script>

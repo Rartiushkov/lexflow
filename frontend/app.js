@@ -12,6 +12,7 @@ const LS_USER = 'lexflow_user';
 const LS_INVOICES = 'lexflow_invoices';
 const LS_INVOICE_TEMPLATES = 'lexflow_invoice_templates';
 const LS_CASE_DIRECTORY = 'lexflow_case_directory';
+const LS_CASE_DETAILS = 'lexflow_case_details';
 const LS_INCOMING_DOCUMENTS = 'lexflow_incoming_documents';
 const OAUTH_REDIRECT_FLAG_KEY = 'lexflow_oauth_redirect_started_at';
 const OAUTH_REDIRECT_FLAG_TTL_MS = 2 * 60 * 1000;
@@ -273,7 +274,8 @@ async function fetchWithAuthRetry(url, opts, parseAsJson = true) {
   return data;
 }
 
-async function api(method, path, body) {
+async function api(method, path, body, options = {}) {
+  const { toastOnError = true } = options;
   const url = `${API_BASE}${path}`;
   const opts = {
     method,
@@ -283,14 +285,14 @@ async function api(method, path, body) {
   try {
     return await fetchWithAuthRetry(url, opts, true);
   } catch (err) {
-    showToast(err.message || 'Network error', 'error');
+    if (toastOnError) showToast(err.message || 'Network error', 'error');
     throw err;
   }
 }
 
-function get(path) { return api('GET', path); }
-function post(path, body) { return api('POST', path, body); }
-function patch(path, body) { return api('PATCH', path, body); }
+function get(path, options) { return api('GET', path, undefined, options); }
+function post(path, body, options) { return api('POST', path, body, options); }
+function patch(path, body, options) { return api('PATCH', path, body, options); }
 
 async function upload(path, file) {
   const url = `${API_BASE}${path}`;
@@ -352,6 +354,19 @@ function saveCaseDirectory(cases) {
   localStorage.setItem(LS_CASE_DIRECTORY, JSON.stringify(cases));
 }
 
+function getCaseDetailsCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_CASE_DETAILS) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCaseDetailsCache(cache) {
+  localStorage.setItem(LS_CASE_DETAILS, JSON.stringify(cache || {}));
+}
+
 function setCaseDirectory(cases) {
   const normalized = (cases || []).map(item => ({
     id: item.id,
@@ -364,6 +379,13 @@ function setCaseDirectory(cases) {
     created_at: item.created_at || new Date().toISOString(),
   }));
   if (normalized.length) saveCaseDirectory(normalized);
+  if (Array.isArray(cases) && cases.length) {
+    const cache = getCaseDetailsCache();
+    cases.forEach(item => {
+      if (item?.id) cache[item.id] = { ...(cache[item.id] || {}), ...item };
+    });
+    saveCaseDetailsCache(cache);
+  }
   return normalized;
 }
 
@@ -374,11 +396,26 @@ function upsertLocalCase(caseData) {
   if (idx >= 0) cases[idx] = normalized;
   else cases.unshift(normalized);
   saveCaseDirectory(cases);
+  cacheCaseDetail(caseData);
   return normalized;
 }
 
 function getLocalCaseById(caseId) {
   return getCaseDirectory().find(item => item.id === caseId) || null;
+}
+
+function cacheCaseDetail(caseData) {
+  if (!caseData?.id) return null;
+  const cache = getCaseDetailsCache();
+  cache[caseData.id] = { ...(cache[caseData.id] || {}), ...caseData };
+  saveCaseDetailsCache(cache);
+  return cache[caseData.id];
+}
+
+function getCachedCaseDetail(caseId) {
+  const cache = getCaseDetailsCache();
+  if (cache[caseId]) return cache[caseId];
+  return getLocalCaseById(caseId);
 }
 
 function getIncomingDocuments() {
@@ -394,7 +431,7 @@ async function fetchIncomingDocuments(filters = {}) {
   if (filters.status) query.set('status', filters.status);
   if (filters.case_id) query.set('case_id', filters.case_id);
   try {
-    const docs = await get(`/api/documents${query.toString() ? `?${query}` : ''}`);
+    const docs = await get(`/api/documents${query.toString() ? `?${query}` : ''}`, { toastOnError: false });
     return Array.isArray(docs) ? docs : [];
   } catch {
     return getIncomingDocuments();

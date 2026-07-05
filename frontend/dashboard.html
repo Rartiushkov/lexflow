@@ -197,7 +197,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=16"></script>
+  <script src="./app.js?v=17"></script>
   <script>
     // Live date/time in topbar
     (function updateDate() {
@@ -485,18 +485,25 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
+      const cachedCases = getCaseDirectory();
+      if (cachedCases.length) {
+        renderDashboard(cachedCases);
+        renderWorkflowSummary({ actions: [], notifications: [] });
+      }
       try {
-        const cases = await get('/api/cases');
+        const cases = await get('/api/cases', { toastOnError: false });
         setCaseDirectory(cases);
         renderDashboard(cases);
         try {
-          renderWorkflowSummary(await get('/api/workflow/summary'));
+          renderWorkflowSummary(await get('/api/workflow/summary', { toastOnError: false }));
         } catch {
           renderWorkflowSummary({ actions: [] });
         }
       } catch (err) {
-        renderDashboard([]);
-        renderWorkflowSummary({ actions: [] });
+        if (!cachedCases.length) {
+          renderDashboard([]);
+          renderWorkflowSummary({ actions: [] });
+        }
       }
     });
   </script>
