@@ -224,11 +224,23 @@
         oauthPanel.style.marginBottom = isOauth ? '0' : '18px';
       }
       if (connectBtn) {
-        connectBtn.textContent = isOauth ? 'Reconnect Google' : 'Connect with Google';
+        connectBtn.textContent = 'Connect with Google';
+        connectBtn.style.display = isOauth ? 'none' : 'inline-flex';
       }
       if (pollBtn) {
         pollBtn.disabled = !hasConnection;
       }
+    }
+
+    function humanizeGmailPollError(err) {
+      const message = err?.message || '';
+      if (message.includes('Gmail API has not been used in project') || message.includes('gmail.googleapis.com/overview')) {
+        return 'Google connected, but Gmail API is not enabled in your Google Cloud project yet. Open Google Cloud, enable Gmail API for this project, wait 1-2 minutes, then run poll again.';
+      }
+      if (message.includes('No usable Gmail integration found')) {
+        return 'Google inbox is not fully saved on the backend yet. Refresh settings once and try again.';
+      }
+      return message || 'Gmail poll failed';
     }
 
     function renderIntegrationTable(integrations) {
@@ -355,7 +367,7 @@
           const result = await post('/api/gmail/poll', {});
           showToast(`Processed ${result.count} email batch(es)`, 'success');
         } catch (err) {
-          showToast(err?.message || 'Gmail poll failed', 'error');
+          showToast(humanizeGmailPollError(err), 'error');
         }
       });
       document.getElementById('btn-disconnect-email')?.addEventListener('click', async () => {
