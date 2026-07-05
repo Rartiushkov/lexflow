@@ -503,7 +503,7 @@
           </div>
         `;
       } else {
-        const localInvoice = getInvoices().find(inv => inv.case_id === c.id);
+        const localInvoice = getInvoiceForCase(c.id);
         if (localInvoice) {
           document.getElementById('invoice-block').innerHTML = `
             <div style="font-size:28px;font-weight:700;letter-spacing:-0.04em;margin-bottom:4px;">${formatCurrency(calculateInvoiceTotal(localInvoice), localInvoice.currency || 'EUR')}</div>
@@ -515,7 +515,8 @@
           `;
         } else {
           document.getElementById('btn-invoice')?.addEventListener('click', () => {
-            window.location.href = `invoice.html?case=${caseId}`;
+            const ex = getInvoiceForCase(caseId);
+            window.location.href = ex ? `invoice.html?id=${ex.id}&case=${caseId}` : `invoice.html?case=${caseId}`;
           });
         }
       }

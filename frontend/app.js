@@ -558,6 +558,20 @@ function getInvoiceById(id) {
   return getInvoices().find(invoice => invoice.id === id || invoice.number === id) || null;
 }
 
+function getInvoiceForCase(caseId) {
+  if (!caseId) return null;
+  const all = getInvoices().filter(inv => inv.case_id === caseId);
+  if (!all.length) return null;
+  // Keep newest, remove duplicates
+  all.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  if (all.length > 1) {
+    const keep = all[0];
+    const deduped = getInvoices().filter(inv => inv.case_id !== caseId || inv.id === keep.id);
+    saveInvoices(deduped);
+  }
+  return all[0];
+}
+
 function upsertInvoice(invoice) {
   const invoices = getInvoices();
   const normalized = {
@@ -569,7 +583,16 @@ function upsertInvoice(invoice) {
       unit_price: Number(item.unit_price || 0),
     })),
   };
-  const idx = invoices.findIndex(item => item.id === normalized.id);
+  let idx = invoices.findIndex(item => item.id === normalized.id);
+  if (idx < 0 && normalized.case_id) {
+    // Prevent duplicate: if a different invoice already exists for this case, merge into it
+    const existingIdx = invoices.findIndex(item => item.case_id === normalized.case_id);
+    if (existingIdx >= 0) {
+      normalized.id = invoices[existingIdx].id;
+      normalized.number = invoices[existingIdx].number;
+      idx = existingIdx;
+    }
+  }
   if (idx >= 0) invoices[idx] = normalized;
   else invoices.unshift(normalized);
   saveInvoices(invoices);
