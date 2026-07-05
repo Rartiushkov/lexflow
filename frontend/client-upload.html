@@ -130,38 +130,9 @@
             showToast(`${file.name} deleted`, 'success');
           });
         } catch (err) {
-          if (!isDemoSession()) {
-            row.innerHTML = `<span>${file.name}</span><span class="badge badge-red">failed</span>`;
-            showToast(`${file.name} upload failed`, 'error');
-            continue;
-          }
-          const dataUrl = await fileToDataUrl(file);
-          const localCase = getLocalCaseById(caseId);
-          const doc = {
-            id: uid('doc'),
-            name: file.name,
-            type: file.type || 'file',
-            size: file.size || 0,
-            uploaded_at: new Date().toISOString(),
-            data_url: dataUrl,
-            status: 'assigned',
-            case_id: caseId,
-            case_name: localCase?.client_name || 'Local case',
-          };
-          saveIncomingDocuments([doc, ...getIncomingDocuments()]);
-          row.dataset.documentRef = doc.id;
-          row.innerHTML = `
-            <span>${file.name}</span>
-            <span class="table-actions">
-              <span class="badge badge-green">uploaded</span>
-              <button class="btn btn-outline btn-sm" type="button" data-delete-upload>Delete</button>
-            </span>
-          `;
-          row.querySelector('[data-delete-upload]').addEventListener('click', () => {
-            deleteIncomingDocumentLocal(doc.id);
-            row.remove();
-            showToast(`${file.name} deleted`, 'success');
-          });
+          row.innerHTML = `<span>${file.name}</span><span class="badge badge-red">failed</span>`;
+          showToast(`${file.name} upload failed`, 'error');
+          continue;
         }
       }
       showToast('Uploads complete', 'success');
@@ -191,11 +162,7 @@
           await post(`/api/cases/${caseId}/public-submit`, payload);
           showToast('Documents submitted', 'success');
         } catch (err) {
-          if (!isDemoSession()) {
-            showToast(err.message || 'Submit failed', 'error');
-            return;
-          }
-          showToast('Saved locally in demo mode', 'success');
+          showToast(err.message || 'Submit failed', 'error');
         }
       });
     });

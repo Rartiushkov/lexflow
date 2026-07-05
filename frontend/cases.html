@@ -59,16 +59,7 @@
           </div>
         `).join('');
       } catch (err) {
-        const cases = getCaseDirectory();
-        list.innerHTML = cases.map(c => `
-          <div class="table-row clickable" onclick="window.location='case.html?id=${c.id}'">
-            <span><strong>${c.client_name}</strong></span>
-            <span>${c.case_type}</span>
-            <span>${c.destination}</span>
-            <span><span class="badge badge-${c.stage === 'submitted' ? 'green' : c.stage === 'payment' ? 'yellow' : 'blue'}">${c.stage}</span></span>
-            <span>${formatDate(c.created_at)}</span>
-          </div>
-        `).join('');
+        list.innerHTML = `<div class="table-row"><span>Unable to load cases.</span><span></span><span></span><span></span><span></span></div>`;
       }
     });
   </script>

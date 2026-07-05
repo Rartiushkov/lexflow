@@ -55,6 +55,7 @@ BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL", "http://localhost:8000
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 GOOGLE_OAUTH_STATE_SECRET = os.environ.get("GOOGLE_OAUTH_STATE_SECRET", SUPABASE_SERVICE_KEY or "dev-google-oauth-state-secret")
+ENABLE_TEST_AUTH = os.environ.get("LEXFLOW_TEST_AUTH", "") == "1"
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
@@ -95,14 +96,6 @@ if USE_R2:
         print(f"R2 init failed: {e}")
 
 # ─── In-memory fallback ─────────────────────────────────
-users = {
-    "demo@lexflow.eu": {
-        "id": "user_1",
-        "email": "demo@lexflow.eu",
-        "name": "Demo Lawyer",
-        "password": "demo",
-    }
-}
 memory_cases: dict[str, dict] = {}
 memory_invoices: dict[str, dict] = {}
 memory_documents: dict[str, dict] = {}
@@ -263,16 +256,9 @@ class EmailIntegrationRequest(BaseModel):
 
 
 async def verify_token(token: str) -> Optional[dict]:
-    if token.startswith("demo_token_"):
-        user_id = token[len("demo_token_"):] or "user_1"
-        user = next((item for item in users.values() if item.get("id") == user_id), None)
-        if not user:
-            user = {
-                "id": user_id,
-                "email": f"{user_id}@demo.lexflow",
-                "name": f"Demo {user_id}",
-            }
-        return {"id": user["id"], "email": user["email"], "name": user.get("name", user["email"]), "role": "lawyer"}
+    if ENABLE_TEST_AUTH and token.startswith("test_token_"):
+        user_id = token[len("test_token_"):] or "user_1"
+        return {"id": user_id, "email": f"{user_id}@test.lexflow", "name": f"Test {user_id}", "role": "lawyer"}
     if not USE_SUPABASE:
         return None
     try:
@@ -694,7 +680,7 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
 
 
 async def create_case_from_document(sender_email: str, subject: str, fields: dict, user_id: str) -> dict:
-    actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@demo.lexflow", "name": sender_email or user_id})
+    actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@lexflow.local", "name": sender_email or user_id})
     client_name = fields.get("full_name") or name_from_email(sender_email)
     case_id = str(uuid.uuid4())[:8]
     case = {
@@ -736,7 +722,7 @@ async def route_incoming_document(
     subject: str = "",
     user_id: str = "user_1",
 ) -> dict:
-    actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@demo.lexflow", "name": sender_email or user_id})
+    actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@lexflow.local", "name": sender_email or user_id})
     content_hash = hashlib.sha256(content).hexdigest()
     duplicate = await db_find_document_by_hash(content_hash)
     ocr = await run_ocr(content, filename)
@@ -848,13 +834,7 @@ async def login(req: LoginRequest):
             }
         except Exception as e:
             print(f"Supabase login failed: {e}")
-    user = users.get(req.email)
-    if not user or user["password"] != req.password:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {
-        "token": f"demo_token_{user['id']}",
-        "user": {"id": user["id"], "email": user["email"], "name": user["name"]},
-    }
+    raise HTTPException(status_code=401, detail="Invalid credentials")
 
 
 @app.get("/api/me")

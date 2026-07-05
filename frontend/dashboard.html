@@ -324,26 +324,8 @@
           renderWorkflowSummary({ actions: [] });
         }
       } catch (err) {
-        const localCases = getCaseDirectory();
-        const fallbackCases = [
-          { id: '1', client_name: 'Anna Schmidt', type: 'Blue Card', country: 'Germany', stage: 'documents', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 1 },
-          { id: '2', client_name: 'Marco Rossi', type: 'ICT permit', country: 'Netherlands', stage: 'payment', created_at: new Date().toISOString(), invoice_paid: false, doc_count: 3 },
-          { id: '3', client_name: 'Elena Petrova', type: 'Family reunion', country: 'France', stage: 'processing', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 4 },
-          { id: '4', client_name: 'Nora Becker', type: 'Work permit', country: 'Austria', stage: 'review', created_at: new Date().toISOString(), invoice_paid: true, doc_count: 6 },
-        ];
-        renderDashboard(localCases.length ? localCases : fallbackCases);
-        const invoices = getInvoices();
-        const overdue = invoices.filter(invoice => invoiceDueState(invoice).daysLeft < 0 && invoice.status !== 'paid');
-        const dueSoon = invoices.filter(invoice => {
-          const state = invoiceDueState(invoice);
-          return state.daysLeft !== null && state.daysLeft >= 0 && state.daysLeft <= 3 && invoice.status !== 'paid';
-        });
-        renderWorkflowSummary({
-          actions: [
-            ...(overdue.length ? [{ priority: 'high', label: 'Overdue invoices', count: overdue.length, action: 'Send reminder or mark paid' }] : []),
-            ...(dueSoon.length ? [{ priority: 'medium', label: 'Invoices due soon', count: dueSoon.length, action: 'Follow up before due date' }] : []),
-          ],
-        });
+        renderDashboard([]);
+        renderWorkflowSummary({ actions: [] });
       }
     });
   </script>

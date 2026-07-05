@@ -16,13 +16,8 @@ const LS_INCOMING_DOCUMENTS = 'lexflow_incoming_documents';
 const OAUTH_REDIRECT_FLAG_KEY = 'lexflow_oauth_redirect_started_at';
 const OAUTH_REDIRECT_FLAG_TTL_MS = 2 * 60 * 1000;
 
-// ─── Demo auth fallback ─────────────────────────────────
 function getToken() {
   return localStorage.getItem(LS_TOKEN);
-}
-
-function isDemoSession() {
-  return (getToken() || '').startsWith('demo_token_');
 }
 
 function setSession(token, user) {
@@ -249,7 +244,7 @@ async function resetAllSessions() {
 
 // ─── API helpers ─────────────────────────────────────────
 async function buildJsonHeaders() {
-  if (!getToken() || isDemoSession()) {
+  if (!getToken()) {
     await syncSessionFromSupabase();
   }
   return {
@@ -301,7 +296,7 @@ async function upload(path, file) {
   const url = `${API_BASE}${path}`;
   const form = new FormData();
   form.append('file', file);
-  if (!getToken() || isDemoSession()) {
+  if (!getToken()) {
     await syncSessionFromSupabase();
   }
   return await fetchWithAuthRetry(url, {
@@ -345,83 +340,12 @@ function formatCurrency(amount, currency = 'EUR') {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(amount);
 }
 
-function invoiceSeed() {
-  return [
-    {
-      id: 'inv-2026-001',
-      number: 'INV-2026-001',
-      client_name: 'Marco Rossi',
-      client_email: 'marco.rossi@example.com',
-      status: 'unpaid',
-      issue_date: '2026-07-04',
-      due_date: '2026-07-11',
-      currency: 'EUR',
-      notes: 'Transfer after payment confirmation.',
-      case_id: '2',
-      template_id: 'tpl-default',
-      items: [
-        { id: 'line-1', description: 'ICT permit filing', quantity: 1, unit_price: 1190 },
-      ],
-    },
-    {
-      id: 'inv-2026-002',
-      number: 'INV-2026-002',
-      client_name: 'Elena Petrova',
-      client_email: 'elena.petrova@example.com',
-      status: 'paid',
-      issue_date: '2026-07-04',
-      due_date: '2026-07-10',
-      currency: 'EUR',
-      notes: 'Paid and archived.',
-      case_id: '3',
-      template_id: 'tpl-default',
-      items: [
-        { id: 'line-1', description: 'Family reunion case package', quantity: 1, unit_price: 2380 },
-      ],
-    },
-  ];
-}
-
-function caseDirectorySeed() {
-  return [
-    {
-      id: '1',
-      client_name: 'Anna Schmidt',
-      client_email: 'anna@example.com',
-      case_type: 'Blue Card',
-      destination: 'Germany',
-      stage: 'documents',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '2',
-      client_name: 'Marco Rossi',
-      client_email: 'marco@example.com',
-      case_type: 'ICT permit',
-      destination: 'Netherlands',
-      stage: 'payment',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      client_name: 'Elena Petrova',
-      client_email: 'elena@example.com',
-      case_type: 'Family reunion',
-      destination: 'France',
-      stage: 'processing',
-      created_at: new Date().toISOString(),
-    },
-  ];
-}
-
 function getCaseDirectory() {
   try {
     const raw = JSON.parse(localStorage.getItem(LS_CASE_DIRECTORY));
     if (Array.isArray(raw) && raw.length) return raw;
   } catch {}
-  const seeded = caseDirectorySeed();
-  localStorage.setItem(LS_CASE_DIRECTORY, JSON.stringify(seeded));
-  return seeded;
+  return [];
 }
 
 function saveCaseDirectory(cases) {
@@ -565,35 +489,11 @@ function getInvoices() {
     const raw = JSON.parse(localStorage.getItem(LS_INVOICES));
     if (Array.isArray(raw) && raw.length) return raw;
   } catch {}
-  const seeded = invoiceSeed();
-  localStorage.setItem(LS_INVOICES, JSON.stringify(seeded));
-  return seeded;
+  return [];
 }
 
 function saveInvoices(invoices) {
   localStorage.setItem(LS_INVOICES, JSON.stringify(invoices));
-}
-
-function templateSeed() {
-  return [
-    {
-      id: 'tpl-default',
-      name: 'Standard DE/EU',
-      issuer_name: 'LexFlow Legal GmbH',
-      issuer_address: 'Musterstrasse 12, 10115 Berlin, Germany',
-      issuer_email: 'billing@lexflow.eu',
-      issuer_phone: '+49 30 0000 0000',
-      issuer_vat_id: 'DE123456789',
-      issuer_tax_number: '30/123/45678',
-      iban: 'DE89370400440532013000',
-      bic: 'COBADEFFXXX',
-      payment_terms: 'Pay within 7 days.',
-      footer_note: 'Please include the invoice number in the transfer reference.',
-      default_vat_rate: 19,
-      accent: '#d8bf8b',
-      logo_data_url: '',
-    },
-  ];
 }
 
 function getInvoiceTemplates() {
@@ -601,9 +501,7 @@ function getInvoiceTemplates() {
     const raw = JSON.parse(localStorage.getItem(LS_INVOICE_TEMPLATES));
     if (Array.isArray(raw) && raw.length) return raw;
   } catch {}
-  const seeded = templateSeed();
-  localStorage.setItem(LS_INVOICE_TEMPLATES, JSON.stringify(seeded));
-  return seeded;
+  return [];
 }
 
 function saveInvoiceTemplates(templates) {
@@ -786,7 +684,7 @@ function setActiveNav() {
 
 // ─── Init ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!getToken() || isDemoSession()) {
+  if (!getToken()) {
     await syncSessionFromSupabase();
   }
   renderUser();

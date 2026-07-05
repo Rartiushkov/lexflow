@@ -15,6 +15,7 @@ for key in (
     "SMTP_PASSWORD",
 ):
     os.environ.pop(key, None)
+os.environ["LEXFLOW_TEST_AUTH"] = "1"
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -25,11 +26,11 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 
 client = TestClient(main.app)
-AUTH = {"Authorization": "Bearer demo_token_user_1"}
+AUTH = {"Authorization": "Bearer test_token_user_1"}
 
 
 def auth_for(user_id: str):
-    return {"Authorization": f"Bearer demo_token_{user_id}"}
+    return {"Authorization": f"Bearer test_token_{user_id}"}
 
 
 def reset_state():
