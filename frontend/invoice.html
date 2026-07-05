@@ -466,32 +466,39 @@
       host.innerHTML = `<div class="empty-attachments">This file type cannot be previewed yet.</div>`;
     }
 
+    function safeField(id) {
+      const el = document.getElementById(id);
+      return el ? el.value : '';
+    }
+
     function collectTemplate() {
       return {
         ...formState.template,
-        name: getFieldValue('template-name'),
-        issuer_name: getFieldValue('issuer-name'),
-        issuer_address: getFieldValue('issuer-address'),
-        issuer_email: getFieldValue('issuer-email'),
-        issuer_phone: getFieldValue('issuer-phone'),
-        issuer_vat_id: getFieldValue('issuer-vat-id'),
-        issuer_tax_number: getFieldValue('issuer-tax-number'),
-        iban: getFieldValue('issuer-iban'),
-        bic: getFieldValue('issuer-bic'),
-        default_vat_rate: Number(getFieldValue('default-vat-rate') || 0),
-        payment_terms: getFieldValue('payment-terms'),
-        footer_note: getFieldValue('footer-note'),
-        accent: getFieldValue('template-accent'),
+        name: safeField('template-name'),
+        issuer_name: safeField('issuer-name'),
+        issuer_address: safeField('issuer-address'),
+        issuer_email: safeField('issuer-email'),
+        issuer_phone: safeField('issuer-phone'),
+        issuer_vat_id: safeField('issuer-vat-id'),
+        issuer_tax_number: safeField('issuer-tax-number'),
+        iban: safeField('issuer-iban'),
+        bic: safeField('issuer-bic'),
+        default_vat_rate: Number(safeField('default-vat-rate') || 0),
+        payment_terms: safeField('payment-terms'),
+        footer_note: safeField('footer-note'),
+        accent: safeField('template-accent'),
       };
     }
 
     function renderTemplateSelects(selectedId) {
       const options = getInvoiceTemplates().map(template => `<option value="${template.id}">${template.name}</option>`).join('');
-      document.getElementById('invoice-template').innerHTML = options;
-      document.getElementById('template-select').innerHTML = options;
+      const invTpl = document.getElementById('invoice-template');
+      const tplSel = document.getElementById('template-select');
+      if (invTpl) invTpl.innerHTML = options;
+      if (tplSel) tplSel.innerHTML = options;
       if (selectedId) {
         setFieldValue('invoice-template', selectedId);
-        setFieldValue('template-select', selectedId);
+        if (tplSel) setFieldValue('template-select', selectedId);
       }
     }
 
@@ -627,6 +634,7 @@
 
     function renderTemplatePreview(template) {
       const preview = document.getElementById('template-preview');
+      if (!preview) return;
       preview.innerHTML = `
         ${template.logo_data_url ? `<div class="template-logo-preview"><img src="${template.logo_data_url}" alt="Template logo" /></div>` : ''}
         <div class="invoice-preview-head">
@@ -750,23 +758,28 @@
       syncPreview();
     }
 
+    function safeset(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.value = val ?? '';
+    }
+
     function populateTemplateForm(template) {
       formState.template = createInvoiceTemplate(template);
       renderTemplateSelects(formState.template.id);
-      setFieldValue('template-select', formState.template.id);
-      setFieldValue('template-name', formState.template.name);
-      setFieldValue('issuer-name', formState.template.issuer_name);
-      setFieldValue('issuer-address', formState.template.issuer_address);
-      setFieldValue('issuer-email', formState.template.issuer_email);
-      setFieldValue('issuer-phone', formState.template.issuer_phone);
-      setFieldValue('issuer-vat-id', formState.template.issuer_vat_id);
-      setFieldValue('issuer-tax-number', formState.template.issuer_tax_number);
-      setFieldValue('issuer-iban', formState.template.iban);
-      setFieldValue('issuer-bic', formState.template.bic);
-      setFieldValue('default-vat-rate', formState.template.default_vat_rate);
-      setFieldValue('payment-terms', formState.template.payment_terms);
-      setFieldValue('footer-note', formState.template.footer_note);
-      setFieldValue('template-accent', formState.template.accent);
+      safeset('template-select', formState.template.id);
+      safeset('template-name', formState.template.name);
+      safeset('issuer-name', formState.template.issuer_name);
+      safeset('issuer-address', formState.template.issuer_address);
+      safeset('issuer-email', formState.template.issuer_email);
+      safeset('issuer-phone', formState.template.issuer_phone);
+      safeset('issuer-vat-id', formState.template.issuer_vat_id);
+      safeset('issuer-tax-number', formState.template.issuer_tax_number);
+      safeset('issuer-iban', formState.template.iban);
+      safeset('issuer-bic', formState.template.bic);
+      safeset('default-vat-rate', formState.template.default_vat_rate);
+      safeset('payment-terms', formState.template.payment_terms);
+      safeset('footer-note', formState.template.footer_note);
+      safeset('template-accent', formState.template.accent);
       syncTemplatePreview();
     }
 
@@ -787,12 +800,12 @@
         document.getElementById(id)?.addEventListener('change', syncPreview);
       });
       document.getElementById('reverse-charge')?.addEventListener('change', syncPreview);
-      document.getElementById('template-select').addEventListener('change', (event) => {
+      document.getElementById('template-select')?.addEventListener('change', (event) => {
         const template = getInvoiceTemplateById(event.target.value);
         if (template) populateTemplateForm(template);
       });
       ['template-name', 'issuer-name', 'issuer-address', 'issuer-email', 'issuer-phone', 'issuer-vat-id', 'issuer-tax-number', 'issuer-iban', 'issuer-bic', 'default-vat-rate', 'payment-terms', 'footer-note', 'template-accent'].forEach(id => {
-        document.getElementById(id).addEventListener('input', syncTemplatePreview);
+        document.getElementById(id)?.addEventListener('input', syncTemplatePreview);
       });
       document.querySelectorAll('.builder-tab').forEach(button => {
         button.addEventListener('click', () => switchTab(button.dataset.tab));
@@ -882,13 +895,13 @@
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         }).from(wrapper).save();
       });
-      document.getElementById('btn-save-template').addEventListener('click', () => {
+      document.getElementById('btn-save-template')?.addEventListener('click', () => {
         const saved = upsertInvoiceTemplate(collectTemplate());
         renderTemplateSelects(saved.id);
         showToast('Template saved', 'success');
         populateTemplateForm(saved);
       });
-      document.getElementById('template-logo').addEventListener('change', (event) => {
+      document.getElementById('template-logo')?.addEventListener('change', (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
