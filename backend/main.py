@@ -287,6 +287,7 @@ async def db_create_case(data: dict) -> dict:
             return res.data[0]
         except Exception as e:
             print(f"Supabase insert failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save case")
     memory_cases[data["id"]] = data
     return data
 
@@ -298,16 +299,18 @@ async def db_get_cases() -> list:
             return res.data
         except Exception as e:
             print(f"Supabase select failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to load cases")
     return sorted(memory_cases.values(), key=lambda c: c.get("created_at", ""), reverse=True)
 
 
 async def db_get_case(case_id: str) -> Optional[dict]:
     if USE_SUPABASE:
         try:
-            res = supabase_client.table("cases").select("*").eq("id", case_id).single().execute()
-            return res.data
+            res = supabase_client.table("cases").select("*").eq("id", case_id).limit(1).execute()
+            return res.data[0] if res.data else None
         except Exception as e:
             print(f"Supabase get failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to load case")
     return memory_cases.get(case_id)
 
 
@@ -318,6 +321,7 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
             return res.data[0]
         except Exception as e:
             print(f"Supabase update failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to update case")
     case = memory_cases.get(case_id)
     if case:
         case.update(patch)

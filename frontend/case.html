@@ -83,6 +83,17 @@
         <div>
           <div class="card" style="margin-bottom:24px;">
             <div class="card-header">
+              <span class="card-title">Client portal</span>
+            </div>
+            <div class="card-body">
+              <div id="portal-block">
+                <p style="color:var(--muted);margin-bottom:12px;">Case link will appear after load.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:24px;">
+            <div class="card-header">
               <span class="card-title">Invoice</span>
             </div>
             <div class="card-body">
@@ -118,27 +129,30 @@
         const c = await get(`/api/cases/${caseId}`);
         render(c);
       } catch (err) {
-        // demo fallback
-        render({
-          id: caseId,
-          client_name: 'Anna Schmidt',
-          client_email: 'anna@example.com',
-          case_type: 'Blue Card',
-          destination: 'Germany',
-          stage: 'documents',
-          created_at: new Date().toISOString(),
-          invoice_paid: false,
-          docs: [
-            { name: 'passport.pdf', status: 'uploaded', uploaded_at: new Date().toISOString() },
-          ],
-        });
+        showToast(err.message || 'Unable to load case', 'error');
+        document.getElementById('case-title').textContent = 'Case unavailable';
+        document.getElementById('breadcrumb-name').textContent = 'Case';
+        document.getElementById('case-meta').textContent = 'This case could not be loaded.';
+        document.getElementById('doc-list').innerHTML = `<p style="color:var(--muted);">No case data available.</p>`;
+        document.getElementById('portal-block').innerHTML = `<p style="color:var(--muted);">Portal link unavailable.</p>`;
       }
+    }
+
+    function copyPortalLink(url) {
+      navigator.clipboard.writeText(url).then(() => showToast('Portal link copied', 'success'));
     }
 
     function render(c) {
       document.getElementById('case-title').textContent = c.client_name;
       document.getElementById('breadcrumb-name').textContent = c.client_name;
       document.getElementById('case-meta').textContent = `${c.case_type} · ${c.destination} · created ${formatDate(c.created_at)}`;
+      const portalUrl = c.portal_url || `${window.location.origin}/client-upload.html?id=${c.id}`;
+      document.getElementById('portal-block').innerHTML = `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share this link with the client if they need to upload documents again.</div>
+        <div class="form-input" style="margin-bottom:10px;word-break:break-all;">${portalUrl}</div>
+        <button class="btn btn-outline btn-sm" type="button" id="btn-copy-portal-link">Copy link</button>
+      `;
+      document.getElementById('btn-copy-portal-link')?.addEventListener('click', () => copyPortalLink(portalUrl));
       const statusMap = {
         documents: 'badge-gray',
         payment: 'badge-yellow',

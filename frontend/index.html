@@ -22,7 +22,7 @@
       <a href="#billing">Billing</a>
     </nav>
     <div class="topbar-cta">
-      <a href="login.html?switch=1" class="btn btn-primary">Open workspace</a>
+      <a href="login.html?switch=1" class="btn btn-primary" id="landing-auth-btn">Open workspace</a>
     </div>
   </header>
 
@@ -39,7 +39,7 @@
             Case intake, client documents, invoices, and release tracking in one focused cabinet for European immigration teams.
           </p>
           <div class="hero-actions">
-            <a href="login.html?switch=1" class="btn btn-primary btn-lg">Enter workspace</a>
+            <a href="login.html?switch=1" class="btn btn-primary btn-lg" id="landing-hero-auth-btn">Enter workspace</a>
             <a href="#system" class="btn btn-outline btn-lg">View structure</a>
           </div>
         </div>
@@ -162,5 +162,24 @@
   </main>
 
   <script src="./app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const user = await syncSessionFromSupabase();
+      const targets = [
+        document.getElementById('landing-auth-btn'),
+        document.getElementById('landing-hero-auth-btn'),
+      ].filter(Boolean);
+      if (user) {
+        targets.forEach((button) => {
+          button.href = 'dashboard.html';
+          button.textContent = 'Run workspace';
+        });
+      } else {
+        targets.forEach((button) => {
+          button.href = 'login.html?switch=1';
+        });
+      }
+    });
+  </script>
 </body>
 </html>
