@@ -87,7 +87,17 @@ LEGAL_UPLOAD/
 - **Key classes**: `.portal-v2`, `.portal-v2-card`, `.portal-v2-input`, `.portal-v2-dropzone`, `.portal-v2-checklist`, `.portal-v2-submit`, `.portal-v2-payment`
 - **Cache bust**: `styles.css?v=4`, `app.js?v=4`
 
-### Landing v2 (index.html)
+### Landing v3 (index.html)
+- **Theme**: Light executive premium (Render-style).
+- **Background**: `#ffffff` with `#f9fafb` sections.
+- **Text**: `#101828` (headings), `#667085` (body), `#344054` (labels).
+- **Primary accent**: `#2563eb` (blue).
+- **Font**: Inter only.
+- **Container**: fixed `max-width: 1200px`, centered.
+- **Key classes**: `.landing-v3*`
+- **Cache bust**: `styles.css?v=5`, `app.js?v=5`
+
+### Landing v2 (legacy, kept in CSS)
 - **Theme**: Dark aurora premium.
 - **Background**: `#05070a` with aurora gradients.
 - **Accent**: `#46e0a1` (green)
@@ -138,10 +148,10 @@ Set these in **Render environment variables** (do not commit values):
 
 - Created `.windsurf/instructions.md` and `.windsurf/memory.md` for AI context.
 - Redesigned `client-upload.html` to **portal-v2 light executive premium**.
-- Redesigned `index.html` as `landing-v2` dark aurora premium.
-- Updated `styles.css` with `.portal-v2*` and `.landing-v2*` classes.
-- Added cache-busting (`?v=4`) to CSS/JS links.
-- Deployed frontend to Cloudflare Pages production.
+- Redesigned `index.html` to **landing-v3 light executive premium** (Render-style, fixed 1200px container, Inter, blue accent).
+- Updated `styles.css` with `.portal-v2*` and `.landing-v3*` classes.
+- Added cache-busting (`?v=5`) to CSS/JS links.
+- Deployed frontend to Cloudflare Pages production via git push.
 
 ## Working conventions
 
