@@ -1196,9 +1196,10 @@
 
       // Prefill from Services builder on case page
       let prefill = null;
+      let explicitPrefill = false;
       try {
         const raw = localStorage.getItem('lf_prefill_invoice');
-        if (raw) { prefill = JSON.parse(raw); localStorage.removeItem('lf_prefill_invoice'); }
+        if (raw) { prefill = JSON.parse(raw); localStorage.removeItem('lf_prefill_invoice'); explicitPrefill = true; }
       } catch {}
 
       let invoice = invoiceId ? getInvoiceById(invoiceId) : null;
@@ -1206,7 +1207,7 @@
       // Derive caseId from the invoice itself if not in URL
       const effectiveCaseId = caseId || invoice?.case_id || null;
 
-      // Auto-load services only when invoice exists but has NO items yet (first open after case services set)
+      // Auto-load services only when invoice has NO items yet (never overwrite existing items automatically)
       if (!prefill && effectiveCaseId && invoice && !(invoice.items?.length)) {
         try {
           const svcRaw = localStorage.getItem(`lf_case_services_${effectiveCaseId}`);
@@ -1220,8 +1221,8 @@
         } catch {}
       }
 
-      // If existing invoice opened AND there's services prefill — replace items with services
-      if (invoice && prefill && prefill.items?.length) {
+      // Apply prefill: explicit (Create invoice btn) always replaces; auto only when no items yet
+      if (invoice && prefill && prefill.items?.length && (explicitPrefill || !(invoice.items?.length))) {
         const serviceItems = prefill.items.map(it => ({
           id: uid('line'),
           description: it.description,
