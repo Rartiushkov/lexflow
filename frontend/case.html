@@ -612,20 +612,32 @@
           const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
           if (!res.ok) throw new Error(await res.text());
           const blob = await res.blob();
-          const objUrl = URL.createObjectURL(blob);
+          // Convert to data URL for local storage
+          const dataUrl = await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          // Trigger download
           const a = document.createElement('a');
-          a.href = objUrl;
+          a.href = dataUrl;
           a.download = `case_${caseId}_form.pdf`;
           a.click();
-          setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
           const now = new Date().toISOString();
+          const docId = `doc-form-${caseId}`;
+          const docName = `Application Form — ${new Date(now).toLocaleDateString('en-GB')}.pdf`;
+          // Remove previous generated form doc, add new one
+          const prevDocs = getIncomingDocuments().filter(d => d.id !== docId);
+          prevDocs.unshift({ id: docId, case_id: caseId, name: docName, status: 'assigned', uploaded_at: now, data_url: dataUrl });
+          saveIncomingDocuments(prevDocs);
           localStorage.setItem(FORM_KEY(), now);
           status.textContent = `Generated: ${new Date(now).toLocaleString('en-GB')}`;
           document.getElementById('btn-download-last').style.display = '';
           document.getElementById('btn-download-last').onclick = () => {
-            window.open(url, '_blank');
+            const a2 = document.createElement('a'); a2.href = dataUrl; a2.download = docName; a2.click();
           };
-          showToast('Application form downloaded', 'success');
+          showToast('Application form saved to Documents', 'success');
+          loadCase();
         } catch (e) {
           status.textContent = 'Generation failed — check that case fields are filled.';
           showToast('Form generation failed', 'error');

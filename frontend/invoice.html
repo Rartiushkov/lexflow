@@ -775,6 +775,20 @@
         row.querySelector('.line-total').textContent = formatCurrency(qty * price);
       });
       renderPreview(formState.invoice);
+      // Sync items back to case services so case page stays in sync
+      const effCase = formState.invoice.case_id || caseId;
+      if (effCase && formState.invoice.items?.length) {
+        try {
+          const svcItems = formState.invoice.items.map((it, i) => ({
+            id: it.id || ('svc-' + i),
+            name: it.description || '',
+            qty: it.quantity ?? 1,
+            price: it.unit_price ?? 0,
+            unit: 'flat',
+          }));
+          localStorage.setItem(`lf_case_services_${effCase}`, JSON.stringify(svcItems));
+        } catch {}
+      }
     }
 
     function syncTemplatePreview() {
