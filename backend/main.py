@@ -1260,6 +1260,28 @@ async def delete_document(document_id: str, user: dict = Depends(get_current_use
     return {"deleted": True, "id": document_id}
 
 
+@app.get("/api/documents/{document_id}/download")
+async def download_document(document_id: str, user: dict = Depends(get_current_user)):
+    doc = await db_get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    key = doc.get("key", "")
+    if USE_R2 and key:
+        try:
+            obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
+            content = obj["Body"].read()
+            content_type = doc.get("content_type") or obj.get("ContentType") or "application/octet-stream"
+            filename = doc.get("name", key.split("/")[-1])
+            return StreamingResponse(
+                io.BytesIO(content),
+                media_type=content_type,
+                headers={"Content-Disposition": f'inline; filename="{filename}"'},
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"R2 fetch failed: {e}")
+    raise HTTPException(status_code=404, detail="File not available")
+
+
 @app.delete("/api/cases/{case_id}/documents/{document_ref:path}")
 async def delete_case_document(case_id: str, document_ref: str, user: Optional[dict] = Depends(get_current_user_optional)):
     case = await db_get_case(case_id)

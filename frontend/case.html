@@ -488,15 +488,24 @@
         list.querySelectorAll('[data-preview-idx]').forEach(btn => {
           btn.addEventListener('click', async () => {
             let { url, name, docId } = _docMap[+btn.dataset.previewIdx] || {};
+            let mimeType = '';
             if (!url && docId) {
+              // Stream via backend proxy to avoid R2 auth errors
               try {
-                const res = await get(`/api/documents/${docId}`);
-                url = res.url || res.data_url || '';
+                const token = getToken();
+                const res = await fetch(`${API_BASE}/api/documents/${docId}/download`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  mimeType = blob.type || '';
+                  url = URL.createObjectURL(blob);
+                }
               } catch {}
             }
             if (!url) { showToast('No preview available for this document', 'info'); return; }
-            const isPdf = /\.pdf$/i.test(name) || url.startsWith('data:application/pdf');
-            const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(name) || url.startsWith('data:image/');
+            const isPdf = /\.pdf$/i.test(name) || url.startsWith('data:application/pdf') || mimeType === 'application/pdf';
+            const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(name) || url.startsWith('data:image/') || mimeType.startsWith('image/');
             if (isPdf) {
               window.open(url, '_blank');
             } else if (isImg) {
