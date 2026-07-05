@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=9" />
+  <link rel="stylesheet" href="./styles.css?v=10" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -48,70 +48,192 @@
         <strong id="breadcrumb-name">Case</strong>
       </div>
       <div class="topbar-actions">
-        <a href="dashboard.html" class="btn btn-outline">Back</a>
+        <a href="cases.html" class="btn btn-outline">All matters</a>
+        <button class="btn btn-outline" id="btn-save-fields">Save fields</button>
+        <button class="btn btn-primary" id="btn-run-ai">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+          Extract from docs
+        </button>
       </div>
     </div>
 
     <div class="page-content">
+      <!-- Duplicate warning banner (hidden by default) -->
+      <div id="duplicate-banner" style="display:none;background:rgba(196,100,90,0.1);border:1px solid rgba(196,100,90,0.3);border-radius:var(--radius);padding:12px 18px;margin-bottom:18px;display:none;align-items:center;gap:12px;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c4645a" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
+        <span style="color:#c4645a;font-size:13px;">Potential duplicate detected — another matter may exist for this client. <a id="dup-link" href="#" style="color:#c4645a;text-decoration:underline;">View existing matter</a></span>
+      </div>
+
+      <!-- OCR auto-fill banner (shown after extraction) -->
+      <div id="ocr-banner" style="display:none;background:rgba(61,184,122,0.08);border:1px solid rgba(61,184,122,0.2);border-radius:var(--radius);padding:12px 18px;margin-bottom:18px;align-items:center;gap:12px;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3db87a" stroke-width="1.5"><path d="M3 8l3 3 7-7"/></svg>
+        <span style="color:#5ebd8e;font-size:13px;">Fields auto-filled from documents. Review and save.</span>
+      </div>
+
       <div class="page-header">
         <div>
           <div class="page-title" id="case-title">Case</div>
           <div class="page-subtitle" id="case-meta">Loading…</div>
         </div>
-        <div style="display:flex;gap:10px;">
-          <span class="badge badge-gray" id="case-status">Unknown</span>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <label style="font-size:12px;color:var(--muted);margin-right:4px;">Stage</label>
+          <select id="stage-select" class="form-select" style="height:32px;font-size:13px;padding:0 10px;min-width:160px;">
+            <option value="documents">Documents</option>
+            <option value="payment">Payment</option>
+            <option value="processing">Processing</option>
+            <option value="review">Ready for review</option>
+            <option value="submitted">Submitted</option>
+          </select>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Documents</span>
-            <span class="badge badge-blue" id="doc-count">0</span>
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+
+        <!-- LEFT COLUMN -->
+        <div>
+
+          <!-- EU Migration Fields -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+              <span class="card-title">Client — personal data</span>
+              <span id="ocr-indicator" style="display:none;" class="badge badge-green">OCR filled</span>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Full name</label><input class="form-input" id="f-full-name" placeholder="As on passport" /></div>
+                <div class="form-group"><label class="form-label">Date of birth</label><input class="form-input" id="f-dob" type="date" /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Nationality</label><input class="form-input" id="f-nationality" placeholder="e.g. Ukrainian" /></div>
+                <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="f-phone" placeholder="+380..." /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Passport number</label><input class="form-input" id="f-passport-no" placeholder="XX000000" /></div>
+                <div class="form-group"><label class="form-label">Passport expiry</label><input class="form-input" id="f-passport-expiry" type="date" /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Home address</label><input class="form-input" id="f-address-home" placeholder="Country of origin" /></div>
+                <div class="form-group"><label class="form-label">EU address</label><input class="form-input" id="f-address-eu" placeholder="Current EU address" /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Marital status</label>
+                  <select class="form-select" id="f-marital">
+                    <option value="">— select —</option>
+                    <option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Dependants (no.)</label><input class="form-input" id="f-dependants" type="number" min="0" placeholder="0" /></div>
+              </div>
+            </div>
           </div>
-          <div class="card-body">
-            <div style="margin-bottom:16px;">
-              <input type="file" id="file-input" multiple accept=".pdf,image/*" style="display:none;" />
-              <button class="btn btn-outline btn-sm" id="btn-upload">+ Upload document</button>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Visa &amp; permit</span></div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Visa type</label>
+                  <select class="form-select" id="f-visa-type">
+                    <option value="">— select —</option>
+                    <option>National visa (D)</option><option>Schengen visa (C)</option>
+                    <option>Residence permit</option><option>EU Blue Card</option>
+                    <option>Intra-company transfer</option><option>Family reunification</option>
+                    <option>Student permit</option><option>Asylum / protection</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Entry type</label>
+                  <select class="form-select" id="f-entry-type">
+                    <option value="">— select —</option>
+                    <option>Single entry</option><option>Multiple entry</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Current status in EU</label>
+                  <select class="form-select" id="f-current-status">
+                    <option value="">— select —</option>
+                    <option>Tourist / visa-free</option><option>Student</option><option>Worker</option>
+                    <option>Temporary protection</option><option>Undocumented</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">Current permit expiry</label><input class="form-input" id="f-permit-expiry" type="date" /></div>
+              </div>
             </div>
-            <div id="doc-list">
-              <p style="color:var(--muted);">No documents uploaded yet.</p>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Employer / sponsor</span></div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Employer name</label><input class="form-input" id="f-employer" placeholder="Company name" /></div>
+                <div class="form-group"><label class="form-label">Employer VAT / reg. no.</label><input class="form-input" id="f-employer-vat" placeholder="DE123456789" /></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Job title</label><input class="form-input" id="f-job-title" placeholder="e.g. Software Engineer" /></div>
+                <div class="form-group"><label class="form-label">Gross salary (EUR/mo)</label><input class="form-input" id="f-salary" type="number" placeholder="0" /></div>
+              </div>
             </div>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Key deadlines</span></div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Authority appointment</label><input class="form-input" id="f-appointment" type="date" /></div>
+                <div class="form-group"><label class="form-label">Submission deadline</label><input class="form-input" id="f-deadline" type="date" /></div>
+              </div>
+              <div class="form-group"><label class="form-label">Internal notes</label><textarea class="form-textarea" id="f-notes" rows="3" placeholder="Case notes, special circumstances, follow-ups…"></textarea></div>
+            </div>
+          </div>
+
+          <!-- Documents -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Documents</span>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span class="badge badge-blue" id="doc-count">0</span>
+                <input type="file" id="file-input" multiple accept=".pdf,image/*" style="display:none;" />
+                <button class="btn btn-outline btn-sm" id="btn-upload">+ Upload</button>
+              </div>
+            </div>
+            <div id="doc-list" style="padding:0 4px;"></div>
           </div>
         </div>
 
+        <!-- RIGHT COLUMN -->
         <div>
-          <div class="card" style="margin-bottom:24px;">
-            <div class="card-header">
-              <span class="card-title">Client portal</span>
-            </div>
-            <div class="card-body">
-              <div id="portal-block">
-                <p style="color:var(--muted);margin-bottom:12px;">Case link will appear after load.</p>
-              </div>
+          <!-- Document checklist -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Document checklist</span></div>
+            <div class="card-body" style="padding:12px 16px;">
+              <div id="doc-checklist" style="display:flex;flex-direction:column;gap:8px;"></div>
             </div>
           </div>
 
-          <div class="card" style="margin-bottom:24px;">
-            <div class="card-header">
-              <span class="card-title">Invoice</span>
+          <!-- Client portal -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Client portal</span></div>
+            <div class="card-body">
+              <div id="portal-block"><p style="color:var(--muted);">Loading…</p></div>
             </div>
+          </div>
+
+          <!-- Invoice -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Invoice</span></div>
             <div class="card-body">
               <div id="invoice-block">
-                <p style="color:var(--muted);margin-bottom:12px;">Invoice not yet generated.</p>
-                <button class="btn btn-primary btn-sm" id="btn-invoice">Open builder</button>
+                <p style="color:var(--muted);margin-bottom:12px;">No invoice yet.</p>
+                <button class="btn btn-primary btn-sm" id="btn-invoice" style="width:100%;">Create invoice</button>
               </div>
             </div>
           </div>
 
+          <!-- Actions -->
           <div class="card">
-            <div class="card-header">
-              <span class="card-title">Actions</span>
-            </div>
-            <div class="card-body">
-              <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-run-ai">Extract fields</button>
-              <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:10px;" id="btn-download">Download PDF form</button>
-              <button class="btn btn-primary btn-sm" style="width:100%;" id="btn-advance">Advance stage</button>
+            <div class="card-header"><span class="card-title">Actions</span></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+              <button class="btn btn-outline btn-sm" style="width:100%;" id="btn-download">Download PDF form</button>
+              <button class="btn btn-outline btn-sm" style="width:100%;" id="btn-advance">Advance stage →</button>
             </div>
           </div>
         </div>
@@ -119,96 +241,217 @@
     </div>
   </div>
 
-  <script src="./app.js?v=9"></script>
+  <script src="./app.js?v=10"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
+
+    const EU_CHECKLIST = [
+      'Valid passport (6+ months)',
+      'Biometric photo (35×45 mm)',
+      'Bank statements (3 months)',
+      'Employment contract',
+      'Employer confirmation letter',
+      'Health insurance proof',
+      'Accommodation proof',
+      'Application form (signed)',
+      'Translation of documents (certified)',
+      'State fee receipt',
+    ];
+
+    function fillFieldsFromExtracted(extracted) {
+      if (!extracted || !Object.keys(extracted).length) return;
+      const map = {
+        'f-full-name':       extracted.full_name || extracted.client_name,
+        'f-dob':             extracted.dob || extracted.date_of_birth,
+        'f-nationality':     extracted.nationality,
+        'f-phone':           extracted.phone,
+        'f-passport-no':     extracted.passport_no || extracted.passport_number,
+        'f-passport-expiry': extracted.passport_expiry,
+        'f-address-home':    extracted.address_home || extracted.home_address,
+        'f-address-eu':      extracted.address_eu || extracted.eu_address,
+        'f-marital':         extracted.marital_status,
+        'f-dependants':      extracted.dependants,
+        'f-visa-type':       extracted.visa_type,
+        'f-entry-type':      extracted.entry_type,
+        'f-current-status':  extracted.current_status,
+        'f-permit-expiry':   extracted.permit_expiry,
+        'f-employer':        extracted.employer_name || extracted.employer,
+        'f-employer-vat':    extracted.employer_vat,
+        'f-job-title':       extracted.job_title,
+        'f-salary':          extracted.salary_eur || extracted.salary,
+        'f-appointment':     extracted.appointment_date,
+        'f-deadline':        extracted.submission_deadline,
+        'f-notes':           extracted.notes,
+      };
+      let filled = 0;
+      Object.entries(map).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el && val != null && val !== '') { el.value = val; filled++; }
+      });
+      if (filled > 0) {
+        document.getElementById('ocr-indicator').style.display = 'inline-flex';
+        const banner = document.getElementById('ocr-banner');
+        banner.style.display = 'flex';
+      }
+    }
+
+    function collectFields() {
+      return {
+        full_name:           document.getElementById('f-full-name').value,
+        dob:                 document.getElementById('f-dob').value,
+        nationality:         document.getElementById('f-nationality').value,
+        phone:               document.getElementById('f-phone').value,
+        passport_no:         document.getElementById('f-passport-no').value,
+        passport_expiry:     document.getElementById('f-passport-expiry').value,
+        address_home:        document.getElementById('f-address-home').value,
+        address_eu:          document.getElementById('f-address-eu').value,
+        marital_status:      document.getElementById('f-marital').value,
+        dependants:          document.getElementById('f-dependants').value,
+        visa_type:           document.getElementById('f-visa-type').value,
+        entry_type:          document.getElementById('f-entry-type').value,
+        current_status:      document.getElementById('f-current-status').value,
+        permit_expiry:       document.getElementById('f-permit-expiry').value,
+        employer_name:       document.getElementById('f-employer').value,
+        employer_vat:        document.getElementById('f-employer-vat').value,
+        job_title:           document.getElementById('f-job-title').value,
+        salary_eur:          document.getElementById('f-salary').value,
+        appointment_date:    document.getElementById('f-appointment').value,
+        submission_deadline: document.getElementById('f-deadline').value,
+        notes:               document.getElementById('f-notes').value,
+      };
+    }
+
+    function renderChecklist(uploadedDocs) {
+      const names = (uploadedDocs || []).map(d => (d.name || '').toLowerCase());
+      const keywords = {
+        'Valid passport (6+ months)':      ['passport'],
+        'Biometric photo (35×45 mm)':      ['photo', 'picture', 'foto'],
+        'Bank statements (3 months)':      ['bank', 'statement', 'account'],
+        'Employment contract':             ['contract', 'employment', 'arbeitsvertrag'],
+        'Employer confirmation letter':    ['confirmation', 'employer letter', 'arbeitsgeberbes'],
+        'Health insurance proof':          ['insurance', 'health', 'krankenvers'],
+        'Accommodation proof':             ['accommodation', 'rental', 'lease', 'mietvertrag'],
+        'Application form (signed)':       ['application', 'antrag', 'form'],
+        'Translation of documents (certified)': ['translation', 'übersetzung', 'certified'],
+        'State fee receipt':               ['fee', 'receipt', 'payment', 'gebühr'],
+      };
+      const host = document.getElementById('doc-checklist');
+      host.innerHTML = EU_CHECKLIST.map(item => {
+        const kws = keywords[item] || [];
+        const found = kws.some(kw => names.some(n => n.includes(kw)));
+        return `<div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+          <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+            background:${found ? 'rgba(61,184,122,0.15)' : 'var(--surface-3)'};
+            border:1px solid ${found ? 'rgba(61,184,122,0.3)' : 'var(--border)'};">
+            ${found ? '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#3db87a" stroke-width="2.5"><path d="M3 8l3 3 7-7"/></svg>'
+                    : '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#606070" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>'}
+          </span>
+          <span style="color:${found ? 'var(--text)' : 'var(--muted)'};">${item}</span>
+        </div>`;
+      }).join('');
+    }
+
+    async function checkDuplicate(clientEmail, clientName) {
+      try {
+        const allCases = await get('/api/cases');
+        const dup = allCases.find(c =>
+          c.id !== caseId && (
+            (clientEmail && c.client_email && c.client_email.toLowerCase() === clientEmail.toLowerCase()) ||
+            (clientName && c.client_name && c.client_name.toLowerCase() === clientName.toLowerCase())
+          )
+        );
+        const banner = document.getElementById('duplicate-banner');
+        if (dup) {
+          banner.style.display = 'flex';
+          document.getElementById('dup-link').href = `case.html?id=${dup.id}`;
+          document.getElementById('dup-link').textContent = `View: ${dup.client_name}`;
+        } else {
+          banner.style.display = 'none';
+        }
+      } catch {}
+    }
 
     async function loadCase() {
       try {
         const c = await get(`/api/cases/${caseId}`);
         render(c);
+        checkDuplicate(c.client_email, c.client_name);
       } catch (err) {
         showToast(err.message || 'Unable to load case', 'error');
         document.getElementById('case-title').textContent = 'Case unavailable';
         document.getElementById('breadcrumb-name').textContent = 'Case';
         document.getElementById('case-meta').textContent = 'This case could not be loaded.';
-        document.getElementById('doc-list').innerHTML = `<p style="color:var(--muted);">No case data available.</p>`;
-        document.getElementById('portal-block').innerHTML = `<p style="color:var(--muted);">Portal link unavailable.</p>`;
       }
-    }
-
-    function copyPortalLink(url) {
-      navigator.clipboard.writeText(url).then(() => showToast('Portal link copied', 'success'));
     }
 
     function render(c) {
       document.getElementById('case-title').textContent = c.client_name;
       document.getElementById('breadcrumb-name').textContent = c.client_name;
-      document.getElementById('case-meta').textContent = `${c.case_type} · ${c.destination} · created ${formatDate(c.created_at)}`;
+      document.getElementById('case-meta').textContent =
+        `${c.case_type} · ${c.destination} · ${c.client_email} · opened ${formatDate(c.created_at)}`;
+
+      // Stage selector
+      const sel = document.getElementById('stage-select');
+      sel.value = c.stage || 'documents';
+
+      // Fill EU fields from extracted JSONB
+      fillFieldsFromExtracted(c.extracted || {});
+
+      // Portal link
       const portalUrl = c.portal_url || `${window.location.origin}/client-upload.html?id=${c.id}`;
       document.getElementById('portal-block').innerHTML = `
-        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share this link with the client if they need to upload documents again.</div>
-        <div class="form-input" style="margin-bottom:10px;word-break:break-all;">${portalUrl}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share with client to upload documents.</div>
+        <div style="font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;word-break:break-all;color:var(--text-2);">${portalUrl}</div>
         <button class="btn btn-outline btn-sm" type="button" id="btn-copy-portal-link">Copy link</button>
       `;
-      document.getElementById('btn-copy-portal-link')?.addEventListener('click', () => copyPortalLink(portalUrl));
-      const statusMap = {
-        documents: 'badge-gray',
-        payment: 'badge-yellow',
-        processing: 'badge-blue',
-        review: 'badge-yellow',
-        submitted: 'badge-green',
-      };
-      const statusEl = document.getElementById('case-status');
-      statusEl.className = `badge ${statusMap[c.stage] || 'badge-gray'}`;
-      statusEl.textContent = c.stage;
+      document.getElementById('btn-copy-portal-link')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(portalUrl).then(() => showToast('Portal link copied', 'success'));
+      });
 
-      const list = document.getElementById('doc-list');
+      // Documents
       const incomingDocs = getDocumentsForCase(c.id);
       const mergedDocs = [...(c.docs || []), ...incomingDocs.map(d => ({
-        id: d.id,
-        document_id: d.id,
-        key: d.key || '',
-        name: d.name,
-        status: 'attached',
-        uploaded_at: d.uploaded_at,
-        data_url: d.data_url || d.url,
+        id: d.id, document_id: d.id, key: d.key || '',
+        name: d.name, status: 'attached',
+        uploaded_at: d.uploaded_at, data_url: d.data_url || d.url,
       }))];
       document.getElementById('doc-count').textContent = mergedDocs.length;
+      const list = document.getElementById('doc-list');
       if (mergedDocs.length) {
         list.innerHTML = mergedDocs.map(d => `
-          <div class="table-row case-doc-row">
-            <div>${d.data_url || d.url ? `<a href="${d.data_url || d.url}" download="${d.name}"><strong>${d.name}</strong></a>` : `<strong>${d.name}</strong>`}</div>
-            <div>${formatDate(d.uploaded_at)}</div>
+          <div class="table-row case-doc-row" style="grid-template-columns:1fr 100px 80px 60px;">
+            <div>${d.data_url || d.url
+              ? `<a href="${d.data_url || d.url}" download="${d.name}" style="color:var(--text);font-weight:500;">${d.name}</a>`
+              : `<strong>${d.name}</strong>`}</div>
+            <div style="color:var(--muted);font-size:12px;">${formatDate(d.uploaded_at)}</div>
             <div><span class="badge badge-green">${d.status}</span></div>
-            <div><button class="btn btn-outline btn-sm" type="button" data-delete-case-doc="${d.document_id || d.key || d.id || d.name}">Delete</button></div>
+            <div><button class="btn btn-outline btn-sm" type="button" data-delete-case-doc="${d.document_id || d.key || d.id || d.name}">Del</button></div>
           </div>
         `).join('');
-        list.querySelectorAll('[data-delete-case-doc]').forEach(button => {
-          button.addEventListener('click', async () => {
-            const ref = button.dataset.deleteCaseDoc;
+        list.querySelectorAll('[data-delete-case-doc]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const ref = btn.dataset.deleteCaseDoc;
             try {
-              if (ref.startsWith('doc-')) {
-                await deleteDocumentRemote(ref);
-              } else {
-                await api('DELETE', `/api/cases/${caseId}/documents/${encodeURIComponent(ref)}`);
-              }
+              if (ref.startsWith('doc-')) await deleteDocumentRemote(ref);
+              else await api('DELETE', `/api/cases/${caseId}/documents/${encodeURIComponent(ref)}`);
               showToast('Document deleted', 'success');
             } catch {
               deleteIncomingDocumentLocal(ref);
-              showToast('Document deleted locally', 'success');
+              showToast('Removed locally', 'success');
             }
             loadCase();
           });
         });
       } else {
-        list.innerHTML = `<p style="color:var(--muted);">No documents uploaded yet.</p>`;
+        list.innerHTML = `<div style="padding:20px;color:var(--muted);font-size:13px;">No documents uploaded yet.</div>`;
       }
+      renderChecklist(mergedDocs);
 
+      // Invoice
       if (c.invoice) {
         document.getElementById('invoice-block').innerHTML = `
-          <div style="font-size:24px;font-weight:700;margin-bottom:6px;">${formatCurrency(c.invoice.amount)}</div>
+          <div style="font-size:28px;font-weight:700;letter-spacing:-0.04em;margin-bottom:4px;">${formatCurrency(c.invoice.amount)}</div>
           <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${c.invoice.number}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Awaiting payment'}</span>
@@ -216,24 +459,46 @@
           </div>
         `;
       } else {
-        const localInvoice = getInvoices().find(invoice => invoice.case_id === c.id);
+        const localInvoice = getInvoices().find(inv => inv.case_id === c.id);
         if (localInvoice) {
           document.getElementById('invoice-block').innerHTML = `
-            <div style="font-size:24px;font-weight:700;margin-bottom:6px;">${formatCurrency(calculateInvoiceTotal(localInvoice), localInvoice.currency || 'EUR')}</div>
+            <div style="font-size:28px;font-weight:700;letter-spacing:-0.04em;margin-bottom:4px;">${formatCurrency(calculateInvoiceTotal(localInvoice), localInvoice.currency || 'EUR')}</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${localInvoice.number}</div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="display:flex;gap:8px;">
               <span class="badge ${invoiceStatusBadge(localInvoice.status)}">${localInvoice.status}</span>
               <a class="btn btn-outline btn-sm" href="invoice.html?id=${localInvoice.id}">Open</a>
             </div>
           `;
+        } else {
+          document.getElementById('btn-invoice')?.addEventListener('click', () => {
+            window.location.href = `invoice.html?case=${caseId}`;
+          });
         }
       }
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
-        loadCase();
-        const input = document.getElementById('file-input');
+      loadCase();
+
+      // Stage change via dropdown → PATCH immediately
+      document.getElementById('stage-select')?.addEventListener('change', async (e) => {
+        try {
+          await patch(`/api/cases/${caseId}`, { stage: e.target.value });
+          showToast(`Stage set to: ${e.target.options[e.target.selectedIndex].text}`, 'success');
+        } catch { showToast('Could not update stage', 'error'); }
+      });
+
+      // Save EU fields
+      document.getElementById('btn-save-fields')?.addEventListener('click', async () => {
+        try {
+          await patch(`/api/cases/${caseId}`, { extracted: collectFields(), notes: document.getElementById('f-notes').value });
+          showToast('Fields saved', 'success');
+        } catch { showToast('Save failed', 'error'); }
+      });
+
+      // File upload
+      const input = document.getElementById('file-input');
       document.getElementById('btn-upload')?.addEventListener('click', () => input.click());
       input?.addEventListener('change', async () => {
         for (const file of input.files) {
@@ -242,19 +507,33 @@
         }
         loadCase();
       });
-      document.getElementById('btn-invoice')?.addEventListener('click', async () => {
-        window.location.href = `invoice.html?case=${caseId}`;
-      });
+
+      // OCR extract
       document.getElementById('btn-run-ai')?.addEventListener('click', async () => {
-        try { await post(`/api/cases/${caseId}/parse`, {}); showToast('Fields extracted', 'success'); loadCase(); }
-        catch { showToast('Extraction failed', 'error'); }
+        try {
+          const result = await post(`/api/cases/${caseId}/parse`, {});
+          showToast('Fields extracted from documents', 'success');
+          if (result?.extracted) fillFieldsFromExtracted(result.extracted);
+          else loadCase();
+        } catch { showToast('Extraction failed — check documents', 'error'); }
       });
+
+      // Download form
       document.getElementById('btn-download')?.addEventListener('click', () => {
         window.open(`${API_BASE}/api/cases/${caseId}/form`, '_blank');
       });
+
+      // Advance stage
       document.getElementById('btn-advance')?.addEventListener('click', async () => {
-        try { await post(`/api/cases/${caseId}/advance`, {}); showToast('Stage advanced', 'success'); loadCase(); }
-        catch { showToast('Stage advanced (demo)', 'success'); }
+        const stages = ['documents','payment','processing','review','submitted'];
+        const sel = document.getElementById('stage-select');
+        const idx = stages.indexOf(sel.value);
+        if (idx < stages.length - 1) {
+          sel.value = stages[idx + 1];
+          sel.dispatchEvent(new Event('change'));
+        } else {
+          showToast('Already at final stage', 'success');
+        }
       });
     });
   </script>

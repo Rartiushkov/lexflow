@@ -263,28 +263,69 @@
         const stageCases = normalizedCases.filter(c => c.stage === stage.id);
         const column = document.createElement('section');
         column.className = 'kanban-column';
+        column.dataset.stage = stage.id;
+
+        const body = document.createElement('div');
+        body.className = 'kanban-column-body';
+        body.dataset.stage = stage.id;
+
+        // Drop zone events
+        body.addEventListener('dragover', e => { e.preventDefault(); column.classList.add('kanban-drop-over'); });
+        body.addEventListener('dragleave', e => { if (!column.contains(e.relatedTarget)) column.classList.remove('kanban-drop-over'); });
+        body.addEventListener('drop', async e => {
+          e.preventDefault();
+          column.classList.remove('kanban-drop-over');
+          const caseId = e.dataTransfer.getData('text/plain');
+          const fromStage = e.dataTransfer.getData('from-stage');
+          if (!caseId || fromStage === stage.id) return;
+          try {
+            await patch(`/api/cases/${caseId}`, { stage: stage.id });
+            showToast(`Moved to ${stage.label}`, 'success');
+            const cases = await get('/api/cases');
+            setCaseDirectory(cases);
+            renderDashboard(cases);
+          } catch { showToast('Could not update stage', 'error'); }
+        });
+
         column.innerHTML = `
           <div class="kanban-header">
             <span>${stage.label}</span>
             <span class="kanban-count">${stageCases.length}</span>
           </div>
-          <div class="kanban-column-body">
-            ${stageCases.length ? stageCases.map(c => `
-              <a class="kanban-card" href="case.html?id=${c.id}">
-                <div class="kanban-card-title">${c.client_name}</div>
-                <div class="kanban-card-meta">
-                  <span>${c.destination}</span>
-                  <span>${formatDate(c.created_at)}</span>
-                </div>
-                <div class="kanban-card-tags">
-                  <span class="badge ${stageBadge(c.stage)}">${c.case_type}</span>
-                  <span class="badge badge-gray">${c.doc_count} files</span>
-                  <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Open'}</span>
-                </div>
-              </a>
-            `).join('') : `<div class="kanban-empty">No cases in this stage.</div>`}
-          </div>
         `;
+
+        if (stageCases.length) {
+          stageCases.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'kanban-card';
+            card.draggable = true;
+            card.dataset.id = c.id;
+            card.innerHTML = `
+              <div class="kanban-card-title">${c.client_name}</div>
+              <div class="kanban-card-meta">
+                <span>${c.destination}</span>
+                <span>${formatDate(c.created_at)}</span>
+              </div>
+              <div class="kanban-card-tags">
+                <span class="badge ${stageBadge(c.stage)}">${c.case_type}</span>
+                <span class="badge badge-gray">${c.doc_count} files</span>
+                <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Open'}</span>
+              </div>
+            `;
+            card.addEventListener('dragstart', e => {
+              e.dataTransfer.setData('text/plain', c.id);
+              e.dataTransfer.setData('from-stage', c.stage);
+              card.classList.add('kanban-card-dragging');
+            });
+            card.addEventListener('dragend', () => card.classList.remove('kanban-card-dragging'));
+            card.addEventListener('click', () => { window.location.href = `case.html?id=${c.id}`; });
+            body.appendChild(card);
+          });
+        } else {
+          body.innerHTML = `<div class="kanban-empty">Drop cases here</div>`;
+        }
+
+        column.appendChild(body);
         board.appendChild(column);
 
         const item = document.createElement('div');

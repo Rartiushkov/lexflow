@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=9" />
+  <link rel="stylesheet" href="./styles.css?v=10" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -76,7 +76,10 @@
               <div class="integration-status-value" id="work-email-status-value">Not connected</div>
               <div class="panel-subtitle" id="work-email-status-note">Connect a Gmail inbox to route documents automatically.</div>
             </div>
-            <span class="badge badge-gray" id="work-email-status-badge">offline</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span class="badge badge-gray" id="work-email-status-badge">offline</span>
+              <button class="btn btn-outline btn-sm" id="btn-disconnect-email" style="display:none;color:var(--red);">Disconnect</button>
+            </div>
           </div>
 
           <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
@@ -134,7 +137,7 @@
       </div>
     </div>
   </div>
-  <script src="./app.js?v=9"></script>
+  <script src="./app.js?v=10"></script>
   <script>
     const WORK_EMAIL_CACHE_KEY = 'lexflow_work_email_cache';
 
@@ -154,6 +157,7 @@
       const badge = document.getElementById('work-email-status-badge');
       const value = document.getElementById('work-email-status-value');
       const note = document.getElementById('work-email-status-note');
+      const disconnectBtn = document.getElementById('btn-disconnect-email');
       const live = integrations?.find(item => item.active);
       const cached = readWorkEmailCache();
       const current = live || cached;
@@ -162,6 +166,7 @@
         badge.textContent = 'offline';
         value.textContent = 'Not connected';
         note.textContent = 'Connect a Gmail inbox to route documents automatically.';
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
         return;
       }
       badge.className = 'badge badge-green';
@@ -169,7 +174,11 @@
       value.textContent = current.email || 'Connected inbox';
       note.textContent = current.auth_type === 'oauth'
         ? 'Google OAuth is active for this workspace.'
-        : 'Manual IMAP fallback is saved for this workspace.';
+        : 'Manual IMAP is saved for this workspace.';
+      if (disconnectBtn) {
+        disconnectBtn.style.display = 'inline-flex';
+        disconnectBtn._integrationId = live?.id;
+      }
     }
 
     function restoreManualImapDraft() {
@@ -270,6 +279,21 @@
         const result = await post('/api/gmail/poll', {});
         showToast(`Processed ${result.count} email batch(es)`, 'success');
       });
+      document.getElementById('btn-disconnect-email')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-disconnect-email');
+        const integrationId = btn?._integrationId;
+        try {
+          if (integrationId) await api('DELETE', `/api/email-integrations/${integrationId}`);
+          localStorage.removeItem(WORK_EMAIL_CACHE_KEY);
+          showToast('Work email disconnected', 'success');
+          await loadSettings();
+        } catch {
+          localStorage.removeItem(WORK_EMAIL_CACHE_KEY);
+          showToast('Disconnected locally', 'success');
+          await loadSettings();
+        }
+      });
+
       const params = new URLSearchParams(window.location.search);
       if (params.get('gmail_connected') === '1') {
         showToast('Google work email connected', 'success');
