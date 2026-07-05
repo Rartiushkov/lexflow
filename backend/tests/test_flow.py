@@ -71,6 +71,7 @@ def test_case_creation_appears_in_case_list():
     cases = response.json()
     assert any(item["id"] == case["id"] for item in cases)
     assert case["stage"] == "documents"
+    assert case["priority"] == "medium"
 
 
 def test_schema_compat_error_matches_legacy_supabase_messages():
@@ -505,7 +506,35 @@ def test_case_control_center_moves_to_processing_when_invoice_is_signed():
     assert center.status_code == 200
     payload = center.json()
     assert payload["control_state"]["billing_complete"] is True
+    assert payload["control_state"]["auto_priority"] == "low"
     assert payload["case"]["stage"] == "processing"
+    assert payload["case"]["priority"] == "low"
+
+
+def test_case_control_center_raises_priority_for_review_blocker():
+    reset_state()
+    case = create_case()
+
+    upload = client.post(
+        f"/api/cases/{case['id']}/upload",
+        headers=AUTH,
+        files={"file": ("passport-anna-schmidt.pdf", make_pdf(["Passport", "Name: Anna Schmidt", "Passport number: C12345678"]), "application/pdf")},
+    )
+    assert upload.status_code == 200
+    document_id = upload.json()["document_id"]
+
+    patched = client.patch(
+        f"/api/documents/{document_id}",
+        headers=AUTH,
+        json={"manual_review_required": True},
+    )
+    assert patched.status_code == 200
+
+    center = client.get(f"/api/cases/{case['id']}/control-center", headers=AUTH)
+    assert center.status_code == 200
+    payload = center.json()
+    assert payload["control_state"]["auto_priority"] == "high"
+    assert payload["case"]["priority"] == "high"
 
 
 def test_notifications_endpoint_returns_protocol_alerts():

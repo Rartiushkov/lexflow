@@ -19,6 +19,7 @@ ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS public_notes TEXT;
 ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS public_submission_completed_at TIMESTAMPTZ;
 ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS route_code TEXT;
 ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS control_state JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
 
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS firm_id TEXT REFERENCES public.firms(id) ON DELETE SET NULL;

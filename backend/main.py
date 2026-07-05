@@ -1009,9 +1009,12 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
     route_code = infer_route_code(case)
     requirements = GERMANY_ROUTE_REQUIREMENTS.get(route_code, GERMANY_ROUTE_REQUIREMENTS["EU_GENERAL"])
     typed_docs: dict[str, list[dict]] = {}
+    active_document_count = 0
     for doc in documents:
         doc_type = canonical_document_type(doc.get("document_type", ""), doc.get("name", ""))
         typed_docs.setdefault(doc_type, []).append(doc)
+        if document_is_active(doc):
+            active_document_count += 1
     requirement_states = []
     missing_codes = []
     blocking_missing = []
@@ -1083,6 +1086,39 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
             auto_stage = "processing"
         else:
             auto_stage = "review"
+    high_risk_count = len([flag for flag in risk_flags if flag.get("severity") == "high"])
+    medium_risk_count = len([flag for flag in risk_flags if flag.get("severity") == "medium"])
+    priority_reasons = []
+    auto_priority = "medium"
+    if high_risk_count:
+        auto_priority = "high"
+        priority_reasons.append("Critical risk flags detected in case documents.")
+    elif open_reviews:
+        auto_priority = "high"
+        priority_reasons.append("Manual review items are blocking protocol completion.")
+    elif unrecognized_count:
+        auto_priority = "high"
+        priority_reasons.append("Unrecognized intake files need assignment before progress continues.")
+    elif (case.get("stage") in {"processing", "review", "submitted"} or auto_stage in {"processing", "review", "submitted"}) and not blocking_missing and open_reviews == 0 and billing_complete:
+        auto_priority = "low"
+        priority_reasons.append("Case is structurally clean and moving without blockers.")
+    elif blocking_missing and active_document_count > 0:
+        auto_priority = "medium"
+        priority_reasons.append("Required blocker documents are still missing.")
+    elif latest_invoice and not billing_complete:
+        auto_priority = "medium"
+        priority_reasons.append("Client action is pending on the invoice.")
+    elif duplicate_count:
+        auto_priority = "medium"
+        priority_reasons.append("Duplicate files should be resolved to keep the case clean.")
+    elif medium_risk_count:
+        auto_priority = "medium"
+        priority_reasons.append("Medium protocol risks should be checked by the team.")
+    elif blocking_missing:
+        auto_priority = "medium"
+        priority_reasons.append("Initial document package is still incomplete.")
+    else:
+        priority_reasons.append("Case is in regular active intake.")
     next_step = actions[0]["label"] if actions else "Ready for legal review"
     return {
         "route_code": route_code,
@@ -1097,6 +1133,8 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
         "latest_invoice_id": latest_invoice.get("id") if latest_invoice else None,
         "billing_complete": bool(billing_complete),
         "auto_stage": auto_stage,
+        "auto_priority": auto_priority,
+        "priority_reasons": priority_reasons,
         "next_step": next_step,
         "updated_at": utc_now(),
     }
@@ -1109,8 +1147,14 @@ async def refresh_case_control(case_id: str, *, trigger: str = "system") -> Opti
     docs = await db_get_documents(case_id=case_id)
     invoices = await db_get_invoices(case_id=case_id)
     control_state = build_case_control_state(case, docs, invoices)
-    patch = {"updated_at": utc_now(), "control_state": control_state, "route_code": control_state["route_code"]}
+    patch = {
+        "updated_at": utc_now(),
+        "control_state": control_state,
+        "route_code": control_state["route_code"],
+        "priority": control_state["auto_priority"],
+    }
     previous_stage = case.get("stage", "documents")
+    previous_priority = case.get("priority", "medium")
     if control_state["auto_stage"] != previous_stage:
         patch["stage"] = control_state["auto_stage"]
     updated_case = await db_update_case(case_id, patch) or {**case, **patch}
@@ -1135,6 +1179,23 @@ async def refresh_case_control(case_id: str, *, trigger: str = "system") -> Opti
             message=f"Case moved from {previous_stage} to {patch['stage']} after protocol checks passed.",
             unique_key=f"stage:{case_id}:{patch['stage']}",
             payload={"from": previous_stage, "to": patch["stage"], "trigger": trigger},
+        )
+    if patch.get("priority") and patch["priority"] != previous_priority:
+        await log_case_event(updated_case, "case.priority.auto_updated", {
+            "from": previous_priority,
+            "to": patch["priority"],
+            "trigger": trigger,
+            "route_code": control_state["route_code"],
+        })
+        await create_notification(
+            actor=actor,
+            case=updated_case,
+            severity="info",
+            kind="priority_update",
+            title="Case priority updated",
+            message=f"Case priority changed from {previous_priority} to {patch['priority']} based on protocol signals.",
+            unique_key=f"priority:{case_id}:{patch['priority']}",
+            payload={"from": previous_priority, "to": patch["priority"], "trigger": trigger},
         )
     for action in control_state["actions"]:
         await create_notification(
@@ -1198,6 +1259,7 @@ async def create_case_from_document(sender_email: str, subject: str, fields: dic
         "destination": infer_destination(" ".join(str(value) for value in fields.values())),
         "notes": f"Auto-created from {fields.get('document_type', 'incoming document')}",
         "stage": "documents",
+        "priority": "medium",
         "invoice_paid": False,
         "created_at": utc_now(),
         "updated_at": utc_now(),
@@ -1532,6 +1594,7 @@ async def create_case(req: CreateCase, user: dict = Depends(get_current_user)):
         "destination": req.destination,
         "notes": req.notes,
         "stage": "documents",
+        "priority": "medium",
         "invoice_paid": False,
         "created_at": utc_now(),
         "updated_at": utc_now(),
@@ -1561,6 +1624,7 @@ class UpdateCase(BaseModel):
     case_type: Optional[str] = None
     destination: Optional[str] = None
     stage: Optional[str] = None
+    priority: Optional[str] = None
     notes: Optional[str] = None
     extracted: Optional[dict] = None
     invoice_paid: Optional[bool] = None
@@ -1576,7 +1640,7 @@ async def update_case(case_id: str, req: UpdateCase, user: dict = Depends(get_cu
     patch_data = {k: v for k, v in req.model_dump().items() if v is not None}
     patch_data["updated_at"] = utc_now()
     updated = await db_update_case(case_id, patch_data)
-    if any(key in patch_data for key in ("case_type", "destination", "stage", "invoice_paid", "extracted", "public_notes")):
+    if any(key in patch_data for key in ("case_type", "destination", "stage", "priority", "invoice_paid", "extracted", "public_notes")):
         await refresh_case_control(case_id, trigger="case_patch")
     return updated or {**case, **patch_data}
 

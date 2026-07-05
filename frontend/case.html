@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=13" />
+  <link rel="stylesheet" href="./styles.css?v=14" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -86,6 +86,7 @@
         <div>
           <div class="page-title" id="case-title">Case</div>
           <div class="page-subtitle" id="case-meta">Loading…</div>
+          <div id="case-priority-badge" style="margin-top:10px;"></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <label style="font-size:12px;color:var(--muted);margin-right:2px;">Stage</label>
@@ -302,7 +303,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=12"></script>
+  <script src="./app.js?v=13"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -426,7 +427,7 @@
       const map = {
         high: 'badge-red',
         medium: 'badge-yellow',
-        low: 'badge-blue',
+        low: 'badge-green',
       };
       return map[severity] || 'badge-gray';
     }
@@ -442,8 +443,8 @@
 
       const stats = [
         { label: 'Route', value: routeCode.replaceAll('_', ' ') },
+        { label: 'Priority', value: (center?.case?.priority || state.auto_priority || 'medium').replace('_', ' ') },
         { label: 'Stage', value: (center?.case?.stage || 'documents').replace('_', ' ') },
-        { label: 'Billing', value: state.billing_complete ? 'Complete' : 'Open' },
         { label: 'Next step', value: state.next_step || 'Review case' },
       ];
 
@@ -584,6 +585,8 @@
       document.getElementById('breadcrumb-name').textContent = c.client_name;
       document.getElementById('case-meta').textContent =
         `${c.case_type} · ${c.destination} · ${c.client_email} · opened ${formatDate(c.created_at)}`;
+      const casePriority = (c.priority || c.control_state?.auto_priority || 'medium').toLowerCase();
+      document.getElementById('case-priority-badge').innerHTML = `<span class="badge ${severityBadge(casePriority)}">${casePriority} priority</span>`;
 
       // Stage selector
       const sel = document.getElementById('stage-select');

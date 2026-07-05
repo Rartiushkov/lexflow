@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=13" />
+  <link rel="stylesheet" href="./styles.css?v=14" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -39,14 +39,23 @@
     <div class="page-content">
       <div class="page-header"><div><div class="page-title">All cases</div><div class="page-subtitle">Compact list of open and completed work.</div></div></div>
       <div class="card">
-        <div class="table-row header"><span>Client</span><span>Type</span><span>Country</span><span>Status</span><span>Date</span></div>
+        <div class="table-row header"><span>Client</span><span>Type</span><span>Country</span><span>Workflow</span><span>Priority</span><span>Date</span></div>
         <div id="cases-list"></div>
       </div>
     </div>
   </div>
 
-  <script src="./app.js?v=12"></script>
+  <script src="./app.js?v=13"></script>
   <script>
+    function priorityBadge(priority) {
+      const map = {
+        high: 'badge-red',
+        medium: 'badge-yellow',
+        low: 'badge-green',
+      };
+      return map[priority] || 'badge-gray';
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       const list = document.getElementById('cases-list');
@@ -54,16 +63,17 @@
         const cases = await get('/api/cases');
         setCaseDirectory(cases);
         list.innerHTML = cases.map(c => `
-          <div class="table-row clickable" onclick="window.location='case.html?id=${c.id}'">
+          <div class="table-row clickable case-list-row case-list-row-${(c.priority || c.control_state?.auto_priority || 'medium').toLowerCase()}" onclick="window.location='case.html?id=${c.id}'">
             <span><strong>${c.client_name}</strong></span>
             <span>${c.case_type}</span>
             <span>${c.destination}</span>
             <span><span class="badge badge-${c.stage === 'submitted' ? 'green' : c.stage === 'payment' ? 'yellow' : 'blue'}">${c.stage}</span></span>
+            <span><span class="badge ${priorityBadge((c.priority || c.control_state?.auto_priority || 'medium').toLowerCase())}">${(c.priority || c.control_state?.auto_priority || 'medium').toLowerCase()}</span></span>
             <span>${formatDate(c.created_at)}</span>
           </div>
         `).join('');
       } catch (err) {
-        list.innerHTML = `<div class="table-row"><span>Unable to load cases.</span><span></span><span></span><span></span><span></span></div>`;
+        list.innerHTML = `<div class="table-row"><span>Unable to load cases.</span><span></span><span></span><span></span><span></span><span></span></div>`;
       }
     });
   </script>

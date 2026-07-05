@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=13" />
+  <link rel="stylesheet" href="./styles.css?v=14" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -197,7 +197,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=12"></script>
+  <script src="./app.js?v=13"></script>
   <script>
     // Live date/time in topbar
     (function updateDate() {
@@ -229,6 +229,15 @@
       return map[stageId] || 'badge-gray';
     }
 
+    function priorityBadge(priority) {
+      const map = {
+        high: 'badge-red',
+        medium: 'badge-yellow',
+        low: 'badge-green',
+      };
+      return map[priority] || 'badge-gray';
+    }
+
     function normalizeDashboardCase(c) {
       const localDocs = c.id ? getDocumentsForCase(c.id) : [];
       return {
@@ -237,6 +246,7 @@
         case_type: c.case_type || c.type || 'Work permit',
         destination: c.destination || c.country || 'EU route',
         stage: STAGES.some(stage => stage.id === c.stage) ? c.stage : 'documents',
+        priority: (c.priority || c.control_state?.auto_priority || 'medium').toLowerCase(),
         created_at: c.created_at || new Date().toISOString(),
         invoice_paid: Boolean(c.invoice_paid),
         doc_count: Number(c.doc_count ?? c.docs?.length ?? localDocs.length ?? 0),
@@ -265,7 +275,10 @@
             <em>${c.destination}</em>
           </span>
           <span>${c.case_type}</span>
-          <span><span class="badge ${stageBadge(c.stage)}">${STAGES.find(s => s.id === c.stage)?.label || c.stage}</span></span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="badge ${stageBadge(c.stage)}">${STAGES.find(s => s.id === c.stage)?.label || c.stage}</span>
+            <span class="badge ${priorityBadge(c.priority)}">${c.priority}</span>
+          </span>
           <span>${c.invoice_paid ? 'Paid' : 'Open'}</span>
           <span>${c.doc_count}</span>
           <span>${formatDate(c.created_at)}</span>
@@ -296,9 +309,27 @@
         `;
 
         if (stageCases.length) {
-          stageCases.forEach(c => {
+          const grouped = {
+            high: stageCases.filter(c => c.priority === 'high').sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+            medium: stageCases.filter(c => c.priority === 'medium').sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+            low: stageCases.filter(c => c.priority === 'low').sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+          };
+          ['high', 'medium', 'low'].forEach(level => {
+            const levelCases = grouped[level];
+            if (!levelCases.length) return;
+            const lane = document.createElement('div');
+            lane.className = `kanban-priority-lane priority-${level}`;
+            lane.innerHTML = `
+              <div class="kanban-priority-lane-head">
+                <span>${level.charAt(0).toUpperCase() + level.slice(1)}</span>
+                <span>${levelCases.length}</span>
+              </div>
+            `;
+            const laneBody = document.createElement('div');
+            laneBody.className = 'kanban-priority-lane-body';
+            levelCases.forEach(c => {
             const card = document.createElement('div');
-            card.className = 'kanban-card';
+            card.className = `kanban-card kanban-card-priority-${c.priority}`;
             card.dataset.id = c.id;
             card.dataset.stage = c.stage;
             card.innerHTML = `
@@ -308,6 +339,7 @@
                 <span>${formatDate(c.created_at)}</span>
               </div>
               <div class="kanban-card-tags">
+                <span class="badge ${priorityBadge(c.priority)}">${c.priority}</span>
                 <span class="badge ${stageBadge(c.stage)}">${c.case_type}</span>
                 <span class="badge badge-gray">${c.doc_count} files</span>
                 <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Open'}</span>
@@ -360,7 +392,10 @@
               document.addEventListener('pointermove', onMove);
               document.addEventListener('pointerup', onUp);
             });
-            body.appendChild(card);
+            laneBody.appendChild(card);
+          });
+            lane.appendChild(laneBody);
+            body.appendChild(lane);
           });
         } else {
           body.innerHTML = `<div class="kanban-empty">Drop cases here</div>`;
@@ -384,10 +419,13 @@
       const paymentCount = normalizedCases.filter(c => c.stage === 'payment').length;
       const reviewCount = normalizedCases.filter(c => c.stage === 'review').length;
       const processingCount = normalizedCases.filter(c => c.stage === 'processing').length;
+      const highCount = normalizedCases.filter(c => c.priority === 'high').length;
+      const mediumCount = normalizedCases.filter(c => c.priority === 'medium').length;
+      const lowCount = normalizedCases.filter(c => c.priority === 'low').length;
       const focusItems = [
-        { label: 'Billing follow-up', value: paymentCount, note: 'Cases waiting for payment confirmation.' },
-        { label: 'Document review', value: reviewCount, note: 'Files are ready for final legal check.' },
-        { label: 'Field processing', value: processingCount, note: 'Records currently being prepared.' },
+        { label: 'High priority', value: highCount, note: 'Urgent matters escalated by protocol signals.' },
+        { label: 'Medium priority', value: mediumCount, note: 'Cases needing follow-up but not critical yet.' },
+        { label: 'Low priority', value: lowCount, note: 'Cases moving cleanly through the workflow.' },
       ];
       focusItems.forEach(item => {
         const el = document.createElement('div');

@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS public.cases (
     destination TEXT NOT NULL,
     notes TEXT,
     stage TEXT DEFAULT 'documents',
+    priority TEXT DEFAULT 'medium',
     invoice_paid BOOLEAN DEFAULT FALSE,
     route_code TEXT,
     control_state JSONB DEFAULT '{}'::jsonb,

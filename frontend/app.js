@@ -360,6 +360,7 @@ function setCaseDirectory(cases) {
     case_type: item.case_type || item.type || '',
     destination: item.destination || item.country || '',
     stage: item.stage || 'documents',
+    priority: item.priority || item.control_state?.auto_priority || 'medium',
     created_at: item.created_at || new Date().toISOString(),
   }));
   if (normalized.length) saveCaseDirectory(normalized);
