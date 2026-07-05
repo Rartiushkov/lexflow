@@ -92,6 +92,7 @@
             <option value="review">Ready for review</option>
             <option value="submitted">Submitted</option>
           </select>
+          <button class="btn btn-outline btn-sm" id="btn-advance" style="white-space:nowrap;">Advance →</button>
         </div>
       </div>
 
@@ -260,12 +261,23 @@
             </div>
           </div>
 
-          <!-- Actions -->
+          <!-- Application Form -->
           <div class="card">
-            <div class="card-header"><span class="card-title">Actions</span></div>
-            <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
-              <button class="btn btn-outline btn-sm" style="width:100%;" id="btn-download">Download PDF form</button>
-              <button class="btn btn-outline btn-sm" style="width:100%;" id="btn-advance">Advance stage →</button>
+            <div class="card-header">
+              <div>
+                <span class="card-title">Application form</span>
+                <div class="panel-subtitle" style="margin-top:3px;">Generate PDF from case data</div>
+              </div>
+            </div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+              <div id="form-gen-status" style="font-size:12px;color:var(--muted);">Not yet generated.</div>
+              <button class="btn btn-primary btn-sm" style="width:100%;" id="btn-generate-form">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M10 2v3h3"/></svg>
+                Generate &amp; Download PDF
+              </button>
+              <button class="btn btn-outline btn-sm" style="width:100%;display:none;" id="btn-download-last">
+                Download last generated
+              </button>
             </div>
           </div>
         </div>
@@ -575,9 +587,52 @@
         } catch { showToast('Extraction failed — check documents', 'error'); }
       });
 
-      // Download form
-      document.getElementById('btn-download')?.addEventListener('click', () => {
-        window.open(`${API_BASE}/api/cases/${caseId}/form`, '_blank');
+      // Application Form — generate & download
+      const FORM_KEY = () => `lf_case_form_${caseId}`;
+      function restoreFormStatus() {
+        const saved = localStorage.getItem(FORM_KEY());
+        if (saved) {
+          document.getElementById('form-gen-status').textContent = `Last generated: ${new Date(saved).toLocaleString('en-GB')}`;
+          document.getElementById('btn-download-last').style.display = '';
+          document.getElementById('btn-download-last').onclick = () => {
+            window.open(`${API_BASE}/api/cases/${caseId}/form`, '_blank');
+          };
+        }
+      }
+      restoreFormStatus();
+
+      document.getElementById('btn-generate-form')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-generate-form');
+        const status = document.getElementById('form-gen-status');
+        btn.disabled = true;
+        btn.textContent = 'Generating…';
+        status.textContent = 'Generating PDF…';
+        try {
+          const url = `${API_BASE}/api/cases/${caseId}/form`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+          if (!res.ok) throw new Error(await res.text());
+          const blob = await res.blob();
+          const objUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = objUrl;
+          a.download = `case_${caseId}_form.pdf`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+          const now = new Date().toISOString();
+          localStorage.setItem(FORM_KEY(), now);
+          status.textContent = `Generated: ${new Date(now).toLocaleString('en-GB')}`;
+          document.getElementById('btn-download-last').style.display = '';
+          document.getElementById('btn-download-last').onclick = () => {
+            window.open(url, '_blank');
+          };
+          showToast('Application form downloaded', 'success');
+        } catch (e) {
+          status.textContent = 'Generation failed — check that case fields are filled.';
+          showToast('Form generation failed', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M10 2v3h3"/></svg> Generate &amp; Download PDF';
+        }
       });
 
       // ── Services & Price Builder ──
