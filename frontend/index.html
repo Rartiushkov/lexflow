@@ -7,158 +7,210 @@
   <meta name="description" content="Operational workspace for European immigration law teams, client files, and invoices." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=3" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css?v=5" />
 </head>
-<body class="landing-v2" data-api-base="https://lexflow-backend-y6m3.onrender.com">
-  <div class="landing-v2-aurora" aria-hidden="true"></div>
-
-  <header class="landing-v2-topbar">
-    <a class="landing-v2-brand" href="/index.html">
-      <span class="brand-mark">Lf</span>
-      <span class="landing-v2-brand-name">LexFlow</span>
-    </a>
-    <nav class="landing-v2-nav">
-      <a href="#workflow">Workflow</a>
-      <a href="#system">System</a>
-      <a href="#billing">Billing</a>
-    </nav>
-    <div class="landing-v2-cta">
-      <a href="login.html?switch=1" class="btn btn-primary" id="landing-auth-btn">Open workspace</a>
+<body class="landing-v3" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+  <header class="landing-v3-topbar">
+    <div class="landing-v3-container">
+      <a class="landing-v3-brand" href="/index.html">
+        <span class="landing-v3-brand-mark">Lf</span>
+        <span class="landing-v3-brand-name">LexFlow</span>
+      </a>
+      <nav class="landing-v3-nav">
+        <a href="#product">Product</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#system">System</a>
+        <a href="#billing">Billing</a>
+      </nav>
+      <div class="landing-v3-cta">
+        <a href="login.html?switch=1" class="landing-v3-btn landing-v3-btn-primary" id="landing-auth-btn">Open workspace</a>
+      </div>
     </div>
   </header>
 
-  <main class="landing-v2-main">
-    <section class="landing-v2-hero">
-      <div class="landing-v2-hero-badge">
-        <span class="landing-v2-hero-badge-dot"></span>
-        Legal operations workspace
-      </div>
-      <h1 class="landing-v2-hero-title">
-        LexFlow
-        <span>for immigration casework.</span>
-      </h1>
-      <p class="landing-v2-hero-sub">
-        Case intake, client documents, invoices, and release tracking in one focused cabinet for European immigration teams.
-      </p>
-      <div class="landing-v2-hero-actions">
-        <a href="login.html?switch=1" class="btn btn-primary btn-lg" id="landing-hero-auth-btn">Enter workspace</a>
-        <a href="#system" class="landing-v2-secondary-btn">View structure</a>
-      </div>
-
-      <div class="landing-v2-hero-stage">
-        <div class="landing-v2-hero-stage-bar">
-          <span></span><span></span><span></span>
-          <span class="landing-v2-hero-stage-title">LexFlow workspace</span>
-        </div>
-        <div class="landing-v2-hero-stage-grid">
-          <div class="landing-v2-hero-stage-card">
-            <span>Cases</span>
-            <strong>Opened, tracked, reviewed</strong>
+  <main class="landing-v3-main">
+    <section class="landing-v3-hero">
+      <div class="landing-v3-container">
+        <div class="landing-v3-hero-grid">
+          <div class="landing-v3-hero-copy">
+            <div class="landing-v3-eyebrow">EU Immigration Operations</div>
+            <h1 class="landing-v3-hero-title">The legal workspace for European immigration teams.</h1>
+            <p class="landing-v3-hero-sub">Case intake, client documents, invoices, and release tracking in one focused cabinet. Built for precision, not noise.</p>
+            <div class="landing-v3-hero-actions">
+              <a href="login.html?switch=1" class="landing-v3-btn landing-v3-btn-primary landing-v3-btn-lg" id="landing-hero-auth-btn">Enter workspace</a>
+              <a href="#product" class="landing-v3-btn landing-v3-btn-secondary landing-v3-btn-lg">Explore product</a>
+            </div>
+            <div class="landing-v3-hero-trust">
+              <div class="landing-v3-trust-item">
+                <strong>EU-hosted</strong>
+                <span>Data stays in region</span>
+              </div>
+              <div class="landing-v3-trust-item">
+                <strong>Client portal</strong>
+                <span>One upload link</span>
+              </div>
+              <div class="landing-v3-trust-item">
+                <strong>Built-in billing</strong>
+                <span>Invoice per case</span>
+              </div>
+            </div>
           </div>
-          <div class="landing-v2-hero-stage-card landing-v2-hero-stage-card-accent">
-            <span>Documents</span>
-            <strong>Uploaded & attached</strong>
-          </div>
-          <div class="landing-v2-hero-stage-card">
-            <span>Invoices</span>
-            <strong>Drafted line by line</strong>
-          </div>
-          <div class="landing-v2-hero-stage-card landing-v2-hero-stage-card-wide">
-            <span>Output</span>
-            <strong>Prepared for release with a clear record</strong>
+          <div class="landing-v3-hero-visual">
+            <div class="landing-v3-hero-card">
+              <div class="landing-v3-hero-card-header">
+                <span></span><span></span><span></span>
+                <span class="landing-v3-hero-card-title">LexFlow cabinet</span>
+              </div>
+              <div class="landing-v3-hero-card-body">
+                <div class="landing-v3-hero-card-row">
+                  <span class="landing-v3-hero-card-label">Active cases</span>
+                  <strong>24</strong>
+                </div>
+                <div class="landing-v3-hero-card-row">
+                  <span class="landing-v3-hero-card-label">Awaiting documents</span>
+                  <strong>7</strong>
+                </div>
+                <div class="landing-v3-hero-card-row">
+                  <span class="landing-v3-hero-card-label">Invoices pending</span>
+                  <strong>3</strong>
+                </div>
+                <div class="landing-v3-hero-card-bar">
+                  <span style="width: 68%;"></span>
+                </div>
+                <div class="landing-v3-hero-card-footer">Stage load: review</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="landing-v2-section" id="workflow">
-      <div class="landing-v2-section-inner">
-        <span class="landing-v2-section-label">Workflow</span>
-        <h2 class="landing-v2-section-title">A strict operational path from opening to release.</h2>
-        <p class="landing-v2-section-desc">Every step stays visible, compact, and reviewable across files, billing, and status changes.</p>
-        <div class="landing-v2-steps">
-          <div class="landing-v2-step">
-            <div class="landing-v2-step-num">01</div>
-            <strong>Open matter</strong>
+    <section class="landing-v3-section" id="product">
+      <div class="landing-v3-container">
+        <div class="landing-v3-section-head">
+          <span class="landing-v3-section-eyebrow">Product</span>
+          <h2 class="landing-v3-section-title">Everything in one cabinet.</h2>
+          <p class="landing-v3-section-desc">No switching between tools. Cases, documents, billing, and status live in a single restrained workspace.</p>
+        </div>
+        <div class="landing-v3-features">
+          <article class="landing-v3-feature">
+            <div class="landing-v3-feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </div>
+            <h3>Case files</h3>
+            <p>One record per matter. Route, status, notes, and documents stay together from open to release.</p>
+          </article>
+          <article class="landing-v3-feature">
+            <div class="landing-v3-feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </div>
+            <h3>Client portal</h3>
+            <p>Share a secure link. Clients upload scans and contracts without touching your workspace.</p>
+          </article>
+          <article class="landing-v3-feature">
+            <div class="landing-v3-feature-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
+            </div>
+            <h3>Built-in billing</h3>
+            <p>Draft invoices, adjust line items, track payment status, and preview documents inside the case.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-v3-section landing-v3-section-alt" id="workflow">
+      <div class="landing-v3-container">
+        <div class="landing-v3-section-head">
+          <span class="landing-v3-section-eyebrow">Workflow</span>
+          <h2 class="landing-v3-section-title">A strict path from opening to release.</h2>
+          <p class="landing-v3-section-desc">Every step stays visible and reviewable across files, billing, and status.</p>
+        </div>
+        <div class="landing-v3-steps">
+          <div class="landing-v3-step">
+            <div class="landing-v3-step-num">01</div>
+            <h3>Open matter</h3>
             <p>Create a case and assign the route.</p>
           </div>
-          <div class="landing-v2-step">
-            <div class="landing-v2-step-num">02</div>
-            <strong>Collect records</strong>
-            <p>Use one client portal for files.</p>
+          <div class="landing-v3-step">
+            <div class="landing-v3-step-num">02</div>
+            <h3>Collect records</h3>
+            <p>Client uploads via the portal.</p>
           </div>
-          <div class="landing-v2-step">
-            <div class="landing-v2-step-num">03</div>
-            <strong>Prepare billing</strong>
+          <div class="landing-v3-step">
+            <div class="landing-v3-step-num">03</div>
+            <h3>Prepare billing</h3>
             <p>Issue the invoice and track payment.</p>
           </div>
-          <div class="landing-v2-step">
-            <div class="landing-v2-step-num">04</div>
-            <strong>Review release</strong>
-            <p>Check the file and move it forward.</p>
+          <div class="landing-v3-step">
+            <div class="landing-v3-step-num">04</div>
+            <h3>Review release</h3>
+            <p>Check the file and move forward.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="landing-v2-section" id="system">
-      <div class="landing-v2-section-inner">
-        <span class="landing-v2-section-label">System</span>
-        <h2 class="landing-v2-section-title">Built for focused legal operations.</h2>
-        <div class="landing-v2-cards">
-          <article class="landing-v2-card landing-v2-card-wide">
-            <div class="landing-v2-card-label">Cabinet</div>
+    <section class="landing-v3-section" id="system">
+      <div class="landing-v3-container">
+        <div class="landing-v3-section-head">
+          <span class="landing-v3-section-eyebrow">System</span>
+          <h2 class="landing-v3-section-title">Built for daily operations.</h2>
+          <p class="landing-v3-section-desc">Four connected modules that keep the office moving without clutter.</p>
+        </div>
+        <div class="landing-v3-system-grid">
+          <article class="landing-v3-system-card">
+            <div class="landing-v3-system-label">Cabinet</div>
             <h3>Operational dashboard</h3>
-            <p>Main queue, stage load, and focus actions stay in one restrained workspace built for daily legal operations.</p>
+            <p>Main queue, stage load, and focus actions in one workspace.</p>
           </article>
-          <article class="landing-v2-card">
-            <div class="landing-v2-card-label">Portal</div>
+          <article class="landing-v3-system-card">
+            <div class="landing-v3-system-label">Portal</div>
             <h3>Client upload flow</h3>
-            <p>One controlled entry point for scans, contracts, and supporting records.</p>
+            <p>Controlled entry point for scans and contracts.</p>
           </article>
-          <article class="landing-v2-card">
-            <div class="landing-v2-card-label">Billing</div>
+          <article class="landing-v3-system-card">
+            <div class="landing-v3-system-label">Billing</div>
             <h3>Invoice constructor</h3>
-            <p>Editable line items, dates, totals, and document preview in one billing screen.</p>
+            <p>Editable line items, dates, totals, and preview.</p>
           </article>
-          <article class="landing-v2-card">
-            <div class="landing-v2-card-label">Control</div>
-            <h3>Clear status logic</h3>
-            <p>Documents, payment, processing, review, and submitted status remain explicit.</p>
+          <article class="landing-v3-system-card">
+            <div class="landing-v3-system-label">Control</div>
+            <h3>Status logic</h3>
+            <p>Documents, payment, review, and submitted status explicit.</p>
           </article>
-          <article class="landing-v2-card landing-v2-card-wide">
-            <div class="landing-v2-card-label">Security</div>
+          <article class="landing-v3-system-card landing-v3-system-card-wide">
+            <div class="landing-v3-system-label">Security</div>
             <h3>EU-processed data</h3>
-            <p>Client documents and case records are handled within the EU data boundary.</p>
+            <p>Client documents and case records handled within the EU data boundary.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section class="landing-v2-section" id="billing">
-      <div class="landing-v2-section-inner">
-        <div class="landing-v2-billing">
-          <div class="landing-v2-billing-copy">
-            <span class="landing-v2-section-label">Billing</span>
-            <h2 class="landing-v2-section-title">Invoices belong inside the case system, not beside it.</h2>
-            <p class="landing-v2-section-desc">Build the invoice, add or remove lines, store draft versions, and open the record directly from the workspace.</p>
-            <a href="login.html?switch=1" class="btn btn-primary btn-lg">Enter workspace</a>
+    <section class="landing-v3-section landing-v3-section-alt" id="billing">
+      <div class="landing-v3-container">
+        <div class="landing-v3-billing">
+          <div class="landing-v3-billing-copy">
+            <span class="landing-v3-section-eyebrow">Billing</span>
+            <h2 class="landing-v3-section-title">Invoices belong inside the case.</h2>
+            <p class="landing-v3-section-desc">Build the invoice, add or remove lines, store drafts, and open the record directly from the workspace.</p>
+            <a href="login.html?switch=1" class="landing-v3-btn landing-v3-btn-primary landing-v3-btn-lg">Enter workspace</a>
           </div>
-          <div class="landing-v2-billing-aside">
-            <div class="landing-v2-billing-metric">
+          <div class="landing-v3-billing-panel">
+            <div class="landing-v3-billing-row">
               <span>Editable rows</span>
               <strong>Yes</strong>
             </div>
-            <div class="landing-v2-billing-metric">
+            <div class="landing-v3-billing-row">
               <span>Draft or paid states</span>
               <strong>Tracked</strong>
             </div>
-            <div class="landing-v2-billing-metric">
+            <div class="landing-v3-billing-row">
               <span>Direct invoice page</span>
               <strong>Openable</strong>
             </div>
-            <div class="landing-v2-billing-metric">
+            <div class="landing-v3-billing-row">
               <span>Document preview</span>
               <strong>Built-in</strong>
             </div>
@@ -167,18 +219,30 @@
       </div>
     </section>
 
-    <footer class="landing-v2-footer">
-      <div class="landing-v2-footer-inner">
-        <div class="landing-v2-brand">
-          <span class="brand-mark">Lf</span>
-          <span class="landing-v2-brand-name">LexFlow</span>
+    <section class="landing-v3-cta">
+      <div class="landing-v3-container">
+        <div class="landing-v3-cta-inner">
+          <h2>Start with a controlled case workflow.</h2>
+          <p>Get the team on one system for intake, documents, and billing.</p>
+          <a href="login.html?switch=1" class="landing-v3-btn landing-v3-btn-primary landing-v3-btn-lg">Open workspace</a>
         </div>
-        <span class="landing-v2-footer-copy">Documents processed within the EU.</span>
+      </div>
+    </section>
+
+    <footer class="landing-v3-footer">
+      <div class="landing-v3-container">
+        <div class="landing-v3-footer-inner">
+          <div class="landing-v3-brand">
+            <span class="landing-v3-brand-mark">Lf</span>
+            <span class="landing-v3-brand-name">LexFlow</span>
+          </div>
+          <span class="landing-v3-footer-copy">Documents processed within the EU.</span>
+        </div>
       </div>
     </footer>
   </main>
 
-  <script src="./app.js?v=3"></script>
+  <script src="./app.js?v=5"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const user = await syncSessionFromSupabase();
