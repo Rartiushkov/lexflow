@@ -867,8 +867,26 @@
     if (!confirm('Delete this template?')) return;
     const tpls = getTemplates().filter(t => t.id !== id);
     saveTemplates(tpls);
+    // Also remove the converted copy from lexflow_invoice_templates
+    try {
+      const INV_KEY = 'lexflow_invoice_templates';
+      const invTpls = JSON.parse(localStorage.getItem(INV_KEY) || '[]');
+      const cleaned = invTpls.filter(t => t.id !== id);
+      if (cleaned.length !== invTpls.length) localStorage.setItem(INV_KEY, JSON.stringify(cleaned));
+    } catch {}
+    if (activeTemplateId === id) activeTemplateId = null;
     renderTemplatesList();
     showToast('Template deleted', 'info');
+  }
+
+  function purgeOrphanInvoiceTemplates() {
+    try {
+      const builderIds = new Set(getTemplates().map(t => t.id));
+      const INV_KEY = 'lexflow_invoice_templates';
+      const invTpls = JSON.parse(localStorage.getItem(INV_KEY) || '[]');
+      const cleaned = invTpls.filter(t => !t._from_builder || builderIds.has(t.id));
+      if (cleaned.length !== invTpls.length) localStorage.setItem(INV_KEY, JSON.stringify(cleaned));
+    } catch {}
   }
 
   // ── Save-as-template modal ──
@@ -946,6 +964,7 @@
   // ── Init ──
   document.addEventListener('DOMContentLoaded', async () => {
     await requireAuth();
+    purgeOrphanInvoiceTemplates();
     const saved = loadBlocks();
     if (saved && saved.length) {
       blocks = saved;
