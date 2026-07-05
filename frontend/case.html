@@ -473,8 +473,9 @@
           // url = R2 private URL — must go through proxy
           const localUrl = d.data_url || '';
           const docId = d.document_id || d.id || '';
-          const canPreview = !!(localUrl || docId);
-          _docMap[i] = { url: localUrl, name: d.name, docId };
+          const docKey = d.key || '';
+          const canPreview = !!(localUrl || docId || docKey);
+          _docMap[i] = { url: localUrl, name: d.name, docId, docKey };
           return `
           <div class="table-row case-doc-row" style="grid-template-columns:1fr 100px 80px auto;">
             <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${d.name}</div>
@@ -490,19 +491,23 @@
         // Preview buttons
         list.querySelectorAll('[data-preview-idx]').forEach(btn => {
           btn.addEventListener('click', async () => {
-            let { url, name, docId } = _docMap[+btn.dataset.previewIdx] || {};
+            let { url, name, docId, docKey } = _docMap[+btn.dataset.previewIdx] || {};
             let mimeType = '';
-            if (!url && docId) {
-              // Stream via backend proxy to avoid R2 auth errors
+            if (!url && (docKey || docId)) {
+              // Stream via backend proxy to avoid R2 private auth errors
               try {
                 const token = getToken();
-                const res = await fetch(`${API_BASE}/api/documents/${docId}/download`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                });
+                const endpoint = docKey
+                  ? `${API_BASE}/api/cases/${caseId}/stream/${encodeURIComponent(docKey)}`
+                  : `${API_BASE}/api/documents/${docId}/download`;
+                const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
                 if (res.ok) {
                   const blob = await res.blob();
                   mimeType = blob.type || '';
                   url = URL.createObjectURL(blob);
+                } else if (docKey && docId) {
+                  const res2 = await fetch(`${API_BASE}/api/documents/${docId}/download`, { headers: { Authorization: `Bearer ${token}` } });
+                  if (res2.ok) { const b = await res2.blob(); mimeType = b.type; url = URL.createObjectURL(b); }
                 }
               } catch {}
             }

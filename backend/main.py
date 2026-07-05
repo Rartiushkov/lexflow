@@ -1260,26 +1260,41 @@ async def delete_document(document_id: str, user: dict = Depends(get_current_use
     return {"deleted": True, "id": document_id}
 
 
+async def _stream_r2_key(key: str, name: str, content_type: str = "application/octet-stream"):
+    if not USE_R2 or not key:
+        raise HTTPException(status_code=404, detail="File not available")
+    try:
+        obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
+        content = obj["Body"].read()
+        ct = content_type or obj.get("ContentType") or "application/octet-stream"
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type=ct,
+            headers={"Content-Disposition": f'inline; filename="{name}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"R2 fetch failed: {e}")
+
+
 @app.get("/api/documents/{document_id}/download")
 async def download_document(document_id: str, user: dict = Depends(get_current_user)):
     doc = await db_get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    key = doc.get("key", "")
-    if USE_R2 and key:
-        try:
-            obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
-            content = obj["Body"].read()
-            content_type = doc.get("content_type") or obj.get("ContentType") or "application/octet-stream"
-            filename = doc.get("name", key.split("/")[-1])
-            return StreamingResponse(
-                io.BytesIO(content),
-                media_type=content_type,
-                headers={"Content-Disposition": f'inline; filename="{filename}"'},
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"R2 fetch failed: {e}")
-    raise HTTPException(status_code=404, detail="File not available")
+    return await _stream_r2_key(doc.get("key", ""), doc.get("name", "document"), doc.get("content_type", ""))
+
+
+@app.get("/api/cases/{case_id}/stream/{doc_key:path}")
+async def stream_case_document(case_id: str, doc_key: str, user: dict = Depends(get_current_user)):
+    case = await db_get_case(case_id)
+    if not case or not record_belongs_to_actor(case, await ensure_actor_context(user)):
+        raise HTTPException(status_code=404, detail="Case not found")
+    doc_entry = next((d for d in case.get("docs", []) if d.get("key") == doc_key), None)
+    if not doc_entry:
+        raise HTTPException(status_code=404, detail="Document not found in case")
+    name = doc_entry.get("name", doc_key.split("/")[-1])
+    ct = doc_entry.get("content_type", "application/octet-stream")
+    return await _stream_r2_key(doc_key, name, ct)
 
 
 @app.delete("/api/cases/{case_id}/documents/{document_ref:path}")
