@@ -656,6 +656,24 @@ body.dashboard {
   background: var(--bg);
   display: flex;
   min-height: 100vh;
+  position: relative;
+}
+
+body.dashboard::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(14,14,16,0.91) 0%, rgba(14,14,16,0.88) 100%),
+    url("./assets/dashboard-bg.png") center center / cover no-repeat;
+  pointer-events: none;
+}
+
+body.dashboard .sidebar,
+body.dashboard .dashboard-main {
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar {
