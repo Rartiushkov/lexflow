@@ -175,6 +175,11 @@ async function signOutSupabaseSession() {
   } catch {}
 }
 
+async function resetAllSessions() {
+  await signOutSupabaseSession();
+  clearSession();
+}
+
 // ─── API helpers ─────────────────────────────────────────
 async function api(method, path, body) {
   const url = `${API_BASE}${path}`;
@@ -676,8 +681,7 @@ function bindSignout() {
   ids.forEach(id => {
     const btn = document.getElementById(id);
     if (btn) btn.addEventListener('click', async () => {
-      await signOutSupabaseSession();
-      clearSession();
+      await resetAllSessions();
       window.location.href = 'login.html';
     });
   });

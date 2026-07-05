@@ -45,6 +45,7 @@
 
     <p class="auth-footer">
       Google login is recommended for staff. Email/password stays available as fallback.<br>
+      <a href="login.html?switch=1" style="color:var(--navy);">Use another account</a><br>
       <a href="index.html" style="color:var(--navy);">Back to landing</a>
     </p>
   </div>
@@ -52,6 +53,7 @@
   <script src="./app.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
       const googleBtn = document.getElementById('btn-google');
       const errorBox = document.getElementById('auth-error');
       const showError = (message) => {
@@ -62,6 +64,13 @@
         errorBox.textContent = '';
         errorBox.classList.remove('visible');
       };
+
+      if (params.get('switch') === '1') {
+        await resetAllSessions();
+        params.delete('switch');
+        const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, document.title, next);
+      }
 
       await requireGuest();
       const oauthUser = await syncSessionFromSupabase();
