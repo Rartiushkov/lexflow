@@ -1,5 +1,6 @@
 import base64
 import email
+import html
 import hashlib
 import hmac
 import imaplib
@@ -104,6 +105,7 @@ memory_evaluations: dict[str, dict] = {}
 memory_profiles: dict[str, dict] = {}
 memory_firms: dict[str, dict] = {}
 memory_email_integrations: dict[str, dict] = {}
+memory_notifications: dict[str, dict] = {}
 
 
 def utc_now():
@@ -193,7 +195,14 @@ def mask_integration(row: dict) -> dict:
 
 
 def strip_unsupported_case_fields(data: dict) -> dict:
-    unsupported = {"firm_id", "portal_url", "public_notes", "public_submission_completed_at"}
+    unsupported = {
+        "firm_id",
+        "portal_url",
+        "public_notes",
+        "public_submission_completed_at",
+        "route_code",
+        "control_state",
+    }
     return {key: value for key, value in data.items() if key not in unsupported}
 
 
@@ -607,6 +616,55 @@ async def db_get_email_integrations(*, lawyer_id: Optional[str] = None, firm_id:
     return sorted(rows, key=lambda item: item.get("created_at", ""), reverse=True)
 
 
+async def db_create_audit_event(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("audit_events").insert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase audit event insert failed: {e}")
+    return data
+
+
+async def db_upsert_notification(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("notifications").upsert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase notification upsert failed: {e}")
+    memory_notifications[data["id"]] = data
+    return data
+
+
+async def db_get_notifications(*, firm_id: Optional[str] = None, lawyer_id: Optional[str] = None, case_id: Optional[str] = None, unread_only: bool = False) -> list:
+    if USE_SUPABASE:
+        try:
+            query = supabase_client.table("notifications").select("*").order("created_at", desc=True)
+            if firm_id:
+                query = query.eq("firm_id", firm_id)
+            if lawyer_id:
+                query = query.eq("lawyer_id", lawyer_id)
+            if case_id:
+                query = query.eq("case_id", case_id)
+            if unread_only:
+                query = query.eq("read_at", None)
+            res = query.execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase notification select failed: {e}")
+    rows = list(memory_notifications.values())
+    if firm_id:
+        rows = [item for item in rows if item.get("firm_id") == firm_id]
+    if lawyer_id:
+        rows = [item for item in rows if item.get("lawyer_id") == lawyer_id]
+    if case_id:
+        rows = [item for item in rows if item.get("case_id") == case_id]
+    if unread_only:
+        rows = [item for item in rows if not item.get("read_at")]
+    return sorted(rows, key=lambda item: item.get("created_at", ""), reverse=True)
+
+
 # ─── File storage helpers ───────────────────────────────
 async def upload_file(case_id: str, file: UploadFile, source: str = "portal") -> dict:
     ext = Path(file.filename or "document.pdf").suffix
@@ -636,7 +694,7 @@ def delete_r2_object(key: str):
             print(f"R2 delete failed: {e}")
 
 
-def send_email_message(to_email: str, subject: str, body: str) -> dict:
+def send_email_message(to_email: str, subject: str, body: str, html_body: Optional[str] = None) -> dict:
     if not USE_SMTP:
         return {
             "sent": False,
@@ -648,6 +706,8 @@ def send_email_message(to_email: str, subject: str, body: str) -> dict:
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
             smtp.starttls()
@@ -656,7 +716,97 @@ def send_email_message(to_email: str, subject: str, body: str) -> dict:
         return {"sent": True, "status": "sent"}
     except Exception as e:
         print(f"SMTP send failed: {e}")
-        raise HTTPException(status_code=502, detail="Invoice email failed")
+        raise HTTPException(status_code=502, detail="Email delivery failed")
+
+
+def build_portal_invite_email(case_item: dict, portal_url: str, custom_message: str = "") -> tuple[str, str]:
+    client_name = case_item.get("client_name") or "Client"
+    case_type = case_item.get("case_type") or "Immigration case"
+    destination = case_item.get("destination") or "Germany"
+    escaped_name = html.escape(client_name)
+    escaped_case = html.escape(case_type)
+    escaped_destination = html.escape(destination)
+    escaped_url = html.escape(portal_url, quote=True)
+    message_text = (custom_message or "").strip()
+    escaped_message = html.escape(message_text).replace("\n", "<br/>")
+
+    text_body = (
+        f"Hello {client_name},\n\n"
+        f"Please use your secure LexFlow portal to upload documents for your {case_type} case"
+        f" ({destination}).\n\n"
+        f"Open your portal:\n{portal_url}\n\n"
+        "What you can do there:\n"
+        "- upload missing files\n"
+        "- review invoice status\n"
+        "- leave notes for the legal team\n\n"
+    )
+    if message_text:
+        text_body += f"Message from your legal team:\n{message_text}\n\n"
+    text_body += "Best regards,\nLexFlow"
+
+    message_block = ""
+    if message_text:
+        message_block = f"""
+          <div style="margin:0 0 24px;padding:16px 18px;border:1px solid #dbe5f1;border-radius:16px;background:#f7fafc;">
+            <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5f6f85;margin:0 0 8px;">Message from your legal team</div>
+            <div style="font-size:14px;line-height:1.7;color:#334155;">{escaped_message}</div>
+          </div>
+        """
+
+    html_body = f"""\
+<!DOCTYPE html>
+<html lang="en">
+  <body style="margin:0;padding:32px 16px;background:#f3f7fb;font-family:Inter,Segoe UI,Arial,sans-serif;color:#14213d;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;border-collapse:collapse;">
+            <tr>
+              <td style="padding:0 0 16px;">
+                <div style="display:inline-flex;align-items:center;gap:10px;">
+                  <span style="display:inline-flex;width:36px;height:36px;border-radius:12px;background:#2563eb;color:#ffffff;font-size:15px;font-weight:800;align-items:center;justify-content:center;">Lf</span>
+                  <span style="font-size:18px;font-weight:700;color:#0f172a;">LexFlow</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#ffffff;border:1px solid #dbe5f1;border-radius:28px;padding:32px;box-shadow:0 18px 60px rgba(15,23,42,0.08);">
+                <div style="display:inline-block;padding:8px 12px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Secure client portal</div>
+                <h1 style="margin:18px 0 10px;font-size:30px;line-height:1.2;color:#0f172a;">Upload documents for your case</h1>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#475569;">
+                  Hello {escaped_name}, your legal team prepared a secure LexFlow link for your
+                  <strong>{escaped_case}</strong> case in <strong>{escaped_destination}</strong>.
+                </p>
+
+                <div style="margin:0 0 24px;padding:18px 20px;border:1px solid #dbe5f1;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);">
+                  <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5f6f85;margin:0 0 10px;">What you can do</div>
+                  <div style="font-size:14px;line-height:1.7;color:#334155;">Upload requested documents, check invoice status, and leave a note for the legal team in one place.</div>
+                </div>
+
+                {message_block}
+
+                <div style="margin:0 0 24px;text-align:center;">
+                  <a href="{escaped_url}" style="display:inline-block;padding:15px 28px;border-radius:16px;background:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open secure upload page</a>
+                </div>
+
+                <div style="margin:0 0 24px;padding:16px 18px;border:1px solid #dbe5f1;border-radius:16px;background:#f8fafc;">
+                  <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5f6f85;margin:0 0 8px;">Direct link</div>
+                  <div style="font-size:13px;line-height:1.7;color:#2563eb;word-break:break-all;">{escaped_url}</div>
+                </div>
+
+                <p style="margin:0;font-size:13px;line-height:1.7;color:#64748b;">
+                  If something is unclear, reply to this email and your legal team will guide you.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+    return text_body, html_body
 
 
 # ─── OCR helpers ────────────────────────────────────────
@@ -717,6 +867,300 @@ async def store_extraction_evaluation(case_id: str, document_id: str, fields: di
     return row
 
 
+DOCUMENT_TYPE_ALIASES = {
+    "passport": "passport",
+    "residence_permit": "residence_permit",
+    "employment": "employment_contract",
+    "qualification": "qualification",
+    "recognition_notice": "recognition_notice",
+    "health_insurance": "health_insurance",
+    "financial_proof": "financial_proof",
+    "marriage_certificate": "marriage_certificate",
+    "birth_certificate": "birth_certificate",
+    "language_certificate": "language_certificate",
+    "questionnaire": "questionnaire",
+    "power_of_attorney": "power_of_attorney",
+    "invoice": "invoice",
+}
+
+
+GERMANY_ROUTE_REQUIREMENTS = {
+    "DE_BLUE_CARD": [
+        {"code": "passport", "label": "Passport", "doc_types": ["passport"], "blocker": True},
+        {"code": "employment", "label": "Employment contract or job offer", "doc_types": ["employment_contract"], "blocker": True},
+        {"code": "qualification", "label": "Degree or qualification proof", "doc_types": ["qualification"], "blocker": True},
+        {"code": "health", "label": "Health insurance", "doc_types": ["health_insurance"], "blocker": True},
+    ],
+    "DE_SKILLED_WORKER": [
+        {"code": "passport", "label": "Passport", "doc_types": ["passport"], "blocker": True},
+        {"code": "employment", "label": "Employment contract or job offer", "doc_types": ["employment_contract"], "blocker": True},
+        {"code": "qualification", "label": "Recognised qualification", "doc_types": ["qualification", "recognition_notice"], "blocker": True},
+        {"code": "health", "label": "Health insurance", "doc_types": ["health_insurance"], "blocker": True},
+    ],
+    "DE_FAMILY_REUNIFICATION_SPOUSE": [
+        {"code": "passport", "label": "Passport", "doc_types": ["passport"], "blocker": True},
+        {"code": "marriage", "label": "Marriage certificate", "doc_types": ["marriage_certificate"], "blocker": True},
+        {"code": "housing", "label": "Housing or rental evidence", "doc_types": ["financial_proof"], "blocker": True},
+        {"code": "income", "label": "Payslips or financial evidence", "doc_types": ["financial_proof"], "blocker": True},
+    ],
+    "DE_RECOGNITION": [
+        {"code": "passport", "label": "Passport", "doc_types": ["passport"], "blocker": True},
+        {"code": "recognition_notice", "label": "Recognition notice", "doc_types": ["recognition_notice"], "blocker": True},
+        {"code": "qualification", "label": "Qualification evidence", "doc_types": ["qualification"], "blocker": True},
+        {"code": "language", "label": "Language certificate", "doc_types": ["language_certificate"], "blocker": True},
+        {"code": "funds", "label": "Proof of funds", "doc_types": ["financial_proof"], "blocker": True},
+        {"code": "health", "label": "Health insurance", "doc_types": ["health_insurance"], "blocker": True},
+    ],
+    "EU_GENERAL": [
+        {"code": "passport", "label": "Passport", "doc_types": ["passport"], "blocker": True},
+        {"code": "questionnaire", "label": "Client questionnaire", "doc_types": ["questionnaire"], "blocker": False},
+    ],
+}
+
+
+def canonical_document_type(raw_type: str, filename: str = "") -> str:
+    normalized = DOCUMENT_TYPE_ALIASES.get(raw_type or "", raw_type or "unknown")
+    if normalized != "unknown":
+        return normalized
+    lookup = normalize_lookup(filename)
+    keyword_map = {
+        "marriage": "marriage_certificate",
+        "heirat": "marriage_certificate",
+        "birth": "birth_certificate",
+        "geburt": "birth_certificate",
+        "insurance": "health_insurance",
+        "kranken": "health_insurance",
+        "diploma": "qualification",
+        "degree": "qualification",
+        "recognition": "recognition_notice",
+        "anerkennung": "recognition_notice",
+        "salary": "financial_proof",
+        "payslip": "financial_proof",
+        "bank": "financial_proof",
+        "questionnaire": "questionnaire",
+        "vollmacht": "power_of_attorney",
+        "power attorney": "power_of_attorney",
+        "contract": "employment_contract",
+        "job offer": "employment_contract",
+    }
+    for keyword, doc_type in keyword_map.items():
+        if keyword in lookup:
+            return doc_type
+    return "unknown"
+
+
+def infer_route_code(case: dict) -> str:
+    case_type = (case.get("case_type") or "").lower()
+    destination = (case.get("destination") or "").lower()
+    if "germany" in destination or "deutschland" in destination:
+        if "blue card" in case_type:
+            return "DE_BLUE_CARD"
+        if "family" in case_type or "spouse" in case_type or "reunion" in case_type:
+            return "DE_FAMILY_REUNIFICATION_SPOUSE"
+        if "recognition" in case_type:
+            return "DE_RECOGNITION"
+        return "DE_SKILLED_WORKER"
+    return "EU_GENERAL"
+
+
+def document_is_active(doc: dict) -> bool:
+    return doc.get("status") not in {"duplicate", "archived"}
+
+
+def document_is_review_blocked(doc: dict) -> bool:
+    return doc.get("status") in {"needs_review"} or bool(doc.get("manual_review_required"))
+
+
+def make_notification_id(unique_key: str) -> str:
+    return hashlib.sha256(unique_key.encode("utf-8")).hexdigest()[:24]
+
+
+async def create_notification(*, actor: dict, case: dict, severity: str, title: str, message: str, kind: str, unique_key: str, payload: Optional[dict] = None):
+    notification = {
+        "id": make_notification_id(unique_key),
+        "lawyer_id": case.get("lawyer_id") or actor["user"]["id"],
+        "firm_id": case.get("firm_id") or actor["firm"]["id"],
+        "case_id": case.get("id"),
+        "severity": severity,
+        "kind": kind,
+        "title": title,
+        "message": message,
+        "payload": payload or {},
+        "read_at": None,
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    await db_upsert_notification(notification)
+    return notification
+
+
+async def log_case_event(case: dict, action: str, payload: Optional[dict] = None):
+    await db_create_audit_event({
+        "lawyer_id": case.get("lawyer_id"),
+        "firm_id": case.get("firm_id"),
+        "case_id": case.get("id"),
+        "action": action,
+        "payload": payload or {},
+        "created_at": utc_now(),
+    })
+
+
+def build_case_control_state(case: dict, documents: list[dict], invoices: list[dict]) -> dict:
+    route_code = infer_route_code(case)
+    requirements = GERMANY_ROUTE_REQUIREMENTS.get(route_code, GERMANY_ROUTE_REQUIREMENTS["EU_GENERAL"])
+    typed_docs: dict[str, list[dict]] = {}
+    for doc in documents:
+        doc_type = canonical_document_type(doc.get("document_type", ""), doc.get("name", ""))
+        typed_docs.setdefault(doc_type, []).append(doc)
+    requirement_states = []
+    missing_codes = []
+    blocking_missing = []
+    open_reviews = 0
+    risk_flags = []
+    actions = []
+    passport_numbers = {
+        item.get("extracted", {}).get("passport_number")
+        for item in typed_docs.get("passport", [])
+        if item.get("extracted", {}).get("passport_number")
+    }
+    if len(passport_numbers) > 1:
+        risk_flags.append({"code": "identity_conflict", "severity": "high", "message": "Multiple passport numbers detected across uploaded passport files."})
+    for requirement in requirements:
+        matched_docs = [
+            doc for doc_type in requirement["doc_types"]
+            for doc in typed_docs.get(doc_type, [])
+            if document_is_active(doc)
+        ]
+        review_docs = [doc for doc in matched_docs if document_is_review_blocked(doc)]
+        if matched_docs and not review_docs:
+            state = "complete"
+        elif matched_docs:
+            state = "needs_review"
+            open_reviews += 1
+        else:
+            state = "missing"
+            missing_codes.append(requirement["code"])
+            if requirement["blocker"]:
+                blocking_missing.append(requirement["code"])
+        requirement_states.append({
+            "code": requirement["code"],
+            "label": requirement["label"],
+            "state": state,
+            "blocker": requirement["blocker"],
+            "document_ids": [doc.get("id") for doc in matched_docs],
+        })
+    for doc in documents:
+        extracted = doc.get("extracted", {}) or {}
+        confidence = float(extracted.get("confidence") or extracted.get("ocr_confidence") or 0)
+        if confidence and confidence < 0.55 and document_is_active(doc):
+            risk_flags.append({"code": f"quality:{doc['id']}", "severity": "medium", "message": f"{doc.get('name')} is low-quality and needs manual review."})
+        expiry = parse_date(extracted.get("expiry_date", ""))
+        if expiry:
+            days_left = (expiry - datetime.now(timezone.utc).date()).days
+            if days_left <= 0:
+                risk_flags.append({"code": f"expired:{doc['id']}", "severity": "high", "message": f"{doc.get('name')} appears expired."})
+            elif days_left <= 180:
+                risk_flags.append({"code": f"expiring:{doc['id']}", "severity": "medium", "message": f"{doc.get('name')} expires in {days_left} days."})
+    unrecognized_count = len([doc for doc in documents if doc.get("status") == "unrecognized"])
+    duplicate_count = len([doc for doc in documents if doc.get("status") == "duplicate"])
+    if duplicate_count:
+        actions.append({"priority": "medium", "label": "Resolve duplicate files", "message": f"{duplicate_count} duplicate file(s) detected."})
+    if open_reviews:
+        actions.append({"priority": "high", "label": "Manual review required", "message": f"{open_reviews} requirement(s) are blocked by review items."})
+    if blocking_missing:
+        actions.append({"priority": "high", "label": "Request missing documents", "message": f"Missing blockers: {', '.join(blocking_missing)}."})
+    if "questionnaire" in missing_codes:
+        actions.append({"priority": "medium", "label": "Send client questionnaire", "message": "The client questionnaire is still missing."})
+    latest_invoice = invoices[0] if invoices else None
+    billing_complete = bool(case.get("invoice_paid")) or (latest_invoice and latest_invoice.get("status") in {"signed", "paid"})
+    if latest_invoice and not billing_complete:
+        actions.append({"priority": "medium", "label": "Follow up on invoice", "message": f"Invoice {latest_invoice.get('number', latest_invoice.get('id', 'draft'))} still needs client action."})
+    auto_stage = case.get("stage", "documents")
+    if not blocking_missing and open_reviews == 0:
+        if latest_invoice and not billing_complete:
+            auto_stage = "payment"
+        elif billing_complete:
+            auto_stage = "processing"
+        else:
+            auto_stage = "review"
+    next_step = actions[0]["label"] if actions else "Ready for legal review"
+    return {
+        "route_code": route_code,
+        "requirements": requirement_states,
+        "missing_codes": missing_codes,
+        "blocking_missing_codes": blocking_missing,
+        "open_review_count": open_reviews,
+        "unrecognized_count": unrecognized_count,
+        "duplicate_count": duplicate_count,
+        "risk_flags": risk_flags,
+        "actions": actions,
+        "latest_invoice_id": latest_invoice.get("id") if latest_invoice else None,
+        "billing_complete": bool(billing_complete),
+        "auto_stage": auto_stage,
+        "next_step": next_step,
+        "updated_at": utc_now(),
+    }
+
+
+async def refresh_case_control(case_id: str, *, trigger: str = "system") -> Optional[dict]:
+    case = await db_get_case(case_id)
+    if not case:
+        return None
+    docs = await db_get_documents(case_id=case_id)
+    invoices = await db_get_invoices(case_id=case_id)
+    control_state = build_case_control_state(case, docs, invoices)
+    patch = {"updated_at": utc_now(), "control_state": control_state, "route_code": control_state["route_code"]}
+    previous_stage = case.get("stage", "documents")
+    if control_state["auto_stage"] != previous_stage:
+        patch["stage"] = control_state["auto_stage"]
+    updated_case = await db_update_case(case_id, patch) or {**case, **patch}
+    actor = await ensure_actor_context({
+        "id": case.get("lawyer_id") or DEFAULT_LAWYER_ID,
+        "email": case.get("client_email") or f"{case.get('lawyer_id') or DEFAULT_LAWYER_ID}@lexflow.local",
+        "name": case.get("client_name") or "LexFlow case owner",
+    })
+    if patch.get("stage") and patch["stage"] != previous_stage:
+        await log_case_event(updated_case, "case.stage.auto_advanced", {
+            "from": previous_stage,
+            "to": patch["stage"],
+            "trigger": trigger,
+            "route_code": control_state["route_code"],
+        })
+        await create_notification(
+            actor=actor,
+            case=updated_case,
+            severity="info",
+            kind="workflow",
+            title="Case moved automatically",
+            message=f"Case moved from {previous_stage} to {patch['stage']} after protocol checks passed.",
+            unique_key=f"stage:{case_id}:{patch['stage']}",
+            payload={"from": previous_stage, "to": patch["stage"], "trigger": trigger},
+        )
+    for action in control_state["actions"]:
+        await create_notification(
+            actor=actor,
+            case=updated_case,
+            severity=action["priority"],
+            kind="action_required",
+            title=action["label"],
+            message=action["message"],
+            unique_key=f"action:{case_id}:{action['label']}",
+            payload={"route_code": control_state["route_code"], "trigger": trigger},
+        )
+    for flag in control_state["risk_flags"]:
+        await create_notification(
+            actor=actor,
+            case=updated_case,
+            severity=flag["severity"],
+            kind="risk_flag",
+            title="Attention required",
+            message=flag["message"],
+            unique_key=f"risk:{case_id}:{flag['code']}",
+            payload={"route_code": control_state["route_code"], "trigger": trigger},
+        )
+    return updated_case
+
+
 async def find_case_for_document(sender_email: str, filename: str, fields: dict, cases: list[dict]) -> tuple[Optional[dict], str, float]:
     sender = (sender_email or "").lower().strip()
     if sender:
@@ -761,6 +1205,8 @@ async def create_case_from_document(sender_email: str, subject: str, fields: dic
         "invoice": None,
         "extracted": fields,
         "portal_url": f"{FRONTEND_URL}/client-upload.html?id={case_id}",
+        "route_code": infer_route_code({"case_type": infer_case_type(fields.get("document_type", ""), subject), "destination": infer_destination(" ".join(str(value) for value in fields.values()))}),
+        "control_state": {},
         "automation": {"created_by": "document_intake", "confidence": fields.get("confidence", 0)},
     }
     return await db_create_case(case)
@@ -790,6 +1236,8 @@ async def route_incoming_document(
     fields = parse_document_text(ocr.get("raw_text", ""), filename)
     fields["ocr_provider"] = ocr.get("provider", "none")
     fields["ocr_confidence"] = ocr.get("confidence", 0)
+    document_type = canonical_document_type(fields.get("document_type", "unknown"), filename)
+    fields["document_type"] = document_type
 
     cases = await db_get_cases()
     matched_case, match_reason, match_score = await find_case_for_document(sender_email, filename, fields, cases)
@@ -800,16 +1248,21 @@ async def route_incoming_document(
 
     case_id = matched_case["id"] if matched_case else "unrecognized"
     uploaded = await upload_bytes(case_id, filename, content_type, content, source=source)
-    document_type = fields.get("document_type", "unknown")
     type_exists = await case_has_document_type(matched_case, document_type) if matched_case else False
     status = "assigned" if matched_case else "unrecognized"
     automation_note = "routed"
+    manual_review_required = False
     if duplicate:
         status = "duplicate"
         automation_note = f"duplicate_of:{duplicate.get('id')}"
     elif type_exists:
         status = "needs_review"
         automation_note = f"document_type_already_exists:{document_type}"
+        manual_review_required = True
+    elif matched_case and document_type == "unknown" and float(fields.get("confidence") or 0) < 0.55:
+        status = "needs_review"
+        automation_note = "low_confidence_scan"
+        manual_review_required = True
 
     document = {
         "id": str(uuid.uuid4()),
@@ -826,8 +1279,13 @@ async def route_incoming_document(
         "size": uploaded.get("size", len(content)),
         "content_hash": content_hash,
         "document_type": document_type,
+        "document_family": document_type,
         "automation_status": "auto_created_case" if auto_created else match_reason,
         "automation_note": automation_note,
+        "manual_review_required": manual_review_required,
+        "quality_status": "poor" if document_type == "unknown" and float(fields.get("confidence") or 0) < 0.55 else "acceptable",
+        "authenticity_status": "pending" if document_type in {"marriage_certificate", "birth_certificate"} else "not_applicable",
+        "translation_status": "pending_review" if document_type in {"marriage_certificate", "birth_certificate", "qualification", "recognition_notice"} else "not_applicable",
         "extracted": fields,
         "uploaded_at": utc_now(),
         "updated_at": utc_now(),
@@ -836,6 +1294,7 @@ async def route_incoming_document(
     if matched_case and status != "duplicate":
         docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"], "document_type": document_type, "status": status}]
         await db_update_case(matched_case["id"], {"docs": docs, "extracted": {**matched_case.get("extracted", {}), **fields}, "updated_at": utc_now()})
+        await refresh_case_control(matched_case["id"], trigger=f"document_routed:{source}")
     await store_extraction_evaluation(matched_case["id"] if matched_case else "", saved["id"], fields)
     return {
         "document": saved,
@@ -1015,6 +1474,22 @@ class AssignDocumentRequest(BaseModel):
     case_id: str
 
 
+class UpdateDocumentRequest(BaseModel):
+    status: Optional[str] = None
+    document_type: Optional[str] = None
+    manual_review_required: Optional[bool] = None
+    quality_status: Optional[str] = None
+    authenticity_status: Optional[str] = None
+    translation_status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PortalInviteRequest(BaseModel):
+    to: Optional[str] = None
+    subject: Optional[str] = None
+    message: Optional[str] = None
+
+
 class UpsertInvoiceRequest(BaseModel):
     id: str
     case_id: Optional[str] = ""
@@ -1064,9 +1539,11 @@ async def create_case(req: CreateCase, user: dict = Depends(get_current_user)):
         "invoice": None,
         "extracted": {},
         "portal_url": f"{FRONTEND_URL}/client-upload.html?id={case_id}",
+        "route_code": infer_route_code({"case_type": req.case_type, "destination": req.destination}),
+        "control_state": {},
     }
     await db_create_case(case)
-    return case
+    return await refresh_case_control(case_id, trigger="case_created") or case
 
 
 @app.get("/api/cases/{case_id}")
@@ -1099,6 +1576,8 @@ async def update_case(case_id: str, req: UpdateCase, user: dict = Depends(get_cu
     patch_data = {k: v for k, v in req.model_dump().items() if v is not None}
     patch_data["updated_at"] = utc_now()
     updated = await db_update_case(case_id, patch_data)
+    if any(key in patch_data for key in ("case_type", "destination", "stage", "invoice_paid", "extracted", "public_notes")):
+        await refresh_case_control(case_id, trigger="case_patch")
     return updated or {**case, **patch_data}
 
 
@@ -1157,7 +1636,51 @@ async def submit_case_public(case_id: str, req: PublicCaseSubmitRequest):
         "updated_at": utc_now(),
     }
     updated = await db_update_case(case_id, patch)
+    await refresh_case_control(case_id, trigger="public_submit")
     return {"submitted": True, "case": updated}
+
+
+@app.post("/api/cases/{case_id}/send-portal-invite")
+async def send_portal_invite(case_id: str, req: PortalInviteRequest, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    case = await db_get_case(case_id)
+    if not case or not record_belongs_to_actor(case, actor):
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    to_email = (req.to or case.get("client_email") or "").strip()
+    if not to_email:
+        raise HTTPException(status_code=400, detail="Client email is missing")
+
+    portal_url = case.get("portal_url") or f"{FRONTEND_URL}/client-upload.html?id={case_id}"
+    subject = (req.subject or f"Secure upload link for your {case.get('case_type') or 'LexFlow'} case").strip()
+    text_body, html_body = build_portal_invite_email(case, portal_url, req.message or "")
+    result = send_email_message(to_email, subject, text_body, html_body=html_body)
+
+    event = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "type": "portal_invite_sent",
+        "title": "Client portal invite sent",
+        "message": f"Portal invite sent to {to_email}",
+        "created_at": utc_now(),
+        "meta": {
+            "to": to_email,
+            "subject": subject,
+            "portal_url": portal_url,
+        },
+    }
+    await db_create_audit_event(event)
+    await db_update_case(case_id, {"updated_at": utc_now()})
+
+    return {
+        **result,
+        "case_id": case_id,
+        "to": to_email,
+        "subject": subject,
+        "portal_url": portal_url,
+        "preview_html": html_body,
+        "preview_text": text_body,
+    }
 
 
 async def get_current_user_optional(authorization: str = Header(None)):
@@ -1172,8 +1695,33 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    upload = await upload_file(case_id, file, source="lawyer" if user else "client")
+    content = await file.read()
+    upload = await upload_bytes(case_id, file.filename or "document.pdf", file.content_type or "application/octet-stream", content, source="lawyer" if user else "client")
+    ocr = await run_ocr(content, file.filename or "document.pdf")
+    extracted = parse_document_text(ocr.get("raw_text", ""), file.filename or "document.pdf")
+    extracted["ocr_provider"] = ocr.get("provider", "none")
+    extracted["ocr_confidence"] = ocr.get("confidence", 0)
+    document_type = canonical_document_type(extracted.get("document_type", "unknown"), file.filename or "document.pdf")
+    extracted["document_type"] = document_type
     document_id = str(uuid.uuid4())
+    content_hash = hashlib.sha256(content).hexdigest()
+    duplicate = await db_find_document_by_hash(content_hash)
+    type_exists = await case_has_document_type(case, document_type)
+    status = "assigned"
+    manual_review_required = False
+    automation_note = "case_upload"
+    if duplicate:
+        status = "duplicate"
+        automation_note = f"duplicate_of:{duplicate.get('id')}"
+        manual_review_required = True
+    elif type_exists:
+        status = "needs_review"
+        automation_note = f"document_type_already_exists:{document_type}"
+        manual_review_required = True
+    elif document_type == "unknown" and float(extracted.get("confidence") or 0) < 0.55:
+        status = "needs_review"
+        automation_note = "low_confidence_scan"
+        manual_review_required = True
     document = {
         "id": document_id,
         "lawyer_id": user["id"] if user else case.get("lawyer_id"),
@@ -1184,15 +1732,27 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
         "key": upload["key"],
         "url": upload.get("url", ""),
         "source": "lawyer" if user else "client",
-        "status": "assigned",
+        "status": status,
         "content_type": upload.get("content_type", file.content_type or "application/octet-stream"),
         "size": upload.get("size", 0),
+        "content_hash": content_hash,
+        "document_type": document_type,
+        "document_family": document_type,
+        "automation_status": "case_upload",
+        "automation_note": automation_note,
+        "manual_review_required": manual_review_required,
+        "quality_status": "poor" if document_type == "unknown" and float(extracted.get("confidence") or 0) < 0.55 else "acceptable",
+        "authenticity_status": "pending" if document_type in {"marriage_certificate", "birth_certificate"} else "not_applicable",
+        "translation_status": "pending_review" if document_type in {"marriage_certificate", "birth_certificate", "qualification", "recognition_notice"} else "not_applicable",
+        "extracted": extracted,
         "uploaded_at": utc_now(),
         "updated_at": utc_now(),
     }
     saved_doc = await db_create_document(document)
-    docs = case.get("docs", []) + [{**upload, "document_id": saved_doc["id"], "uploaded_at": saved_doc["uploaded_at"]}]
-    await db_update_case(case_id, {"docs": docs, "updated_at": utc_now()})
+    docs = case.get("docs", []) + [{**upload, "document_id": saved_doc["id"], "uploaded_at": saved_doc["uploaded_at"], "document_type": document_type, "status": status}]
+    await db_update_case(case_id, {"docs": docs, "extracted": {**case.get("extracted", {}), **extracted}, "updated_at": utc_now()})
+    await store_extraction_evaluation(case_id, saved_doc["id"], extracted)
+    await refresh_case_control(case_id, trigger=f"case_upload:{document_type}")
     return {**upload, "document_id": saved_doc["id"]}
 
 
@@ -1201,6 +1761,27 @@ async def list_documents(status: Optional[str] = None, case_id: Optional[str] = 
     actor = await ensure_actor_context(user)
     docs = await db_get_documents(status=status, case_id=case_id)
     return [doc for doc in docs if record_belongs_to_actor(doc, actor)]
+
+
+@app.get("/api/cases/{case_id}/control-center")
+async def case_control_center(case_id: str, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    case = await db_get_case(case_id)
+    if not case or not record_belongs_to_actor(case, actor):
+        raise HTTPException(status_code=404, detail="Case not found")
+    updated_case = await refresh_case_control(case_id, trigger="control_center_open") or case
+    notifications = await db_get_notifications(firm_id=actor["firm"]["id"], case_id=case_id)
+    return {
+        "case": updated_case,
+        "control_state": updated_case.get("control_state", {}),
+        "notifications": notifications[:20],
+    }
+
+
+@app.get("/api/notifications")
+async def list_notifications(case_id: Optional[str] = None, unread_only: bool = False, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    return await db_get_notifications(firm_id=actor["firm"]["id"], case_id=case_id, unread_only=unread_only)
 
 
 @app.post("/api/documents/intake")
@@ -1225,6 +1806,7 @@ async def assign_document(document_id: str, req: AssignDocumentRequest, user: di
         "case_id": case["id"],
         "case_name": case["client_name"],
         "status": "assigned",
+        "manual_review_required": False,
         "updated_at": utc_now(),
     })
     if not doc:
@@ -1239,7 +1821,24 @@ async def assign_document(document_id: str, req: AssignDocumentRequest, user: di
         "uploaded_at": doc.get("uploaded_at", utc_now()),
     }]
     await db_update_case(case["id"], {"docs": docs, "updated_at": utc_now()})
+    await refresh_case_control(case["id"], trigger="manual_assign")
     return doc
+
+
+@app.patch("/api/documents/{document_id}")
+async def update_document(document_id: str, req: UpdateDocumentRequest, user: dict = Depends(get_current_user)):
+    doc = await db_get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    patch = {k: v for k, v in req.model_dump().items() if v is not None}
+    if "document_type" in patch:
+        patch["document_type"] = canonical_document_type(patch["document_type"], doc.get("name", ""))
+        patch["document_family"] = patch["document_type"]
+    patch["updated_at"] = utc_now()
+    updated = await db_update_document(document_id, patch)
+    if doc.get("case_id"):
+        await refresh_case_control(doc["case_id"], trigger="document_patch")
+    return updated or {**doc, **patch}
 
 
 @app.delete("/api/documents/{document_id}")
@@ -1257,6 +1856,7 @@ async def delete_document(document_id: str, user: dict = Depends(get_current_use
                 if item.get("document_id") != document_id and item.get("key") != doc.get("key")
             ]
             await db_update_case(case_id, {"docs": docs, "updated_at": utc_now()})
+            await refresh_case_control(case_id, trigger="document_delete")
     return {"deleted": True, "id": document_id}
 
 
@@ -1315,6 +1915,7 @@ async def delete_case_document(case_id: str, document_ref: str, user: Optional[d
         await db_delete_document(removed["document_id"])
     delete_r2_object(removed.get("key", ""))
     await db_update_case(case_id, {"docs": kept, "updated_at": utc_now()})
+    await refresh_case_control(case_id, trigger="case_document_delete")
     return {"deleted": True, "id": document_ref}
 
 
@@ -1333,6 +1934,7 @@ async def workflow_summary(user: dict = Depends(get_current_user)):
     invoices = [invoice for invoice in await db_get_invoices() if record_belongs_to_actor(invoice, actor)]
     documents = [doc for doc in await db_get_documents() if record_belongs_to_actor(doc, actor)]
     cases = [case for case in await db_get_cases() if record_belongs_to_actor(case, actor)]
+    notifications = await db_get_notifications(firm_id=actor["firm"]["id"], unread_only=True)
     overdue = []
     due_soon = []
     for invoice in invoices:
@@ -1366,12 +1968,15 @@ async def workflow_summary(user: dict = Depends(get_current_user)):
         actions.append({"priority": "medium", "label": "Unrecognized documents", "count": doc_counts["unrecognized"], "action": "Review and assign"})
     if doc_counts["needs_review"]:
         actions.append({"priority": "medium", "label": "Duplicate document type", "count": doc_counts["needs_review"], "action": "Confirm replacement or keep both"})
+    if notifications:
+        actions.append({"priority": "medium", "label": "Unread protocol alerts", "count": len(notifications), "action": "Review control-center notifications"})
 
     return {
         "generated_at": utc_now(),
         "cases": {"total": len(cases), "by_stage": {stage: len([case for case in cases if case.get("stage") == stage]) for stage in ["documents", "payment", "processing", "review", "submitted"]}},
         "documents": doc_counts,
         "invoices": {"overdue": overdue, "due_soon": due_soon},
+        "notifications": notifications[:20],
         "actions": actions,
     }
 
@@ -1399,7 +2004,17 @@ async def upsert_invoice(req: UpsertInvoiceRequest, user: dict = Depends(get_cur
         "updated_at": utc_now(),
         "created_at": invoice.get("created_at") or utc_now(),
     })
-    return await db_upsert_invoice(invoice)
+    saved = await db_upsert_invoice(invoice)
+    if saved.get("case_id"):
+        case = await db_get_case(saved["case_id"])
+        if case:
+            await db_update_case(saved["case_id"], {
+                "invoice": {"id": saved["id"], "number": saved["number"], "amount": saved["amount"], "status": saved.get("status", "draft")},
+                "invoice_paid": saved.get("status") == "paid",
+                "updated_at": utc_now(),
+            })
+            await refresh_case_control(saved["case_id"], trigger=f"invoice_upsert:{saved.get('status', 'draft')}")
+    return saved
 
 
 @app.post("/api/invoices/{invoice_id}/attachments")
@@ -1422,6 +2037,8 @@ async def upload_invoice_attachment(invoice_id: str, file: UploadFile = File(...
     invoice["attachments"] = attachments
     invoice["updated_at"] = utc_now()
     await db_upsert_invoice(invoice)
+    if invoice.get("case_id"):
+        await refresh_case_control(invoice["case_id"], trigger="invoice_attachment")
     return attachment
 
 
@@ -1443,6 +2060,8 @@ async def delete_invoice_attachment(invoice_id: str, attachment_id: str, user: d
     invoice["attachments"] = next_attachments
     invoice["updated_at"] = utc_now()
     await db_upsert_invoice(invoice)
+    if invoice.get("case_id"):
+        await refresh_case_control(invoice["case_id"], trigger="invoice_attachment_delete")
     return {"deleted": True, "id": attachment_id}
 
 
@@ -1473,6 +2092,8 @@ async def send_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
     if invoice.get("status") == "draft":
         invoice["status"] = "unpaid"
     await db_upsert_invoice(invoice)
+    if invoice.get("case_id"):
+        await refresh_case_control(invoice["case_id"], trigger="invoice_sent")
     return {
         **result,
         "invoice_id": invoice_id,
@@ -1502,6 +2123,7 @@ async def create_invoice(case_id: str, user: dict = Depends(get_current_user)):
     }
     await db_upsert_invoice({**invoice, "case_id": case_id, "lawyer_id": user["id"], "status": "draft", "updated_at": utc_now()})
     await db_update_case(case_id, {"invoice": invoice, "updated_at": utc_now()})
+    await refresh_case_control(case_id, trigger="invoice_created")
     return invoice
 
 
@@ -1513,6 +2135,7 @@ async def pay_invoice(case_id: str):
     if not case.get("invoice"):
         raise HTTPException(status_code=400, detail="No invoice")
     await db_update_case(case_id, {"invoice_paid": True, "stage": "processing", "updated_at": utc_now()})
+    await refresh_case_control(case_id, trigger="invoice_paid")
     return {"status": "paid"}
 
 
@@ -1525,6 +2148,7 @@ async def advance_case(case_id: str, user: dict = Depends(get_current_user)):
     idx = stages.index(case.get("stage", "documents"))
     if idx < len(stages) - 1:
         await db_update_case(case_id, {"stage": stages[idx + 1], "updated_at": utc_now()})
+    await refresh_case_control(case_id, trigger="manual_advance")
     return await db_get_case(case_id)
 
 

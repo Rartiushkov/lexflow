@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=10" />
+  <link rel="stylesheet" href="./styles.css?v=12" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -100,7 +100,7 @@
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+      <div class="case-detail-layout" style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
 
         <!-- LEFT COLUMN -->
         <div id="case-fields-area">
@@ -238,6 +238,19 @@
 
         <!-- RIGHT COLUMN -->
         <div>
+          <!-- Control center -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+              <div>
+                <span class="card-title">Control center</span>
+                <div class="panel-subtitle">Protocol status, blockers, risk flags, and system recommendations.</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="control-center-block"><p style="color:var(--muted);">Loading…</p></div>
+            </div>
+          </div>
+
           <!-- Document checklist -->
           <div class="card" style="margin-bottom:16px;">
             <div class="card-header"><span class="card-title">Document checklist</span></div>
@@ -289,7 +302,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=10"></script>
+  <script src="./app.js?v=11"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -400,6 +413,130 @@
       }).join('');
     }
 
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function severityBadge(severity) {
+      const map = {
+        high: 'badge-red',
+        medium: 'badge-yellow',
+        low: 'badge-blue',
+      };
+      return map[severity] || 'badge-gray';
+    }
+
+    function renderControlCenter(center) {
+      const host = document.getElementById('control-center-block');
+      const state = center?.control_state || {};
+      const notifications = center?.notifications || [];
+      const requirements = state.requirements || [];
+      const actions = state.actions || [];
+      const risks = state.risk_flags || [];
+      const routeCode = state.route_code || 'EU_GENERAL';
+
+      const stats = [
+        { label: 'Route', value: routeCode.replaceAll('_', ' ') },
+        { label: 'Stage', value: (center?.case?.stage || 'documents').replace('_', ' ') },
+        { label: 'Billing', value: state.billing_complete ? 'Complete' : 'Open' },
+        { label: 'Next step', value: state.next_step || 'Review case' },
+      ];
+
+      host.innerHTML = `
+        <div class="control-center-stack">
+          <div class="control-hero">
+            ${stats.map(item => `
+              <div class="control-stat">
+                <span class="control-stat-label">${escapeHtml(item.label)}</span>
+                <strong class="control-stat-value">${escapeHtml(item.value)}</strong>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="control-pill-row">
+            <span class="badge ${state.blocking_missing_codes?.length ? 'badge-red' : 'badge-green'}">${state.blocking_missing_codes?.length || 0} blockers</span>
+            <span class="badge ${state.open_review_count ? 'badge-yellow' : 'badge-green'}">${state.open_review_count || 0} review items</span>
+            <span class="badge ${state.duplicate_count ? 'badge-yellow' : 'badge-gray'}">${state.duplicate_count || 0} duplicates</span>
+            <span class="badge ${state.unrecognized_count ? 'badge-red' : 'badge-gray'}">${state.unrecognized_count || 0} unrecognized</span>
+          </div>
+
+          <div class="control-section">
+            <div class="control-section-title">Route checklist</div>
+            <div class="control-checklist">
+              ${requirements.length ? requirements.map(item => `
+                <div class="control-check">
+                  <div class="control-check-copy">
+                    <strong>${escapeHtml(item.label)}</strong>
+                    <span>${item.blocker ? 'Blocking requirement' : 'Supporting requirement'}</span>
+                  </div>
+                  <span class="badge ${
+                    item.state === 'complete' ? 'badge-green'
+                      : item.state === 'needs_review' ? 'badge-yellow'
+                      : 'badge-red'
+                  }">${escapeHtml(item.state.replace('_', ' '))}</span>
+                </div>
+              `).join('') : '<div class="kanban-empty">No route protocol data yet.</div>'}
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="control-section-title">Recommended actions</div>
+            <div class="control-feed">
+              ${actions.length ? actions.map(item => `
+                <div class="control-feed-item">
+                  <span class="badge ${severityBadge(item.priority)}">${escapeHtml(item.priority || 'info')}</span>
+                  <div class="control-feed-copy">
+                    <strong>${escapeHtml(item.label)}</strong>
+                    <span>${escapeHtml(item.message)}</span>
+                  </div>
+                </div>
+              `).join('') : '<div class="kanban-empty">No pending recommendations.</div>'}
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="control-section-title">Risk flags</div>
+            <div class="control-feed">
+              ${risks.length ? risks.map(item => `
+                <div class="control-feed-item">
+                  <span class="badge ${severityBadge(item.severity)}">${escapeHtml(item.severity || 'info')}</span>
+                  <div class="control-feed-copy">
+                    <strong>${escapeHtml((item.code || 'risk').replace(/[_:]/g, ' '))}</strong>
+                    <span>${escapeHtml(item.message)}</span>
+                  </div>
+                </div>
+              `).join('') : '<div class="kanban-empty">No protocol risks detected.</div>'}
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="control-section-title">Recent alerts</div>
+            <div class="control-feed">
+              ${notifications.length ? notifications.slice(0, 4).map(item => `
+                <div class="control-feed-item">
+                  <span class="badge ${severityBadge(item.severity)}">${escapeHtml(item.kind || 'notice')}</span>
+                  <div class="control-feed-copy">
+                    <strong>${escapeHtml(item.title)}</strong>
+                    <span>${escapeHtml(item.message)}</span>
+                  </div>
+                </div>
+              `).join('') : '<div class="kanban-empty">No case notifications.</div>'}
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (center?.case?.stage) {
+        const sel = document.getElementById('stage-select');
+        if (sel) sel.value = center.case.stage;
+      }
+    }
+
     async function checkDuplicate(clientEmail, clientName) {
       try {
         const allCases = await get('/api/cases');
@@ -422,14 +559,23 @@
 
     async function loadCase() {
       try {
-        const c = await get(`/api/cases/${caseId}`);
+        const center = await get(`/api/cases/${caseId}/control-center`);
+        const c = center.case || await get(`/api/cases/${caseId}`);
         render(c);
+        renderControlCenter(center);
         checkDuplicate(c.client_email, c.client_name);
       } catch (err) {
-        showToast(err.message || 'Unable to load case', 'error');
-        document.getElementById('case-title').textContent = 'Case unavailable';
-        document.getElementById('breadcrumb-name').textContent = 'Case';
-        document.getElementById('case-meta').textContent = 'This case could not be loaded.';
+        try {
+          const c = await get(`/api/cases/${caseId}`);
+          render(c);
+          renderControlCenter({ case: c, control_state: c.control_state || {}, notifications: [] });
+          checkDuplicate(c.client_email, c.client_name);
+        } catch {
+          showToast(err.message || 'Unable to load case', 'error');
+          document.getElementById('case-title').textContent = 'Case unavailable';
+          document.getElementById('breadcrumb-name').textContent = 'Case';
+          document.getElementById('case-meta').textContent = 'This case could not be loaded.';
+        }
       }
     }
 
@@ -448,13 +594,61 @@
 
       // Portal link
       const portalUrl = c.portal_url || `${window.location.origin}/client-upload.html?id=${c.id}`;
+      const clientEmail = c.client_email || '';
       document.getElementById('portal-block').innerHTML = `
-        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share with client to upload documents.</div>
-        <div style="font-size:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;word-break:break-all;color:var(--text-2);">${portalUrl}</div>
-        <button class="btn btn-outline btn-sm" type="button" id="btn-copy-portal-link">Copy link</button>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="padding:14px;border:1px solid #dbe5f1;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <span style="display:inline-flex;width:34px;height:34px;border-radius:12px;background:#2563eb;color:#fff;align-items:center;justify-content:center;font-size:14px;font-weight:800;">Lf</span>
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#0f172a;">Client upload invite</div>
+                <div style="font-size:12px;color:#64748b;">Light email template in LexFlow portal style</div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;margin-bottom:10px;">
+              Send a secure upload button straight to the client's inbox. The message uses the same clean light theme as the portal page.
+            </div>
+            <div style="font-size:12px;background:#fff;border:1px solid #dbe5f1;border-radius:14px;padding:10px 12px;margin-bottom:10px;word-break:break-word;color:#1d4ed8;">${portalUrl}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+              <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;">Recipient</span>
+              <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:12px;font-weight:600;">${clientEmail || 'No client email yet'}</span>
+            </div>
+            <textarea id="portal-invite-message" rows="4" placeholder="Optional note for the client" style="width:100%;resize:vertical;border:1px solid #dbe5f1;border-radius:14px;padding:10px 12px;font:inherit;font-size:13px;line-height:1.6;background:#fff;color:var(--text);margin-bottom:12px;"></textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" type="button" id="btn-send-portal-invite" ${clientEmail ? '' : 'disabled'}>Send to client</button>
+              <button class="btn btn-outline btn-sm" type="button" id="btn-copy-portal-link">Copy link</button>
+            </div>
+            <div id="portal-invite-status" style="display:none;font-size:12px;color:#64748b;margin-top:10px;"></div>
+          </div>
+        </div>
       `;
       document.getElementById('btn-copy-portal-link')?.addEventListener('click', () => {
         navigator.clipboard.writeText(portalUrl).then(() => showToast('Portal link copied', 'success'));
+      });
+      document.getElementById('btn-send-portal-invite')?.addEventListener('click', async () => {
+        const message = document.getElementById('portal-invite-message')?.value || '';
+        const status = document.getElementById('portal-invite-status');
+        const button = document.getElementById('btn-send-portal-invite');
+        if (!clientEmail) {
+          showToast('Add client email first', 'error');
+          return;
+        }
+        try {
+          button.disabled = true;
+          button.textContent = 'Sending...';
+          const result = await post(`/api/cases/${c.id}/send-portal-invite`, { message });
+          const demoMode = result.status === 'queued_demo';
+          status.style.display = 'block';
+          status.textContent = demoMode
+            ? `Template prepared for ${result.to}. SMTP is not configured yet, so this is demo mode.`
+            : `Invite sent to ${result.to}.`;
+          showToast(demoMode ? 'Invite template prepared' : 'Portal invite sent', 'success');
+        } catch (err) {
+          showToast(err.message || 'Invite send failed', 'error');
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Send to client';
+        }
       });
 
       // Documents

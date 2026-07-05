@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS public.cases (
     notes TEXT,
     stage TEXT DEFAULT 'documents',
     invoice_paid BOOLEAN DEFAULT FALSE,
+    route_code TEXT,
+    control_state JSONB DEFAULT '{}'::jsonb,
     docs JSONB DEFAULT '[]'::jsonb,
     invoice JSONB,
     extracted JSONB DEFAULT '{}'::jsonb,
@@ -87,8 +89,14 @@ CREATE TABLE IF NOT EXISTS public.documents (
     status TEXT DEFAULT 'unrecognized',
     content_hash TEXT,
     document_type TEXT,
+    document_family TEXT,
     automation_status TEXT,
     automation_note TEXT,
+    manual_review_required BOOLEAN DEFAULT FALSE,
+    quality_status TEXT,
+    authenticity_status TEXT,
+    translation_status TEXT,
+    notes TEXT,
     extracted JSONB DEFAULT '{}'::jsonb,
     content_type TEXT,
     size BIGINT DEFAULT 0,
@@ -155,6 +163,21 @@ CREATE TABLE IF NOT EXISTS public.email_integrations (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY,
+    firm_id TEXT REFERENCES public.firms(id) ON DELETE CASCADE,
+    lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    case_id TEXT REFERENCES public.cases(id) ON DELETE CASCADE,
+    severity TEXT NOT NULL DEFAULT 'info',
+    kind TEXT NOT NULL DEFAULT 'action_required',
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    payload JSONB DEFAULT '{}'::jsonb,
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.firms ENABLE ROW LEVEL SECURITY;
@@ -165,6 +188,7 @@ ALTER TABLE public.invoice_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ml_evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Policies for cases
 CREATE POLICY "Users can manage their own cases"
@@ -218,6 +242,12 @@ CREATE POLICY "Users can manage firms through their profile"
 
 CREATE POLICY "Users can manage email integrations for their firm"
     ON public.email_integrations
+    FOR ALL
+    USING (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()))
+    WITH CHECK (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()));
+
+CREATE POLICY "Users can manage notifications for their firm"
+    ON public.notifications
     FOR ALL
     USING (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()))
     WITH CHECK (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()));

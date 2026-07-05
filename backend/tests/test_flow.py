@@ -42,6 +42,7 @@ def reset_state():
     main.memory_profiles.clear()
     main.memory_firms.clear()
     main.memory_email_integrations.clear()
+    main.memory_notifications.clear()
 
 
 def create_case(name="Anna Schmidt", email="anna@example.com", auth=AUTH):
@@ -172,6 +173,25 @@ def test_invoice_attachment_and_send_demo_mode():
     assert payload["to"] == case["client_email"]
     assert payload["sent"] is False
     assert payload["status"] == "queued_demo"
+
+
+def test_portal_invite_send_demo_mode():
+    reset_state()
+    case = create_case()
+
+    send_response = client.post(
+        f"/api/cases/{case['id']}/send-portal-invite",
+        headers=AUTH,
+        json={"message": "Please upload the missing passport and contract."},
+    )
+
+    assert send_response.status_code == 200
+    payload = send_response.json()
+    assert payload["to"] == case["client_email"]
+    assert payload["sent"] is False
+    assert payload["status"] == "queued_demo"
+    assert payload["portal_url"].endswith(f"/client-upload.html?id={case['id']}")
+    assert "Open secure upload page" in payload["preview_html"]
 
 
 def test_email_webhook_routes_documents_by_sender():
@@ -409,6 +429,98 @@ def test_public_portal_submit_and_upload_persist_to_case():
     docs = client.get(f"/api/documents?case_id={case['id']}", headers=AUTH).json()
     assert len(docs) == 1
     assert docs[0]["source"] == "client"
+
+
+def test_case_control_center_auto_moves_to_payment_when_documents_are_complete_but_invoice_is_open():
+    reset_state()
+    case = create_case()
+
+    for filename, body in (
+        ("passport-anna-schmidt.pdf", make_pdf(["Passport", "Name: Anna Schmidt", "Passport number: C12345678", "Date of birth: 01.02.1990"])),
+        ("employment-contract.pdf", make_pdf(["Employment contract", "Name: Anna Schmidt", "Employer: Demo GmbH"])),
+        ("degree-diploma.pdf", make_pdf(["Diploma", "Name: Anna Schmidt"])),
+        ("health-insurance.pdf", make_pdf(["Health insurance certificate", "Anna Schmidt"])),
+    ):
+        response = client.post(
+            f"/api/cases/{case['id']}/upload",
+            headers=AUTH,
+            files={"file": (filename, body, "application/pdf")},
+        )
+        assert response.status_code == 200
+
+    client.post("/api/invoices", headers=AUTH, json={
+        "id": "inv-open",
+        "case_id": case["id"],
+        "number": "INV-OPEN",
+        "status": "unpaid",
+        "client_name": case["client_name"],
+        "client_email": case["client_email"],
+        "issue_date": "2026-07-05",
+        "due_date": "2026-07-12",
+        "currency": "EUR",
+        "items": [{"description": "Service", "quantity": 1, "unit_price": 100}],
+        "attachments": [],
+    })
+
+    center = client.get(f"/api/cases/{case['id']}/control-center", headers=AUTH)
+    assert center.status_code == 200
+    payload = center.json()
+    assert payload["control_state"]["route_code"] == "DE_BLUE_CARD"
+    assert payload["control_state"]["blocking_missing_codes"] == []
+    assert payload["control_state"]["auto_stage"] == "payment"
+    assert payload["case"]["stage"] == "payment"
+
+
+def test_case_control_center_moves_to_processing_when_invoice_is_signed():
+    reset_state()
+    case = create_case()
+
+    for filename, body in (
+        ("passport-anna-schmidt.pdf", make_pdf(["Passport", "Name: Anna Schmidt", "Passport number: C12345678", "Date of birth: 01.02.1990"])),
+        ("employment-contract.pdf", make_pdf(["Employment contract", "Name: Anna Schmidt", "Employer: Demo GmbH"])),
+        ("degree-diploma.pdf", make_pdf(["Diploma", "Name: Anna Schmidt"])),
+        ("health-insurance.pdf", make_pdf(["Health insurance certificate", "Anna Schmidt"])),
+    ):
+        assert client.post(
+            f"/api/cases/{case['id']}/upload",
+            headers=AUTH,
+            files={"file": (filename, body, "application/pdf")},
+        ).status_code == 200
+
+    assert client.post("/api/invoices", headers=AUTH, json={
+        "id": "inv-signed",
+        "case_id": case["id"],
+        "number": "INV-SIGNED",
+        "status": "signed",
+        "client_name": case["client_name"],
+        "client_email": case["client_email"],
+        "issue_date": "2026-07-05",
+        "due_date": "2026-07-12",
+        "currency": "EUR",
+        "items": [{"description": "Service", "quantity": 1, "unit_price": 100}],
+        "attachments": [],
+    }).status_code == 200
+
+    center = client.get(f"/api/cases/{case['id']}/control-center", headers=AUTH)
+    assert center.status_code == 200
+    payload = center.json()
+    assert payload["control_state"]["billing_complete"] is True
+    assert payload["case"]["stage"] == "processing"
+
+
+def test_notifications_endpoint_returns_protocol_alerts():
+    reset_state()
+    case = create_case()
+
+    assert client.post(
+        f"/api/cases/{case['id']}/upload",
+        headers=AUTH,
+        files={"file": ("passport-anna-schmidt.pdf", make_pdf(["Passport", "Name: Anna Schmidt", "Passport number: C12345678", "Date of birth: 01.02.1990"]), "application/pdf")},
+    ).status_code == 200
+
+    notifications = client.get("/api/notifications", headers=AUTH)
+    assert notifications.status_code == 200
+    assert any(item["kind"] == "action_required" for item in notifications.json())
 
 
 def test_email_integrations_are_isolated_per_firm():

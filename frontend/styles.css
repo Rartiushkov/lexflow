@@ -1291,6 +1291,118 @@ a.queue-row:hover .queue-client strong {
   box-shadow: inset 3px 0 0 rgba(216, 191, 139, 0.8);
 }
 
+.control-center-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.control-hero {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.control-stat {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #dbe5f1;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.control-stat-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.control-stat-value {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.control-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.control-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.control-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.control-checklist,
+.control-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-check,
+.control-feed-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #dbe5f1;
+  background: #ffffff;
+}
+
+.control-feed-link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.control-feed-link:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.control-check-copy,
+.control-feed-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control-check-copy strong,
+.control-feed-copy strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.control-check-copy span,
+.control-feed-copy span {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+.control-feed-compact .control-feed-item {
+  padding: 10px 12px;
+}
+
 .invoice-table {
   display: grid;
   grid-template-columns: 1.1fr 1fr 120px 120px 100px 100px 120px;
@@ -2688,8 +2800,8 @@ body.auth.auth-loading .auth-loading-screen {
     display: block;
   }
   .sidebar {
-    position: sticky;
-    top: 0;
+    position: relative;
+    top: auto;
     width: 100%;
     height: auto;
     z-index: 50;
@@ -2721,6 +2833,7 @@ body.auth.auth-loading .auth-loading-screen {
     margin-left: 0;
   }
   .dashboard-topbar {
+    position: static;
     min-height: var(--topbar-h);
     height: auto;
     align-items: flex-start;
@@ -2751,6 +2864,271 @@ body.auth.auth-loading .auth-loading-screen {
   .dashboard-rail { gap: 12px; }
   .intake-summary-grid { grid-template-columns: 1fr; }
   .kanban-board { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --topbar-h: 56px;
+  }
+
+  .topbar {
+    height: auto;
+    min-height: var(--topbar-h);
+    padding-top: 10px;
+    padding-bottom: 10px;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-cta,
+  .topbar-cta .btn,
+  .hero-actions,
+  .hero-actions .btn {
+    width: 100%;
+  }
+
+  .topbar-cta {
+    justify-content: stretch;
+  }
+
+  .hero-panel,
+  .feature-card,
+  .workflow-step,
+  .system-card,
+  .card,
+  .stat-card {
+    border-radius: 12px;
+  }
+
+  .page-content {
+    padding: 14px 12px 24px;
+  }
+
+  .page-header,
+  .card-header,
+  .builder-section-head,
+  .stage-row-copy,
+  .automation-item,
+  .control-check,
+  .control-feed-item,
+  .portal-v2-payment-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-header > :last-child:not(:first-child),
+  .card-header > :last-child:not(:first-child) {
+    width: 100%;
+  }
+
+  .page-header > :last-child:not(:first-child) {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dashboard-topbar {
+    padding: 12px;
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .topbar-breadcrumb {
+    width: 100%;
+    flex-wrap: wrap;
+    line-height: 1.4;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: stretch;
+    gap: 8px;
+  }
+
+  .topbar-actions .btn,
+  .topbar-actions a.btn,
+  .page-header .btn,
+  .builder-tabs,
+  .builder-tab {
+    width: 100%;
+  }
+
+  .topbar-date {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+    padding-bottom: 4px;
+  }
+
+  .sidebar-brand {
+    width: 100%;
+  }
+
+  .sidebar-nav {
+    padding: 0 12px 10px;
+    gap: 8px;
+    scroll-snap-type: x proximity;
+  }
+
+  .nav-item {
+    scroll-snap-align: start;
+    padding: 0 12px;
+  }
+
+  .stats-row,
+  .features-grid,
+  .workflow-strip,
+  .system-grid,
+  .billing-band,
+  .intake-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-table,
+  .invoices-list-card,
+  .intake-list-card {
+    overflow: visible;
+  }
+
+  .table-row.header {
+    display: none;
+  }
+
+  .queue-row,
+  .invoice-table,
+  .intake-table,
+  .table-row,
+  .case-doc-row,
+  .line-item-row,
+  .page-content .table-row[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .queue-row,
+  .invoice-row-link,
+  .intake-row,
+  .table-row.clickable,
+  .page-content .table-row[style*="grid-template-columns"] {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 0 0 10px;
+  }
+
+  .queue-row > span,
+  .invoice-table > span,
+  .intake-table > span,
+  .table-row > span,
+  .line-item-row > * {
+    min-width: 0;
+  }
+
+  .queue-row > span,
+  .invoice-table > span,
+  .intake-table > span,
+  .table-row > span {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .queue-row > span::before,
+  .invoice-table > span::before,
+  .intake-table > span::before {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .queue-row > span:nth-child(1)::before { content: "Client"; }
+  .queue-row > span:nth-child(2)::before { content: "Type"; }
+  .queue-row > span:nth-child(3)::before { content: "Stage"; }
+  .queue-row > span:nth-child(4)::before { content: "Billing"; }
+  .queue-row > span:nth-child(5)::before { content: "Files"; }
+  .queue-row > span:nth-child(6)::before { content: "Date"; }
+
+  .invoice-table > span:nth-child(1)::before { content: "Number"; }
+  .invoice-table > span:nth-child(2)::before { content: "Client"; }
+  .invoice-table > span:nth-child(3)::before { content: "Status"; }
+  .invoice-table > span:nth-child(4)::before { content: "Total"; }
+  .invoice-table > span:nth-child(5)::before { content: "Issue"; }
+  .invoice-table > span:nth-child(6)::before { content: "Due"; }
+  .invoice-table > span:nth-child(7)::before { content: "Risk"; }
+
+  .intake-table > span:nth-child(1)::before { content: "File"; }
+  .intake-table > span:nth-child(2)::before { content: "Case"; }
+  .intake-table > span:nth-child(3)::before { content: "Status"; }
+  .intake-table > span:nth-child(4)::before { content: "Uploaded"; }
+  .intake-table > span:nth-child(5)::before { content: "Actions"; }
+
+  .queue-client strong,
+  .intake-row strong {
+    font-size: 14px;
+  }
+
+  .invoice-preview-card {
+    position: static;
+  }
+
+  .invoice-a4 {
+    max-height: none;
+    overflow: auto;
+  }
+
+  .a4-sheet {
+    padding: 24px 18px;
+  }
+
+  .a4-header,
+  .a4-parties {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .builder-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .automation-item .badge,
+  .control-check .badge,
+  .control-feed-item .badge,
+  .table-actions,
+  .portal-v2-upload-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .table-actions .btn,
+  .portal-v2-upload-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .case-detail-layout,
+  .case-detail-layout > *,
+  [data-svc-idx] {
+    min-width: 0;
+  }
+
+  .case-detail-layout {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .control-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .case-doc-row,
+  [data-svc-idx] {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* ─── Portal 2026-2027 premium components ───────────────── */

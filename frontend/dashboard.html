@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=10" />
+  <link rel="stylesheet" href="./styles.css?v=12" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -182,12 +182,22 @@
             </div>
             <div class="spotlight-list" id="spotlight-list"></div>
           </section>
+
+          <section class="card spotlight-panel">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Protocol alerts</div>
+                <div class="panel-subtitle">Unread control-center notifications across matters.</div>
+              </div>
+            </div>
+            <div class="control-feed control-feed-compact" id="protocol-alerts"></div>
+          </section>
         </aside>
       </div>
     </div>
   </div>
 
-  <script src="./app.js?v=10"></script>
+  <script src="./app.js?v=11"></script>
   <script>
     // Live date/time in topbar
     (function updateDate() {
@@ -400,18 +410,38 @@
 
     function renderWorkflowSummary(summary) {
       const host = document.getElementById('automation-list');
+      const alerts = document.getElementById('protocol-alerts');
       if (!summary?.actions?.length) {
         host.innerHTML = `<div class="kanban-empty">No urgent automation items.</div>`;
+      } else {
+        host.innerHTML = summary.actions.map(item => `
+          <div class="automation-item automation-${item.priority}">
+            <div>
+              <strong>${item.label}</strong>
+              <span>${item.action}</span>
+            </div>
+            <span class="badge ${item.priority === 'high' ? 'badge-red' : 'badge-yellow'}">${item.count}</span>
+          </div>
+        `).join('');
+      }
+
+      if (!summary?.notifications?.length) {
+        alerts.innerHTML = `<div class="kanban-empty">No unread protocol alerts.</div>`;
         return;
       }
-      host.innerHTML = summary.actions.map(item => `
-        <div class="automation-item automation-${item.priority}">
-          <div>
-            <strong>${item.label}</strong>
-            <span>${item.action}</span>
+
+      alerts.innerHTML = summary.notifications.slice(0, 5).map(item => `
+        <a class="control-feed-item control-feed-link" href="case.html?id=${item.case_id || ''}">
+          <span class="badge ${
+            item.severity === 'high' ? 'badge-red'
+              : item.severity === 'medium' ? 'badge-yellow'
+              : 'badge-blue'
+          }">${item.kind || 'notice'}</span>
+          <div class="control-feed-copy">
+            <strong>${item.title || 'Protocol alert'}</strong>
+            <span>${item.message || ''}</span>
           </div>
-          <span class="badge ${item.priority === 'high' ? 'badge-red' : 'badge-yellow'}">${item.count}</span>
-        </div>
+        </a>
       `).join('');
     }
 

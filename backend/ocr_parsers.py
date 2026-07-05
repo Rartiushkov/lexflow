@@ -7,6 +7,14 @@ DOCUMENT_RULES = {
         "keywords": ("passport", "reisepass", "travel document", "document no"),
         "required": ("full_name", "passport_number", "date_of_birth"),
     },
+    "marriage_certificate": {
+        "keywords": ("marriage certificate", "heiratsurkunde", "certificate of marriage", "spouse"),
+        "required": ("full_name",),
+    },
+    "birth_certificate": {
+        "keywords": ("birth certificate", "geburtsurkunde", "date of birth", "place of birth"),
+        "required": ("full_name", "date_of_birth"),
+    },
     "invoice": {
         "keywords": ("invoice", "rechnung", "iban", "vat", "amount due"),
         "required": ("invoice_number", "invoice_total"),
@@ -18,6 +26,34 @@ DOCUMENT_RULES = {
     "employment": {
         "keywords": ("employment", "employer", "arbeitsvertrag", "salary", "position"),
         "required": ("full_name", "employer"),
+    },
+    "qualification": {
+        "keywords": ("diploma", "degree", "zeugnis", "qualification", "transcript"),
+        "required": ("full_name",),
+    },
+    "recognition_notice": {
+        "keywords": ("recognition notice", "anerkennung", "statement of comparability", "partial recognition"),
+        "required": (),
+    },
+    "health_insurance": {
+        "keywords": ("health insurance", "krankenversicherung", "insurance certificate", "coverage"),
+        "required": (),
+    },
+    "financial_proof": {
+        "keywords": ("blocked account", "bank statement", "declaration of commitment", "proof of funds"),
+        "required": (),
+    },
+    "language_certificate": {
+        "keywords": ("language certificate", "sprachzertifikat", "cefr", "goethe"),
+        "required": ("full_name",),
+    },
+    "questionnaire": {
+        "keywords": ("questionnaire", "intake form", "client questionnaire", "survey"),
+        "required": (),
+    },
+    "power_of_attorney": {
+        "keywords": ("power of attorney", "vollmacht", "authorization"),
+        "required": ("full_name",),
     },
 }
 

@@ -17,6 +17,8 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFA
 ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS firm_id TEXT REFERENCES public.firms(id) ON DELETE SET NULL;
 ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS public_notes TEXT;
 ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS public_submission_completed_at TIMESTAMPTZ;
+ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS route_code TEXT;
+ALTER TABLE public.cases ADD COLUMN IF NOT EXISTS control_state JSONB DEFAULT '{}'::jsonb;
 
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS firm_id TEXT REFERENCES public.firms(id) ON DELETE SET NULL;
@@ -63,8 +65,14 @@ CREATE TABLE IF NOT EXISTS public.documents (
 ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
 ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS firm_id TEXT REFERENCES public.firms(id) ON DELETE SET NULL;
 ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS document_type TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS document_family TEXT;
 ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS automation_status TEXT;
 ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS automation_note TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS manual_review_required BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS quality_status TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS authenticity_status TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS translation_status TEXT;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS extracted JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS public.invoice_templates (
@@ -123,6 +131,21 @@ CREATE TABLE IF NOT EXISTS public.email_integrations (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY,
+    firm_id TEXT REFERENCES public.firms(id) ON DELETE CASCADE,
+    lawyer_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    case_id TEXT REFERENCES public.cases(id) ON DELETE CASCADE,
+    severity TEXT NOT NULL DEFAULT 'info',
+    kind TEXT NOT NULL DEFAULT 'action_required',
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    payload JSONB DEFAULT '{}'::jsonb,
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 ALTER TABLE public.email_integrations ADD COLUMN IF NOT EXISTS access_token TEXT;
 ALTER TABLE public.email_integrations ADD COLUMN IF NOT EXISTS refresh_token TEXT;
 ALTER TABLE public.email_integrations ADD COLUMN IF NOT EXISTS token_expires_at DOUBLE PRECISION;
@@ -134,6 +157,7 @@ ALTER TABLE public.invoice_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ml_evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can manage their own cases" ON public.cases;
 CREATE POLICY "Users can manage their own cases"
@@ -189,6 +213,13 @@ CREATE POLICY "Users can manage firms through their profile"
 DROP POLICY IF EXISTS "Users can manage email integrations for their firm" ON public.email_integrations;
 CREATE POLICY "Users can manage email integrations for their firm"
     ON public.email_integrations
+    FOR ALL
+    USING (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()))
+    WITH CHECK (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()));
+
+DROP POLICY IF EXISTS "Users can manage notifications for their firm" ON public.notifications;
+CREATE POLICY "Users can manage notifications for their firm"
+    ON public.notifications
     FOR ALL
     USING (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()))
     WITH CHECK (lawyer_id = auth.uid() OR firm_id IN (SELECT firm_id FROM public.profiles WHERE id = auth.uid()));

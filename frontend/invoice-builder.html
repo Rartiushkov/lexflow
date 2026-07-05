@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=10" />
+  <link rel="stylesheet" href="./styles.css?v=12" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     /* ── Builder layout ── */
@@ -293,6 +293,66 @@
     .tpl-item-meta { font-size: 11px; color: var(--muted); }
     .tpl-del-btn { background: none; border: none; cursor: pointer; color: var(--red); font-size: 13px; padding: 2px 5px; border-radius: 3px; }
     .tpl-del-btn:hover { background: rgba(196,100,90,0.12); }
+
+    @media (max-width: 980px) {
+      .builder-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      .builder-panel {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        max-height: none;
+      }
+
+      .builder-canvas-area {
+        align-items: flex-start;
+        padding: 20px 16px 28px;
+        overflow-x: auto;
+      }
+
+      .canvas-toolbar {
+        width: 794px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .builder-panel {
+        padding: 12px;
+      }
+
+      .builder-panel-body {
+        padding: 12px;
+      }
+
+      .builder-canvas-area {
+        padding: 12px 12px 24px;
+      }
+
+      .canvas-toolbar {
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .cvs-tool-btn {
+        min-height: 34px;
+      }
+
+      .blk-header {
+        display: grid;
+        gap: 10px;
+      }
+
+      .blk-header-right {
+        text-align: left;
+      }
+
+      .blk-parties,
+      .prop-row {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
@@ -453,7 +513,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=10"></script>
+  <script src="./app.js?v=11"></script>
   <script>
   /* ═══════════════════════════════════════════
      INVOICE BUILDER — Builder + Templates tabs
