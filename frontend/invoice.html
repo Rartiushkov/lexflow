@@ -192,11 +192,50 @@
         </section>
 
         <aside class="invoice-preview-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 2px;">
-            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">A4 Preview</span>
-            <span style="font-size:11px;color:var(--dim);">Customer-facing document</span>
+          <!-- Canvas toolbar -->
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-right:4px;">Canvas</span>
+            <button class="cvs-add-btn" data-block="text">+ Text</button>
+            <button class="cvs-add-btn" data-block="field">+ Custom field</button>
+            <button class="cvs-add-btn" data-block="divider">+ Divider</button>
+            <button class="cvs-add-btn" data-block="image">+ Image</button>
+            <span style="flex:1;"></span>
+            <button class="cvs-add-btn" id="btn-cvs-clear" style="color:var(--red);border-color:rgba(196,100,90,0.3);">Clear custom</button>
           </div>
-          <div class="invoice-a4" id="invoice-preview"></div>
+          <!-- A4 interactive canvas -->
+          <div class="invoice-a4" style="padding:6px;">
+            <div id="invoice-canvas" class="a4-canvas">
+              <!-- Static rendered invoice (non-draggable, updated from form) -->
+              <div id="invoice-preview" class="a4-base-layer"></div>
+              <!-- Draggable custom elements overlay -->
+              <div id="canvas-overlay"></div>
+            </div>
+          </div>
+          <!-- Custom field dialog (hidden) -->
+          <div id="cvs-field-dialog" style="display:none;margin-top:10px;background:var(--surface-2);border:1px solid var(--border-2);border-radius:var(--radius);padding:14px;">
+            <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text);">Custom field</div>
+            <div class="form-group" style="margin-bottom:10px;">
+              <label class="form-label">Label</label>
+              <input class="form-input" id="cvs-field-label" placeholder="e.g. Reference number" style="height:32px;font-size:13px;" />
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Value</label>
+              <input class="form-input" id="cvs-field-value" placeholder="e.g. REF-2024-001" style="height:32px;font-size:13px;" />
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary btn-sm" id="cvs-field-add">Add to canvas</button>
+              <button class="btn btn-outline btn-sm" id="cvs-field-cancel">Cancel</button>
+            </div>
+          </div>
+          <!-- Custom image dialog (hidden) -->
+          <div id="cvs-image-dialog" style="display:none;margin-top:10px;background:var(--surface-2);border:1px solid var(--border-2);border-radius:var(--radius);padding:14px;">
+            <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text);">Add image to canvas</div>
+            <input type="file" id="cvs-image-file" accept="image/*" class="form-input" style="margin-bottom:10px;height:auto;padding:6px;" />
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary btn-sm" id="cvs-image-add">Add to canvas</button>
+              <button class="btn btn-outline btn-sm" id="cvs-image-cancel">Cancel</button>
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -722,6 +761,26 @@
     }
 
     function buildPrintablePreview(invoice) {
+      // Clone the full canvas (base invoice + overlay elements)
+      const canvas = document.getElementById('invoice-canvas');
+      if (canvas) {
+        const clone = canvas.cloneNode(true);
+        // Remove interactive chrome from clone
+        clone.querySelectorAll('.canvas-el-toolbar, .cvs-resize-handle').forEach(el => el.remove());
+        clone.querySelectorAll('.canvas-el').forEach(el => {
+          el.classList.remove('cvs-selected');
+          el.style.border = 'none';
+          el.style.boxShadow = 'none';
+          const inner = el.querySelector('.canvas-el-inner');
+          if (inner) inner.contentEditable = 'false';
+        });
+        clone.style.boxShadow = 'none';
+        const wrapper = document.createElement('div');
+        wrapper.style.background = '#ffffff';
+        wrapper.appendChild(clone);
+        return { wrapper, filename: `${invoice.number || 'invoice'}.pdf` };
+      }
+      // Fallback: just the a4-sheet
       const sheet = document.querySelector('.a4-sheet');
       const clone = sheet ? sheet.cloneNode(true) : document.getElementById('invoice-preview').cloneNode(true);
       clone.style.boxShadow = 'none';
@@ -967,10 +1026,193 @@
       });
     }
 
+    /* ══════════════════════════════════════════════
+       CANVAS ENGINE — drag/resize/edit/delete overlay elements
+    ══════════════════════════════════════════════ */
+    const CANVAS_KEY = 'lf_invoice_canvas_els';
+    let canvasEls = [];        // { id, type, x, y, w, h, text, label, src, fontSize }
+    let selectedElId = null;
+
+    function saveCanvas() {
+      try { localStorage.setItem(CANVAS_KEY + '_' + (invoiceId || 'new'), JSON.stringify(canvasEls)); } catch {}
+    }
+    function loadCanvas() {
+      try { return JSON.parse(localStorage.getItem(CANVAS_KEY + '_' + (invoiceId || 'new')) || '[]'); } catch { return []; }
+    }
+
+    function renderCanvas() {
+      const overlay = document.getElementById('canvas-overlay');
+      if (!overlay) return;
+      overlay.innerHTML = '';
+      canvasEls.forEach(el => {
+        const div = document.createElement('div');
+        div.className = 'canvas-el' + (el.id === selectedElId ? ' cvs-selected' : '');
+        div.dataset.elId = el.id;
+        div.style.cssText = `left:${el.x}px;top:${el.y}px;width:${el.w || 'auto'}px;`;
+
+        let inner = '';
+        if (el.type === 'text') {
+          inner = `<div class="canvas-el-inner" style="font-size:${el.fontSize||12}px;" contenteditable="${el.id === selectedElId ? 'true' : 'false'}" data-edit-id="${el.id}">${el.text || 'Double-click to edit'}</div>`;
+        } else if (el.type === 'field') {
+          inner = `<div class="canvas-el-label">${el.label || 'Label'}</div><div class="canvas-el-inner" style="font-size:${el.fontSize||12}px;" contenteditable="${el.id === selectedElId ? 'true' : 'false'}" data-edit-id="${el.id}">${el.text || 'Value'}</div>`;
+        } else if (el.type === 'divider') {
+          inner = `<div class="canvas-el-divider"></div>`;
+        } else if (el.type === 'image') {
+          inner = `<div class="canvas-el-image"><img src="${el.src}" style="width:${el.w||120}px;" /></div>`;
+        }
+
+        const toolbar = `<div class="canvas-el-toolbar">
+          <button class="cvs-tb-btn" data-action="smaller" data-id="${el.id}">A-</button>
+          <button class="cvs-tb-btn" data-action="bigger" data-id="${el.id}">A+</button>
+          <button class="cvs-tb-btn" data-action="bold" data-id="${el.id}">B</button>
+          <button class="cvs-tb-btn del" data-action="delete" data-id="${el.id}">✕</button>
+        </div>`;
+
+        div.innerHTML = inner + toolbar + '<div class="cvs-resize-handle" data-resize-id="' + el.id + '"></div>';
+        overlay.appendChild(div);
+
+        // Drag to move
+        let dragging = false, ox = 0, oy = 0;
+        div.addEventListener('mousedown', e => {
+          if (e.target.closest('.canvas-el-toolbar') || e.target.closest('.cvs-resize-handle') || e.target.isContentEditable) return;
+          e.preventDefault();
+          dragging = true;
+          ox = e.clientX - el.x;
+          oy = e.clientY - el.y;
+          selectEl(el.id);
+          const onMove = ev => {
+            if (!dragging) return;
+            el.x = Math.max(0, ev.clientX - ox);
+            el.y = Math.max(0, ev.clientY - oy);
+            div.style.left = el.x + 'px';
+            div.style.top = el.y + 'px';
+          };
+          const onUp = () => { dragging = false; saveCanvas(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        // Double-click to edit text
+        div.addEventListener('dblclick', e => {
+          const editable = div.querySelector('[data-edit-id]');
+          if (editable) { editable.contentEditable = 'true'; editable.focus(); selectEl(el.id); }
+        });
+        // Save on blur
+        const editable = div.querySelector('[data-edit-id]');
+        if (editable) {
+          editable.addEventListener('blur', () => {
+            el.text = editable.innerText;
+            editable.contentEditable = 'false';
+            saveCanvas();
+          });
+        }
+
+        // Resize handle
+        const resizeHandle = div.querySelector('.cvs-resize-handle');
+        if (resizeHandle) {
+          let resizing = false, rx = 0, rw0 = 0;
+          resizeHandle.addEventListener('mousedown', e => {
+            e.stopPropagation(); e.preventDefault();
+            resizing = true; rx = e.clientX; rw0 = el.w || 120;
+            const onMove = ev => { el.w = Math.max(60, rw0 + ev.clientX - rx); div.style.width = el.w + 'px'; };
+            const onUp = () => { resizing = false; saveCanvas(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          });
+        }
+
+        // Toolbar actions
+        div.querySelectorAll('.cvs-tb-btn').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const action = btn.dataset.action;
+            const id = btn.dataset.id;
+            const target = canvasEls.find(c => c.id === id);
+            if (!target) return;
+            if (action === 'delete') { canvasEls = canvasEls.filter(c => c.id !== id); selectedElId = null; }
+            else if (action === 'smaller') { target.fontSize = Math.max(8, (target.fontSize || 12) - 1); }
+            else if (action === 'bigger') { target.fontSize = (target.fontSize || 12) + 1; }
+            else if (action === 'bold') { target.bold = !target.bold; }
+            saveCanvas();
+            renderCanvas();
+          });
+        });
+      });
+
+      // Click outside deselects
+      overlay.addEventListener('mousedown', e => {
+        if (e.target === overlay) { selectedElId = null; renderCanvas(); }
+      });
+    }
+
+    function selectEl(id) {
+      selectedElId = id;
+      renderCanvas();
+    }
+
+    function addCanvasEl(type, extra = {}) {
+      const id = 'cel-' + Date.now();
+      const base = { id, type, x: 40, y: 40 + canvasEls.length * 30, w: 180, fontSize: 12, bold: false };
+      canvasEls.push({ ...base, ...extra });
+      selectedElId = id;
+      saveCanvas();
+      renderCanvas();
+    }
+
+    function initCanvas() {
+      canvasEls = loadCanvas();
+      renderCanvas();
+
+      // Toolbar buttons
+      document.querySelectorAll('.cvs-add-btn[data-block]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const type = btn.dataset.block;
+          if (type === 'text') { addCanvasEl('text', { text: 'Your text here', w: 200 }); }
+          else if (type === 'field') { document.getElementById('cvs-field-dialog').style.display = 'block'; }
+          else if (type === 'divider') { addCanvasEl('divider', { w: 300, text: '' }); }
+          else if (type === 'image') { document.getElementById('cvs-image-dialog').style.display = 'block'; }
+        });
+      });
+
+      document.getElementById('btn-cvs-clear')?.addEventListener('click', () => {
+        if (confirm('Remove all custom canvas elements?')) { canvasEls = []; selectedElId = null; saveCanvas(); renderCanvas(); }
+      });
+
+      // Custom field dialog
+      document.getElementById('cvs-field-add')?.addEventListener('click', () => {
+        const label = document.getElementById('cvs-field-label').value || 'Field';
+        const value = document.getElementById('cvs-field-value').value || '';
+        addCanvasEl('field', { label, text: value, w: 180 });
+        document.getElementById('cvs-field-label').value = '';
+        document.getElementById('cvs-field-value').value = '';
+        document.getElementById('cvs-field-dialog').style.display = 'none';
+      });
+      document.getElementById('cvs-field-cancel')?.addEventListener('click', () => {
+        document.getElementById('cvs-field-dialog').style.display = 'none';
+      });
+
+      // Image dialog
+      document.getElementById('cvs-image-add')?.addEventListener('click', () => {
+        const file = document.getElementById('cvs-image-file').files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          addCanvasEl('image', { src: reader.result, w: 120, text: '' });
+          document.getElementById('cvs-image-dialog').style.display = 'none';
+          document.getElementById('cvs-image-file').value = '';
+        };
+        reader.readAsDataURL(file);
+      });
+      document.getElementById('cvs-image-cancel')?.addEventListener('click', () => {
+        document.getElementById('cvs-image-dialog').style.display = 'none';
+      });
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       ensureDefaultTemplates();
       bindForm();
+      initCanvas();
 
       // Close modal on backdrop click
       document.getElementById('send-modal').addEventListener('click', (e) => {
