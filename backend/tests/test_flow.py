@@ -28,18 +28,25 @@ client = TestClient(main.app)
 AUTH = {"Authorization": "Bearer demo_token_user_1"}
 
 
+def auth_for(user_id: str):
+    return {"Authorization": f"Bearer demo_token_{user_id}"}
+
+
 def reset_state():
     main.memory_cases.clear()
     main.memory_documents.clear()
     main.memory_invoices.clear()
     main.memory_invoice_templates.clear()
     main.memory_evaluations.clear()
+    main.memory_profiles.clear()
+    main.memory_firms.clear()
+    main.memory_email_integrations.clear()
 
 
-def create_case(name="Anna Schmidt", email="anna@example.com"):
+def create_case(name="Anna Schmidt", email="anna@example.com", auth=AUTH):
     response = client.post(
         "/api/cases",
-        headers=AUTH,
+        headers=auth,
         json={
             "client_name": name,
             "client_email": email,
@@ -369,3 +376,79 @@ def test_workflow_summary_flags_overdue_and_due_soon_invoices():
     assert len(summary["invoices"]["overdue"]) == 1
     assert len(summary["invoices"]["due_soon"]) == 1
     assert any(item["label"] == "Overdue invoices" for item in summary["actions"])
+
+
+def test_public_portal_submit_and_upload_persist_to_case():
+    reset_state()
+    case = create_case()
+
+    upload_response = client.post(
+        f"/api/cases/{case['id']}/upload",
+        files={"file": ("portal-passport.pdf", b"fake pdf", "application/pdf")},
+    )
+    assert upload_response.status_code == 200
+
+    submit_response = client.post(
+        f"/api/cases/{case['id']}/public-submit",
+        json={
+            "client_name": "Anna Schmidt",
+            "client_email": "anna@example.com",
+            "notes": "Client completed upload",
+        },
+    )
+    assert submit_response.status_code == 200
+    saved_case = client.get(f"/api/cases/{case['id']}", headers=AUTH).json()
+    assert saved_case["public_notes"] == "Client completed upload"
+    docs = client.get(f"/api/documents?case_id={case['id']}", headers=AUTH).json()
+    assert len(docs) == 1
+    assert docs[0]["source"] == "client"
+
+
+def test_email_integrations_are_isolated_per_firm():
+    reset_state()
+    user2_auth = auth_for("user_2")
+
+    assert client.post("/api/email-integrations", headers=AUTH, json={
+        "provider": "gmail",
+        "email": "first-firm@gmail.com",
+        "app_password": "secret-1",
+        "imap_host": "imap.gmail.com",
+        "mailbox": "INBOX",
+        "poll_limit": 10,
+        "active": True,
+    }).status_code == 200
+
+    assert client.post("/api/email-integrations", headers=user2_auth, json={
+        "provider": "gmail",
+        "email": "second-firm@gmail.com",
+        "app_password": "secret-2",
+        "imap_host": "imap.gmail.com",
+        "mailbox": "INBOX",
+        "poll_limit": 10,
+        "active": True,
+    }).status_code == 200
+
+    first = client.get("/api/email-integrations", headers=AUTH)
+    second = client.get("/api/email-integrations", headers=user2_auth)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(first.json()) == 1
+    assert len(second.json()) == 1
+    assert first.json()[0]["email"] == "first-firm@gmail.com"
+    assert second.json()[0]["email"] == "second-firm@gmail.com"
+
+
+def test_cases_are_isolated_per_firm_in_memory_mode():
+    reset_state()
+    user2_auth = auth_for("user_2")
+    case1 = create_case(name="Firm One Client", email="one@example.com", auth=AUTH)
+    case2 = create_case(name="Firm Two Client", email="two@example.com", auth=user2_auth)
+
+    first = client.get("/api/cases", headers=AUTH)
+    second = client.get("/api/cases", headers=user2_auth)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert [item["id"] for item in first.json()] == [case1["id"]]
+    assert [item["id"] for item in second.json()] == [case2["id"]]

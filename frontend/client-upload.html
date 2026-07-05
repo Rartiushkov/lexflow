@@ -23,6 +23,19 @@
         <div style="font-weight:600;" id="case-title">Loading…</div>
       </div>
 
+      <div class="form-group">
+        <label class="form-label" for="portal-client-name">Client name</label>
+        <input class="form-input" id="portal-client-name" type="text" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="portal-client-email">Client email</label>
+        <input class="form-input" id="portal-client-email" type="email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="portal-notes">Notes</label>
+        <textarea class="form-textarea" id="portal-notes" placeholder="Optional notes for your legal team"></textarea>
+      </div>
+
       <div class="checklist" id="checklist">
         <div class="checklist-item" data-doc="passport">
           <div class="checklist-icon">✓</div>
@@ -45,6 +58,7 @@
       </div>
 
       <div id="uploaded-list" style="margin-top:16px;"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:16px;" id="btn-submit-portal" type="button">Submit documents</button>
 
       <div id="payment-block" style="display:none;margin-top:24px;padding-top:24px;border-top:1px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -72,6 +86,9 @@
       try {
         const c = await get(`/api/cases/${caseId}/public`);
         document.getElementById('case-title').textContent = `${c.client_name} · ${c.case_type}`;
+        document.getElementById('portal-client-name').value = c.client_name || '';
+        document.getElementById('portal-client-email').value = c.client_email || '';
+        document.getElementById('portal-notes').value = c.public_notes || '';
         if (c.invoice && !c.invoice_paid) {
           document.getElementById('payment-block').style.display = 'block';
           document.getElementById('invoice-amount').textContent = formatCurrency(c.invoice.amount);
@@ -81,6 +98,8 @@
         document.getElementById('case-title').textContent = localCase
           ? `${localCase.client_name} · ${localCase.case_type}`
           : 'Demo case · Blue Card';
+        document.getElementById('portal-client-name').value = localCase?.client_name || '';
+        document.getElementById('portal-client-email').value = localCase?.client_email || '';
       }
     }
 
@@ -111,6 +130,11 @@
             showToast(`${file.name} deleted`, 'success');
           });
         } catch (err) {
+          if (!isDemoSession()) {
+            row.innerHTML = `<span>${file.name}</span><span class="badge badge-red">failed</span>`;
+            showToast(`${file.name} upload failed`, 'error');
+            continue;
+          }
           const dataUrl = await fileToDataUrl(file);
           const localCase = getLocalCaseById(caseId);
           const doc = {
@@ -157,6 +181,23 @@
       });
       input.addEventListener('change', () => handleFiles(input.files));
       document.getElementById('btn-pay')?.addEventListener('click', () => showToast('Redirecting to Stripe (demo)', 'info'));
+      document.getElementById('btn-submit-portal')?.addEventListener('click', async () => {
+        const payload = {
+          client_name: document.getElementById('portal-client-name').value,
+          client_email: document.getElementById('portal-client-email').value,
+          notes: document.getElementById('portal-notes').value,
+        };
+        try {
+          await post(`/api/cases/${caseId}/public-submit`, payload);
+          showToast('Documents submitted', 'success');
+        } catch (err) {
+          if (!isDemoSession()) {
+            showToast(err.message || 'Submit failed', 'error');
+            return;
+          }
+          showToast('Saved locally in demo mode', 'success');
+        }
+      });
     });
   </script>
 </body>

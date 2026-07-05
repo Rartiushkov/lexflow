@@ -102,6 +102,9 @@ memory_invoices: dict[str, dict] = {}
 memory_documents: dict[str, dict] = {}
 memory_invoice_templates: dict[str, dict] = {}
 memory_evaluations: dict[str, dict] = {}
+memory_profiles: dict[str, dict] = {}
+memory_firms: dict[str, dict] = {}
+memory_email_integrations: dict[str, dict] = {}
 
 
 def utc_now():
@@ -155,15 +158,80 @@ def parse_date(value: str) -> Optional[date]:
     return None
 
 
+async def ensure_actor_context(user: dict) -> dict:
+    profile = await db_get_profile(user["id"])
+    if not profile:
+        firm_id = f"firm_{user['id']}"
+        firm = await db_upsert_firm({
+            "id": firm_id,
+            "name": f"{user.get('name') or user.get('email')} Office",
+            "created_at": utc_now(),
+            "updated_at": utc_now(),
+        })
+        profile = await db_upsert_profile({
+            "id": user["id"],
+            "email": user.get("email", ""),
+            "full_name": user.get("name") or user.get("email", ""),
+            "firm_id": firm["id"],
+            "firm_name": firm["name"],
+            "created_at": utc_now(),
+            "updated_at": utc_now(),
+        })
+    firm = await db_get_firm(profile["firm_id"])
+    if not firm:
+        firm = await db_upsert_firm({
+            "id": profile["firm_id"],
+            "name": profile.get("firm_name") or f"{user.get('name') or user.get('email')} Office",
+            "created_at": utc_now(),
+            "updated_at": utc_now(),
+        })
+    return {"user": user, "profile": profile, "firm": firm}
+
+
+def record_belongs_to_actor(record: dict, actor: dict) -> bool:
+    if not record:
+        return False
+    if record.get("lawyer_id") == actor["user"]["id"]:
+        return True
+    if record.get("firm_id") and record.get("firm_id") == actor["firm"]["id"]:
+        return True
+    return False
+
+
 # ─── Auth ───────────────────────────────────────────────
 class LoginRequest(BaseModel):
     email: str
     password: str
 
 
+class UpdateSettingsRequest(BaseModel):
+    full_name: Optional[str] = ""
+    firm_name: Optional[str] = ""
+    vat_id: Optional[str] = ""
+
+
+class EmailIntegrationRequest(BaseModel):
+    id: Optional[str] = ""
+    provider: str = "gmail"
+    email: str
+    app_password: str
+    imap_host: Optional[str] = "imap.gmail.com"
+    mailbox: Optional[str] = "INBOX"
+    poll_limit: Optional[int] = 10
+    active: Optional[bool] = True
+
+
 async def verify_token(token: str) -> Optional[dict]:
     if token.startswith("demo_token_"):
-        return {"id": "user_1", "email": "demo@lexflow.eu", "role": "lawyer"}
+        user_id = token[len("demo_token_"):] or "user_1"
+        user = next((item for item in users.values() if item.get("id") == user_id), None)
+        if not user:
+            user = {
+                "id": user_id,
+                "email": f"{user_id}@demo.lexflow",
+                "name": f"Demo {user_id}",
+            }
+        return {"id": user["id"], "email": user["email"], "name": user.get("name", user["email"]), "role": "lawyer"}
     if not USE_SUPABASE:
         return None
     try:
@@ -374,6 +442,83 @@ async def db_get_evaluations(case_id: Optional[str] = None) -> list:
     return sorted(rows, key=lambda item: item.get("created_at", ""), reverse=True)
 
 
+async def db_get_profile(user_id: str) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("profiles").select("*").eq("id", user_id).limit(1).execute()
+            return res.data[0] if res.data else None
+        except Exception as e:
+            print(f"Supabase profile get failed: {e}")
+    return memory_profiles.get(user_id)
+
+
+async def db_upsert_profile(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("profiles").upsert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase profile upsert failed: {e}")
+    memory_profiles[data["id"]] = data
+    return data
+
+
+async def db_get_firm(firm_id: str) -> Optional[dict]:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("firms").select("*").eq("id", firm_id).limit(1).execute()
+            return res.data[0] if res.data else None
+        except Exception as e:
+            print(f"Supabase firm get failed: {e}")
+    return memory_firms.get(firm_id)
+
+
+async def db_upsert_firm(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("firms").upsert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase firm upsert failed: {e}")
+    memory_firms[data["id"]] = data
+    return data
+
+
+async def db_upsert_email_integration(data: dict) -> dict:
+    if USE_SUPABASE:
+        try:
+            res = supabase_client.table("email_integrations").upsert(data).execute()
+            return res.data[0]
+        except Exception as e:
+            print(f"Supabase email integration upsert failed: {e}")
+    memory_email_integrations[data["id"]] = data
+    return data
+
+
+async def db_get_email_integrations(*, lawyer_id: Optional[str] = None, firm_id: Optional[str] = None, active_only: bool = False) -> list:
+    if USE_SUPABASE:
+        try:
+            query = supabase_client.table("email_integrations").select("*").order("created_at", desc=True)
+            if active_only:
+                query = query.eq("active", True)
+            if lawyer_id:
+                query = query.eq("lawyer_id", lawyer_id)
+            if firm_id:
+                query = query.eq("firm_id", firm_id)
+            res = query.execute()
+            return res.data
+        except Exception as e:
+            print(f"Supabase email integrations select failed: {e}")
+    rows = list(memory_email_integrations.values())
+    if active_only:
+        rows = [item for item in rows if item.get("active")]
+    if lawyer_id:
+        rows = [item for item in rows if item.get("lawyer_id") == lawyer_id]
+    if firm_id:
+        rows = [item for item in rows if item.get("firm_id") == firm_id]
+    return sorted(rows, key=lambda item: item.get("created_at", ""), reverse=True)
+
+
 # ─── File storage helpers ───────────────────────────────
 async def upload_file(case_id: str, file: UploadFile, source: str = "portal") -> dict:
     ext = Path(file.filename or "document.pdf").suffix
@@ -508,11 +653,13 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
 
 
 async def create_case_from_document(sender_email: str, subject: str, fields: dict, user_id: str) -> dict:
+    actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@demo.lexflow", "name": sender_email or user_id})
     client_name = fields.get("full_name") or name_from_email(sender_email)
     case_id = str(uuid.uuid4())[:8]
     case = {
         "id": case_id,
         "lawyer_id": user_id,
+        "firm_id": actor["firm"]["id"],
         "client_name": client_name,
         "client_email": sender_email or fields.get("email") or "",
         "case_type": infer_case_type(fields.get("document_type", ""), subject),
@@ -548,6 +695,7 @@ async def route_incoming_document(
     subject: str = "",
     user_id: str = "user_1",
 ) -> dict:
+    actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@demo.lexflow", "name": sender_email or user_id})
     content_hash = hashlib.sha256(content).hexdigest()
     duplicate = await db_find_document_by_hash(content_hash)
     ocr = await run_ocr(content, filename)
@@ -578,6 +726,7 @@ async def route_incoming_document(
     document = {
         "id": str(uuid.uuid4()),
         "lawyer_id": user_id,
+        "firm_id": matched_case.get("firm_id") if matched_case else actor["firm"]["id"],
         "case_id": matched_case["id"] if matched_case else None,
         "case_name": matched_case.get("client_name") if matched_case else "",
         "name": uploaded["name"],
@@ -672,6 +821,66 @@ async def me(user: dict = Depends(get_current_user)):
     return user
 
 
+@app.get("/api/settings/profile")
+async def get_settings_profile(user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    return {
+        "profile": actor["profile"],
+        "firm": actor["firm"],
+    }
+
+
+@app.post("/api/settings/profile")
+async def update_settings_profile(req: UpdateSettingsRequest, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    firm = await db_upsert_firm({
+        **actor["firm"],
+        "name": req.firm_name or actor["firm"].get("name") or actor["firm"]["id"],
+        "vat_id": req.vat_id or actor["firm"].get("vat_id", ""),
+        "updated_at": utc_now(),
+    })
+    profile = await db_upsert_profile({
+        **actor["profile"],
+        "full_name": req.full_name or actor["profile"].get("full_name", ""),
+        "firm_id": firm["id"],
+        "firm_name": firm.get("name", ""),
+        "vat_id": req.vat_id or actor["profile"].get("vat_id", ""),
+        "updated_at": utc_now(),
+    })
+    return {"profile": profile, "firm": firm}
+
+
+@app.get("/api/email-integrations")
+async def list_email_integrations(user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    rows = await db_get_email_integrations(firm_id=actor["firm"]["id"])
+    return [{**row, "app_password": "********" if row.get("app_password") else ""} for row in rows]
+
+
+@app.post("/api/email-integrations")
+async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    integration = {
+        "id": req.id or str(uuid.uuid4()),
+        "provider": req.provider,
+        "email": req.email.lower().strip(),
+        "app_password": req.app_password,
+        "imap_host": req.imap_host or "imap.gmail.com",
+        "mailbox": req.mailbox or "INBOX",
+        "poll_limit": max(1, min(int(req.poll_limit or 10), 100)),
+        "active": bool(req.active),
+        "lawyer_id": user["id"],
+        "firm_id": actor["firm"]["id"],
+        "auth_type": "app_password",
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "last_polled_at": None,
+        "last_processed_message_id": "",
+    }
+    saved = await db_upsert_email_integration(integration)
+    return {**saved, "app_password": "********"}
+
+
 # ─── Cases ─────────────────────────────────────────────
 class CreateCase(BaseModel):
     client_name: str
@@ -701,17 +910,26 @@ class UpsertInvoiceRequest(BaseModel):
     attachments: list[dict] = Field(default_factory=list)
 
 
+class PublicCaseSubmitRequest(BaseModel):
+    client_name: Optional[str] = ""
+    client_email: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
 @app.get("/api/cases")
 async def list_cases(user: dict = Depends(get_current_user)):
-    return await db_get_cases()
+    actor = await ensure_actor_context(user)
+    return [case for case in await db_get_cases() if record_belongs_to_actor(case, actor)]
 
 
 @app.post("/api/cases")
 async def create_case(req: CreateCase, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
     case_id = str(uuid.uuid4())[:8]
     case = {
         "id": case_id,
         "lawyer_id": user["id"],
+        "firm_id": actor["firm"]["id"],
         "client_name": req.client_name,
         "client_email": req.client_email,
         "case_type": req.case_type,
@@ -732,8 +950,9 @@ async def create_case(req: CreateCase, user: dict = Depends(get_current_user)):
 
 @app.get("/api/cases/{case_id}")
 async def get_case(case_id: str, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
     case = await db_get_case(case_id)
-    if not case:
+    if not case or not record_belongs_to_actor(case, actor):
         raise HTTPException(status_code=404, detail="Case not found")
     return case
 
@@ -746,11 +965,29 @@ async def get_case_public(case_id: str):
     return {
         "id": case["id"],
         "client_name": case["client_name"],
+        "client_email": case.get("client_email", ""),
         "case_type": case["case_type"],
         "destination": case["destination"],
         "invoice": case.get("invoice"),
         "invoice_paid": case.get("invoice_paid", False),
+        "public_notes": case.get("public_notes", ""),
     }
+
+
+@app.post("/api/cases/{case_id}/public-submit")
+async def submit_case_public(case_id: str, req: PublicCaseSubmitRequest):
+    case = await db_get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    patch = {
+        "client_name": req.client_name or case.get("client_name", ""),
+        "client_email": req.client_email or case.get("client_email", ""),
+        "public_notes": req.notes or case.get("public_notes", ""),
+        "public_submission_completed_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    updated = await db_update_case(case_id, patch)
+    return {"submitted": True, "case": updated}
 
 
 async def get_current_user_optional(authorization: str = Header(None)):
@@ -770,6 +1007,7 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     document = {
         "id": document_id,
         "lawyer_id": user["id"] if user else case.get("lawyer_id"),
+        "firm_id": case.get("firm_id"),
         "case_id": case_id,
         "case_name": case.get("client_name", ""),
         "name": upload["name"],
@@ -790,7 +1028,9 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
 
 @app.get("/api/documents")
 async def list_documents(status: Optional[str] = None, case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    return await db_get_documents(status=status, case_id=case_id)
+    actor = await ensure_actor_context(user)
+    docs = await db_get_documents(status=status, case_id=case_id)
+    return [doc for doc in docs if record_belongs_to_actor(doc, actor)]
 
 
 @app.post("/api/documents/intake")
@@ -874,15 +1114,18 @@ async def delete_case_document(case_id: str, document_ref: str, user: Optional[d
 # ─── Invoices ───────────────────────────────────────────
 @app.get("/api/invoices")
 async def list_invoices(case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    return await db_get_invoices(case_id=case_id)
+    actor = await ensure_actor_context(user)
+    invoices = await db_get_invoices(case_id=case_id)
+    return [invoice for invoice in invoices if record_belongs_to_actor(invoice, actor)]
 
 
 @app.get("/api/workflow/summary")
 async def workflow_summary(user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
     today = datetime.now(timezone.utc).date()
-    invoices = await db_get_invoices()
-    documents = await db_get_documents()
-    cases = await db_get_cases()
+    invoices = [invoice for invoice in await db_get_invoices() if record_belongs_to_actor(invoice, actor)]
+    documents = [doc for doc in await db_get_documents() if record_belongs_to_actor(doc, actor)]
+    cases = [case for case in await db_get_cases() if record_belongs_to_actor(case, actor)]
     overdue = []
     due_soon = []
     for invoice in invoices:
@@ -936,10 +1179,12 @@ async def get_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
 
 @app.post("/api/invoices")
 async def upsert_invoice(req: UpsertInvoiceRequest, user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
     total = sum(float(item.get("quantity", 0) or 0) * float(item.get("unit_price", 0) or 0) for item in req.items)
     invoice = req.model_dump()
     invoice.update({
         "lawyer_id": user["id"],
+        "firm_id": actor["firm"]["id"],
         "amount": total,
         "net": total,
         "vat": 0,
@@ -1089,7 +1334,7 @@ class EmailWebhook(BaseModel):
     attachments: list[EmailAttachment]
 
 
-async def process_email_payload(payload: EmailWebhook) -> dict:
+async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optional[str] = None) -> dict:
     from_email = payload.from_.lower().strip()
     matched = []
     created = []
@@ -1104,7 +1349,7 @@ async def process_email_payload(payload: EmailWebhook) -> dict:
             source="email",
             sender_email=from_email,
             subject=payload.subject,
-            user_id=DEFAULT_LAWYER_ID,
+            user_id=owner_user_id or DEFAULT_LAWYER_ID,
         )
         if result["case"]:
             matched.append(result["case"]["id"])
@@ -1142,47 +1387,74 @@ def extract_gmail_attachments(message: Message) -> list[EmailAttachment]:
     return attachments
 
 
+async def process_email_integration(integration: dict) -> dict:
+    processed = []
+    with imaplib.IMAP4_SSL(integration.get("imap_host") or "imap.gmail.com") as mailbox:
+        mailbox.login(integration["email"], integration["app_password"])
+        mailbox.select(integration.get("mailbox") or "INBOX")
+        status, data = mailbox.search(None, "UNSEEN")
+        if status != "OK":
+            raise HTTPException(status_code=502, detail=f"Gmail search failed for {integration['email']}")
+        message_ids = data[0].split()[: int(integration.get("poll_limit") or 10)]
+        for message_id in message_ids:
+            fetch_status, fetch_data = mailbox.fetch(message_id, "(RFC822)")
+            if fetch_status != "OK" or not fetch_data:
+                continue
+            raw = fetch_data[0][1]
+            message = email.message_from_bytes(raw)
+            attachments = extract_gmail_attachments(message)
+            if not attachments:
+                mailbox.store(message_id, "+FLAGS", "\\Seen")
+                continue
+            sender = parseaddr(message.get("From", ""))[1]
+            subject = message.get("Subject", "")
+            result = await process_email_payload(EmailWebhook(
+                **{"from": sender, "subject": subject, "attachments": attachments}
+            ), owner_user_id=integration.get("lawyer_id"))
+            mailbox.store(message_id, "+FLAGS", "\\Seen")
+            processed.append({
+                "integration_id": integration["id"],
+                "message_id": message_id.decode("utf-8", errors="ignore"),
+                "from": sender,
+                "subject": subject,
+                **result,
+            })
+    await db_upsert_email_integration({
+        **integration,
+        "last_polled_at": utc_now(),
+        "updated_at": utc_now(),
+    })
+    return {"integration_id": integration["id"], "email": integration["email"], "processed": processed, "count": len(processed)}
+
+
 @app.post("/api/gmail/poll")
 async def poll_gmail(user: dict = Depends(get_current_user)):
-    if not USE_GMAIL:
-        raise HTTPException(status_code=400, detail="Gmail IMAP is not configured")
-    processed = []
-    try:
-        with imaplib.IMAP4_SSL(GMAIL_IMAP_HOST) as mailbox:
-            mailbox.login(GMAIL_EMAIL, GMAIL_APP_PASSWORD)
-            mailbox.select(GMAIL_MAILBOX)
-            status, data = mailbox.search(None, "UNSEEN")
-            if status != "OK":
-                raise HTTPException(status_code=502, detail="Gmail search failed")
-            message_ids = data[0].split()[:GMAIL_POLL_LIMIT]
-            for message_id in message_ids:
-                fetch_status, fetch_data = mailbox.fetch(message_id, "(RFC822)")
-                if fetch_status != "OK" or not fetch_data:
-                    continue
-                raw = fetch_data[0][1]
-                message = email.message_from_bytes(raw)
-                attachments = extract_gmail_attachments(message)
-                if not attachments:
-                    mailbox.store(message_id, "+FLAGS", "\\Seen")
-                    continue
-                sender = parseaddr(message.get("From", ""))[1]
-                subject = message.get("Subject", "")
-                result = await process_email_payload(EmailWebhook(
-                    **{"from": sender, "subject": subject, "attachments": attachments}
-                ))
-                mailbox.store(message_id, "+FLAGS", "\\Seen")
-                processed.append({
-                    "message_id": message_id.decode("utf-8", errors="ignore"),
-                    "from": sender,
-                    "subject": subject,
-                    **result,
-                })
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Gmail poll failed: {e}")
-        raise HTTPException(status_code=502, detail="Gmail poll failed")
-    return {"processed": processed, "count": len(processed)}
+    actor = await ensure_actor_context(user)
+    integrations = await db_get_email_integrations(firm_id=actor["firm"]["id"], active_only=True)
+    if not integrations and USE_GMAIL:
+        integrations = [{
+            "id": "env-fallback",
+            "email": GMAIL_EMAIL,
+            "app_password": GMAIL_APP_PASSWORD,
+            "imap_host": GMAIL_IMAP_HOST,
+            "mailbox": GMAIL_MAILBOX,
+            "poll_limit": GMAIL_POLL_LIMIT,
+            "lawyer_id": user["id"],
+            "firm_id": actor["firm"]["id"],
+            "active": True,
+        }]
+    if not integrations:
+        raise HTTPException(status_code=400, detail="No active Gmail integrations configured")
+    runs = []
+    for integration in integrations:
+        try:
+            runs.append(await process_email_integration(integration))
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Gmail poll failed for {integration.get('email')}: {e}")
+            raise HTTPException(status_code=502, detail=f"Gmail poll failed for {integration.get('email')}")
+    return {"runs": runs, "count": sum(item["count"] for item in runs)}
 
 
 # ─── OCR pipeline ───────────────────────────────────────

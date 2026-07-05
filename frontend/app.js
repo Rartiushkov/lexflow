@@ -18,6 +18,10 @@ function getToken() {
   return localStorage.getItem(LS_TOKEN);
 }
 
+function isDemoSession() {
+  return (getToken() || '').startsWith('demo_token_');
+}
+
 function setSession(token, user) {
   localStorage.setItem(LS_TOKEN, token);
   localStorage.setItem(LS_USER, JSON.stringify(user));

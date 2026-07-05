@@ -33,15 +33,19 @@
     </div>
     <div class="page-content">
       <div class="page-header"><div><div class="page-title">Settings</div><div class="page-subtitle">Workspace preferences and account setup.</div></div></div>
-      <div class="card" style="max-width:640px;">
+      <div class="card" style="max-width:720px;margin-bottom:20px;">
         <div class="card-body">
           <div class="form-group">
             <label class="form-label">Law firm name</label>
-            <input class="form-input" type="text" value="LexFlow Pilot Office" />
+            <input class="form-input" type="text" id="firm-name" />
           </div>
           <div class="form-group">
             <label class="form-label">EU VAT ID</label>
-            <input class="form-input" type="text" value="DE123456789" />
+            <input class="form-input" type="text" id="vat-id" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Your name</label>
+            <input class="form-input" type="text" id="full-name" />
           </div>
           <div class="form-group">
             <label class="form-label">Invoice currency</label>
@@ -51,12 +55,106 @@
             <label class="form-label">Default VAT rate</label>
             <select class="form-select"><option>19% (Germany)</option><option>0% Reverse charge</option></select>
           </div>
-          <button class="btn btn-primary">Save settings</button>
+          <button class="btn btn-primary" id="btn-save-settings" type="button">Save settings</button>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:720px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Connect work email</div>
+            <div class="panel-subtitle">Per-firm Gmail inbox for autonomous document intake.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Provider</label>
+              <input class="form-input" value="Gmail" disabled />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input class="form-input" id="gmail-email" type="email" placeholder="inbox@firm.com" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">App password</label>
+              <input class="form-input" id="gmail-password" type="password" placeholder="Google app password" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">IMAP host</label>
+              <input class="form-input" id="gmail-host" type="text" value="imap.gmail.com" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Mailbox</label>
+              <input class="form-input" id="gmail-mailbox" type="text" value="INBOX" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Poll limit</label>
+              <input class="form-input" id="gmail-poll-limit" type="number" min="1" max="100" value="10" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;">
+            <button class="btn btn-primary" id="btn-save-gmail" type="button">Save Gmail connection</button>
+            <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run Gmail poll</button>
+          </div>
+          <div id="gmail-integrations" style="margin-top:16px;"></div>
         </div>
       </div>
     </div>
   </div>
   <script src="./app.js"></script>
-  <script>document.addEventListener('DOMContentLoaded', requireAuth);</script>
+  <script>
+    async function loadSettings() {
+      const profile = await get('/api/settings/profile');
+      document.getElementById('firm-name').value = profile.firm?.name || '';
+      document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
+      document.getElementById('full-name').value = profile.profile?.full_name || '';
+      const integrations = await get('/api/email-integrations');
+      document.getElementById('gmail-integrations').innerHTML = integrations.length
+        ? integrations.map(item => `
+          <div class="table-row" style="grid-template-columns:1.2fr 120px 120px;">
+            <span><strong>${item.email}</strong></span>
+            <span>${item.mailbox}</span>
+            <span><span class="badge ${item.active ? 'badge-green' : 'badge-gray'}">${item.active ? 'active' : 'inactive'}</span></span>
+          </div>
+        `).join('')
+        : '<div class="kanban-empty">No work email connected yet.</div>';
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      requireAuth();
+      await loadSettings();
+      document.getElementById('btn-save-settings').addEventListener('click', async () => {
+        await post('/api/settings/profile', {
+          firm_name: document.getElementById('firm-name').value,
+          vat_id: document.getElementById('vat-id').value,
+          full_name: document.getElementById('full-name').value,
+        });
+        showToast('Settings saved', 'success');
+      });
+      document.getElementById('btn-save-gmail').addEventListener('click', async () => {
+        await post('/api/email-integrations', {
+          provider: 'gmail',
+          email: document.getElementById('gmail-email').value,
+          app_password: document.getElementById('gmail-password').value,
+          imap_host: document.getElementById('gmail-host').value,
+          mailbox: document.getElementById('gmail-mailbox').value,
+          poll_limit: Number(document.getElementById('gmail-poll-limit').value || 10),
+          active: true,
+        });
+        document.getElementById('gmail-password').value = '';
+        showToast('Gmail integration saved', 'success');
+        await loadSettings();
+      });
+      document.getElementById('btn-poll-gmail').addEventListener('click', async () => {
+        const result = await post('/api/gmail/poll', {});
+        showToast(`Processed ${result.count} email batch(es)`, 'success');
+      });
+    });
+  </script>
 </body>
 </html>

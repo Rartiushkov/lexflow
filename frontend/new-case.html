@@ -138,7 +138,12 @@
           document.getElementById('portal-link').textContent = data.portal_url;
           document.getElementById('result').style.display = 'block';
           showToast('Case created', 'success');
+          setTimeout(() => { window.location.href = `case.html?id=${data.id}`; }, 400);
         } catch (err) {
+          if (!isDemoSession()) {
+            showToast(err.message || 'Case was not created', 'error');
+            return;
+          }
           const id = Math.random().toString(36).slice(2, 8);
           const localCase = upsertLocalCase({
             id,
