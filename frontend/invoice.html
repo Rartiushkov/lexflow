@@ -340,7 +340,7 @@
     function renderTemplatePicker(activeId) {
       const host = document.getElementById('template-picker');
       if (!host) return;
-      const builtIn = getInvoiceTemplates();
+      const builtIn = getActiveInvoiceTemplates().filter(t => !t._from_builder);
       const myLayouts = getBuilderTemplates();
 
       const btnStyle = (id) => `
@@ -543,8 +543,22 @@
       };
     }
 
+    function getActiveInvoiceTemplates() {
+      const builderIds = new Set(getBuilderTemplates().map(t => t.id));
+      return getInvoiceTemplates().filter(t => !t._from_builder || builderIds.has(t.id));
+    }
+
+    function cleanOrphanBuilderTemplates() {
+      const builderIds = new Set(getBuilderTemplates().map(t => t.id));
+      const all = getInvoiceTemplates();
+      const clean = all.filter(t => !t._from_builder || builderIds.has(t.id));
+      if (clean.length !== all.length) {
+        try { localStorage.setItem('lexflow_invoice_templates', JSON.stringify(clean)); } catch {}
+      }
+    }
+
     function renderTemplateSelects(selectedId) {
-      const options = getInvoiceTemplates().map(template => `<option value="${template.id}">${template.name}</option>`).join('');
+      const options = getActiveInvoiceTemplates().map(template => `<option value="${template.id}">${template.name}</option>`).join('');
       const invTpl = document.getElementById('invoice-template');
       const tplSel = document.getElementById('template-select');
       if (invTpl) invTpl.innerHTML = options;
@@ -1190,6 +1204,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       ensureDefaultTemplates();
+      cleanOrphanBuilderTemplates();
       bindForm();
       initCanvas();
 
