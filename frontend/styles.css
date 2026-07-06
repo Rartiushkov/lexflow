@@ -2646,6 +2646,11 @@ a.queue-row:hover .queue-client strong {
   cursor: grabbing;
 }
 
+.kanban-card-saving {
+  opacity: 0.78;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.2), 0 10px 24px rgba(30, 64, 175, 0.16);
+}
+
 .kanban-card-title {
   font-weight: 600;
   font-size: 13px;

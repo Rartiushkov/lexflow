@@ -253,8 +253,48 @@
       };
     }
 
+    let dashboardCasesState = [];
+    let stageUpdateSequence = 0;
+    const pendingStageUpdates = new Map();
+
+    function storeDashboardCases(cases) {
+      dashboardCasesState = (cases || []).map(normalizeDashboardCase);
+      return dashboardCasesState;
+    }
+
+    function syncDashboardCasesToLocalCache(cases) {
+      const normalized = (cases || []).map(normalizeDashboardCase);
+      saveCaseDirectory(normalized);
+      normalized.forEach(item => cacheCaseDetail(item));
+      return normalized;
+    }
+
+    function applyStageMoveToCases(cases, caseId, targetStage) {
+      return (cases || []).map(item => (
+        item.id === caseId
+          ? normalizeDashboardCase({ ...item, stage: targetStage })
+          : normalizeDashboardCase(item)
+      ));
+    }
+
+    function moveCaseOptimistically(caseId, targetStage) {
+      const nextCases = applyStageMoveToCases(
+        dashboardCasesState.length ? dashboardCasesState : getCaseDirectory(),
+        caseId,
+        targetStage
+      );
+      storeDashboardCases(nextCases);
+      syncDashboardCasesToLocalCache(nextCases);
+      renderDashboard(nextCases);
+      return nextCases;
+    }
+
+    function isCaseStageSaving(caseId) {
+      return pendingStageUpdates.has(caseId);
+    }
+
     function renderDashboard(cases) {
-      const normalizedCases = (cases || []).map(normalizeDashboardCase);
+      const normalizedCases = storeDashboardCases(cases);
       const queue = document.getElementById('queue-list');
       const stack = document.getElementById('stage-stack');
       const spotlight = document.getElementById('spotlight-list');
@@ -330,6 +370,7 @@
             levelCases.forEach(c => {
             const card = document.createElement('div');
             card.className = `kanban-card kanban-card-priority-${c.priority}`;
+            if (isCaseStageSaving(c.id)) card.classList.add('kanban-card-saving');
             card.dataset.id = c.id;
             card.dataset.stage = c.stage;
             card.innerHTML = `
@@ -343,6 +384,7 @@
                 <span class="badge ${stageBadge(c.stage)}">${c.case_type}</span>
                 <span class="badge badge-gray">${c.doc_count} files</span>
                 <span class="badge ${c.invoice_paid ? 'badge-green' : 'badge-yellow'}">${c.invoice_paid ? 'Paid' : 'Open'}</span>
+                ${isCaseStageSaving(c.id) ? '<span class="badge badge-blue">Saving...</span>' : ''}
               </div>
             `;
             let _dragging = false, _ghost = null, _moved = false;
@@ -381,13 +423,24 @@
                 const col = el?.closest('.kanban-column');
                 const targetStage = col?.dataset?.stage;
                 if (!targetStage || targetStage === c.stage) return;
+                const previousCases = dashboardCasesState.map(item => ({ ...item }));
+                const requestId = ++stageUpdateSequence;
+                pendingStageUpdates.set(c.id, requestId);
+                moveCaseOptimistically(c.id, targetStage);
                 try {
-                  await patch(`/api/cases/${c.id}`, { stage: targetStage });
+                  await patch(`/api/cases/${c.id}`, { stage: targetStage }, { toastOnError: false });
+                  if (pendingStageUpdates.get(c.id) !== requestId) return;
+                  pendingStageUpdates.delete(c.id);
+                  renderDashboard(dashboardCasesState);
                   showToast(`Moved to ${targetStage}`, 'success');
-                  const cases = await get('/api/cases');
-                  setCaseDirectory(cases);
-                  renderDashboard(cases);
-                } catch { showToast('Could not update stage', 'error'); }
+                } catch {
+                  if (pendingStageUpdates.get(c.id) !== requestId) return;
+                  pendingStageUpdates.delete(c.id);
+                  storeDashboardCases(previousCases);
+                  syncDashboardCasesToLocalCache(previousCases);
+                  renderDashboard(previousCases);
+                  showToast('Could not update stage', 'error');
+                }
               };
               document.addEventListener('pointermove', onMove);
               document.addEventListener('pointerup', onUp);
