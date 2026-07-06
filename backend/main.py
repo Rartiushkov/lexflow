@@ -123,6 +123,7 @@ memory_notifications: dict[str, dict] = {}
 app.state.email_poll_lock = None
 app.state.email_poll_task = None
 app.state.email_poll_debug = {}
+app.state.email_integration_db_debug = {}
 
 
 def utc_now():
@@ -728,9 +729,21 @@ async def db_upsert_email_integration(data: dict) -> dict:
     if USE_SUPABASE:
         try:
             res = supabase_client.table("email_integrations").upsert(data).execute()
+            app.state.email_integration_db_debug = {
+                "last_upsert_error": "",
+                "last_select_error": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_select_error", ""),
+                "last_upsert_at": utc_now(),
+                "last_select_at": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_select_at", ""),
+            }
             return res.data[0]
         except Exception as e:
             print(f"Supabase email integration upsert failed: {e}")
+            app.state.email_integration_db_debug = {
+                "last_upsert_error": trim_poll_debug_text(str(e)),
+                "last_select_error": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_select_error", ""),
+                "last_upsert_at": utc_now(),
+                "last_select_at": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_select_at", ""),
+            }
     memory_email_integrations[data["id"]] = data
     return data
 
@@ -757,9 +770,21 @@ async def db_get_email_integrations(*, lawyer_id: Optional[str] = None, firm_id:
             if firm_id:
                 query = query.eq("firm_id", firm_id)
             res = query.execute()
+            app.state.email_integration_db_debug = {
+                "last_upsert_error": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_upsert_error", ""),
+                "last_select_error": "",
+                "last_upsert_at": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_upsert_at", ""),
+                "last_select_at": utc_now(),
+            }
             return res.data
         except Exception as e:
             print(f"Supabase email integrations select failed: {e}")
+            app.state.email_integration_db_debug = {
+                "last_upsert_error": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_upsert_error", ""),
+                "last_select_error": trim_poll_debug_text(str(e)),
+                "last_upsert_at": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_upsert_at", ""),
+                "last_select_at": utc_now(),
+            }
     rows = list(memory_email_integrations.values())
     if active_only:
         rows = [item for item in rows if item.get("active")]
@@ -2002,6 +2027,7 @@ async def public_debug_email_integrations_all(limit: int = 20):
     return {
         "generated_at": utc_now(),
         "count": len(rows),
+        "db_debug": getattr(app.state, "email_integration_db_debug", {}) or {},
         "items": [
             {
                 "id": row.get("id"),
