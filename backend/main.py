@@ -196,6 +196,47 @@ def mistral_ocr_to_raw_text(payload: dict) -> tuple[str, float, list[dict]]:
     return raw_text, confidence, normalized_pages
 
 
+def score_extracted_fields(fields: dict) -> float:
+    if not fields:
+        return 0.0
+    important = (
+        "full_name",
+        "passport_number",
+        "date_of_birth",
+        "expiry_date",
+        "nationality",
+        "employer",
+        "email",
+        "phone",
+        "address",
+    )
+    present = sum(1 for key in important if fields.get(key))
+    confidence = float(fields.get("confidence") or 0)
+    return round(confidence + present * 0.08, 3)
+
+
+def merge_extracted_fields(base: dict, incoming: dict) -> dict:
+    merged = dict(base or {})
+    current_score = score_extracted_fields(merged)
+    incoming_score = score_extracted_fields(incoming)
+    for key, value in (incoming or {}).items():
+        if value in (None, "", [], {}):
+            continue
+        if key in {"missing_fields", "document_type", "classification_confidence", "confidence", "ocr_provider", "ocr_confidence"}:
+            continue
+        if not merged.get(key) or incoming_score >= current_score:
+            merged[key] = value
+    merged["missing_fields"] = incoming.get("missing_fields") or merged.get("missing_fields") or []
+    merged["document_type"] = incoming.get("document_type") if incoming.get("document_type") and incoming.get("document_type") != "unknown" else merged.get("document_type", "unknown")
+    merged["classification_confidence"] = max(float(merged.get("classification_confidence") or 0), float(incoming.get("classification_confidence") or 0))
+    merged["confidence"] = max(float(merged.get("confidence") or 0), float(incoming.get("confidence") or 0))
+    if incoming.get("ocr_provider"):
+        merged["ocr_provider"] = incoming.get("ocr_provider")
+    if incoming.get("ocr_confidence") is not None:
+        merged["ocr_confidence"] = incoming.get("ocr_confidence")
+    return merged
+
+
 def infer_case_type(document_type: str, subject: str = "") -> str:
     lookup = f"{document_type} {subject}".lower()
     if "blue card" in lookup:
@@ -4001,24 +4042,50 @@ async def parse_documents(case_id: str, user: dict = Depends(get_current_user)):
     case = await db_get_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    docs = case.get("docs", [])
+    docs = await db_get_documents(case_id=case_id)
+    docs = [
+        doc for doc in docs
+        if (doc.get("status") != "duplicate")
+        and (doc.get("source") in {"email", "lawyer", "client", "intake"})
+        and not (doc.get("name") or "").lower().startswith("application form")
+    ]
     if not docs:
         raise HTTPException(status_code=400, detail="No documents")
-    # For demo, parse the first document name as source of fake text
-    first_doc = docs[0]
-    text = f"DEMO OCR TEXT\nName: {case['client_name']}\nPassport: D1234567\nDOB: 1990-01-01\nEmployer: Demo GmbH"
-    if USE_R2 and first_doc.get("key"):
+    extracted = dict(case.get("extracted", {}) or {})
+    parsed_documents = []
+    for doc in docs:
+        key = doc.get("key") or ""
+        if not (USE_R2 and key):
+            continue
         try:
-            obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=first_doc["key"])
+            obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
             content = obj["Body"].read()
-            ocr = await run_ocr(content, first_doc.get("name", "document.pdf"))
-            text = ocr.get("raw_text", "")
+            ocr = await run_ocr(content, doc.get("name", "document.pdf"))
+            text = ocr.get("raw_text", "") or ""
+            fields = parse_document_text(text, doc.get("name", "document.pdf"))
+            fields["ocr_provider"] = ocr.get("provider", "none")
+            fields["ocr_confidence"] = ocr.get("confidence", 0)
+            fields["document_type"] = canonical_document_type(fields.get("document_type", "unknown"), doc.get("name", "document.pdf"))
+            parsed_documents.append({
+                "document_id": doc.get("id", ""),
+                "name": doc.get("name", ""),
+                "score": score_extracted_fields(fields),
+                "extracted": fields,
+            })
+            extracted = merge_extracted_fields(extracted, fields)
+            await store_extraction_evaluation(case_id, doc.get("id", ""), fields)
         except Exception as e:
-            print(f"R2 read for OCR failed: {e}")
-    extracted = parse_document_text(text, first_doc.get("name", "document.pdf"))
-    await store_extraction_evaluation(case_id, first_doc.get("document_id", ""), extracted)
-    await db_update_case(case_id, {"extracted": extracted, "stage": "review", "updated_at": utc_now()})
-    return {"case_id": case_id, "extracted": extracted, "stage": "review"}
+            print(f"R2 read for OCR failed on {doc.get('name', '')}: {e}")
+    if not parsed_documents:
+        raise HTTPException(status_code=400, detail="No parsable documents")
+    updated = await db_update_case(case_id, {"extracted": extracted, "stage": "review", "updated_at": utc_now()})
+    return {
+        "case_id": case_id,
+        "extracted": extracted,
+        "stage": "review",
+        "parsed_documents": sorted(parsed_documents, key=lambda item: item.get("score", 0), reverse=True),
+        "case": updated or {**case, "extracted": extracted, "stage": "review"},
+    }
 
 
 class OcrEvaluationRequest(BaseModel):

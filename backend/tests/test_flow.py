@@ -208,6 +208,60 @@ def test_case_upload_returns_extracted_fields_and_updated_case(monkeypatch):
     assert payload["case"]["extracted"]["passport_number"] == "C12345678"
 
 
+def test_case_parse_merges_fields_from_multiple_documents(monkeypatch):
+    reset_state()
+    case = create_case(name="Roman", email="roman@example.com")
+
+    main.memory_documents["doc-1"] = {
+        "id": "doc-1",
+        "case_id": case["id"],
+        "name": "permit-front.png",
+        "key": "case/permit-front.png",
+        "status": "assigned",
+        "source": "email",
+    }
+    main.memory_documents["doc-2"] = {
+        "id": "doc-2",
+        "case_id": case["id"],
+        "name": "passport.png",
+        "key": "case/passport.png",
+        "status": "assigned",
+        "source": "email",
+    }
+
+    class FakeBody:
+        def __init__(self, value):
+            self.value = value
+        def read(self):
+            return self.value
+
+    class FakeR2:
+        def get_object(self, Bucket=None, Key=None):
+            return {"Body": FakeBody(Key.encode("utf-8"))}
+
+    async def fake_run_ocr(content, filename):
+        if filename == "permit-front.png":
+            return {"raw_text": "Residence permit\nName: Roman Test\nDate of birth: 01.02.1990", "provider": "mistral", "confidence": 0.9}
+        return {"raw_text": "Passport\nPassport number: C12345678\nNationality: Russian", "provider": "mistral", "confidence": 0.92}
+
+    original_use_r2 = main.USE_R2
+    original_r2 = main.r2_client
+    monkeypatch.setattr(main, "run_ocr", fake_run_ocr)
+    try:
+        main.USE_R2 = True
+        main.r2_client = FakeR2()
+        response = client.post(f"/api/cases/{case['id']}/parse", headers=AUTH, json={})
+    finally:
+        main.USE_R2 = original_use_r2
+        main.r2_client = original_r2
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["extracted"]["full_name"] == "Roman Test"
+    assert payload["extracted"]["passport_number"] == "C12345678"
+    assert payload["parsed_documents"][0]["score"] >= payload["parsed_documents"][1]["score"]
+
+
 def test_case_patch_succeeds_even_if_control_refresh_fails(monkeypatch):
     reset_state()
     case = create_case()

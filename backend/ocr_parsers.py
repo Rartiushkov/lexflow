@@ -100,7 +100,7 @@ def parse_document_text(text: str, filename: str = "") -> dict:
             r"([A-Z][A-Z'\-]+,\s+[A-Z][A-Z'\-]+)",
         ], cleaned),
         "passport_number": first_match([
-            r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+([A-Z0-9]{6,12})",
+            r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,12})",
             r"\b([A-Z][0-9]{7,9})\b",
         ], cleaned),
         "date_of_birth": normalize_date(first_match([

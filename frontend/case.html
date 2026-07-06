@@ -1037,8 +1037,15 @@
         try {
           const result = await post(`/api/cases/${caseId}/parse`, {});
           showToast('Fields extracted from documents', 'success');
-          if (result?.extracted) fillFieldsFromExtracted(result.extracted);
-          else loadCase();
+          if (result?.case) {
+            cacheCaseDetail(result.case);
+            upsertLocalCase(result.case);
+            render(result.case);
+          } else if (result?.extracted) {
+            fillFieldsFromExtracted(result.extracted);
+          } else {
+            loadCase();
+          }
         } catch { showToast('Extraction failed — check documents', 'error'); }
       });
 
