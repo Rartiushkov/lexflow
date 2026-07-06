@@ -163,6 +163,13 @@ def normalize_lookup(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
 
 
+def parse_duplicate_origin_id(value: str) -> str:
+    note = (value or "").strip()
+    if note.startswith("duplicate_of:"):
+        return note.split(":", 1)[1].strip()
+    return ""
+
+
 def infer_case_type(document_type: str, subject: str = "") -> str:
     lookup = f"{document_type} {subject}".lower()
     if "blue card" in lookup:
@@ -1687,6 +1694,10 @@ async def route_incoming_document(
     actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@lexflow.local", "name": sender_email or user_id})
     content_hash = hashlib.sha256(content).hexdigest()
     duplicate = await db_find_document_by_hash(content_hash)
+    if duplicate and duplicate.get("status") == "duplicate":
+        origin_id = parse_duplicate_origin_id(duplicate.get("automation_note", ""))
+        origin_doc = await db_get_document(origin_id) if origin_id and origin_id != duplicate.get("id") else None
+        duplicate = origin_doc
     if duplicate:
         duplicate_case = await db_get_case(duplicate.get("case_id")) if duplicate.get("case_id") else None
         duplicate_fields = duplicate.get("extracted", {}) or {}

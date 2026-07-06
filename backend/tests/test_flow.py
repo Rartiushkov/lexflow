@@ -975,6 +975,15 @@ def test_route_incoming_document_returns_existing_duplicate_without_new_upload(m
         "document_type": "unknown",
         "extracted": {"document_type": "unknown", "confidence": 0.1},
         "status": "duplicate",
+        "automation_note": "duplicate_of:doc-root",
+    }
+    root = {
+        "id": "doc-root",
+        "case_id": "case-1",
+        "name": "IMG_1203.png",
+        "document_type": "unknown",
+        "extracted": {"document_type": "unknown", "confidence": 0.1},
+        "status": "assigned",
     }
 
     async def fake_find(_content_hash):
@@ -983,11 +992,15 @@ def test_route_incoming_document_returns_existing_duplicate_without_new_upload(m
     async def fake_get_case(case_id):
         return {"id": case_id, "client_name": "Roman", "firm_id": "firm-1"}
 
+    async def fake_get_document(document_id):
+        return root if document_id == "doc-root" else None
+
     async def fail_upload(*_args, **_kwargs):
         raise AssertionError("upload_bytes should not be called for duplicates")
 
     monkeypatch.setattr(main, "db_find_document_by_hash", fake_find)
     monkeypatch.setattr(main, "db_get_case", fake_get_case)
+    monkeypatch.setattr(main, "db_get_document", fake_get_document)
     monkeypatch.setattr(main, "upload_bytes", fail_upload)
 
     result = asyncio.run(
@@ -1003,8 +1016,68 @@ def test_route_incoming_document_returns_existing_duplicate_without_new_upload(m
     )
 
     assert result["duplicate"] is True
-    assert result["document"]["id"] == "doc-existing"
+    assert result["document"]["id"] == "doc-root"
     assert result["document"]["status"] == "duplicate"
+
+
+def test_route_incoming_document_replaces_stale_duplicate_with_new_canonical_doc(monkeypatch):
+    reset_state()
+    existing = {
+        "id": "doc-duplicate",
+        "case_id": "case-1",
+        "name": "IMG_1203.png",
+        "document_type": "unknown",
+        "extracted": {"document_type": "unknown", "confidence": 0.1},
+        "status": "duplicate",
+        "automation_note": "duplicate_of:doc-root",
+    }
+
+    async def fake_find(_content_hash):
+        return existing
+
+    async def fake_get_doc(document_id):
+        return None
+
+    async def fake_get_cases():
+        return []
+
+    async def fake_upload(case_id, filename, content_type, content, source="email"):
+        return {
+            "name": filename,
+            "key": f"{case_id}/file.png",
+            "url": "https://example.com/file.png",
+            "content_type": content_type,
+            "size": len(content),
+        }
+
+    async def fake_create_document(document):
+        return document
+
+    async def fake_run_ocr(*_args, **_kwargs):
+        return {"raw_text": "", "provider": "none", "confidence": 0}
+
+    monkeypatch.setattr(main, "db_find_document_by_hash", fake_find)
+    monkeypatch.setattr(main, "db_get_document", fake_get_doc)
+    monkeypatch.setattr(main, "db_get_cases", fake_get_cases)
+    monkeypatch.setattr(main, "upload_bytes", fake_upload)
+    monkeypatch.setattr(main, "db_create_document", fake_create_document)
+    monkeypatch.setattr(main, "run_ocr", fake_run_ocr)
+    monkeypatch.setattr(main, "parse_document_text", lambda *_args, **_kwargs: {"document_type": "unknown", "confidence": 0.1, "missing_fields": []})
+
+    result = asyncio.run(
+        main.route_incoming_document(
+            filename="IMG_1203.png",
+            content=b"same-file",
+            content_type="image/png",
+            source="email",
+            sender_email="new@example.com",
+            subject="Residence permit",
+            user_id="user_1",
+        )
+    )
+
+    assert result["duplicate"] is False
+    assert result["document"]["status"] == "unrecognized"
 
 
 def test_db_get_email_integrations_falls_back_to_r2(monkeypatch):
