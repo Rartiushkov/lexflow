@@ -3341,7 +3341,6 @@ async def process_email_integration(integration: dict) -> dict:
             params={
                 "folderId": folder_id,
                 "status": "unread",
-                "attachedMails": "true",
                 "limit": int(ready.get("poll_limit") or 10),
                 "sortorder": "false",
             },
