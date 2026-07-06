@@ -635,7 +635,8 @@ def test_email_webhook_detects_duplicate_document_by_hash():
     assert second.status_code == 200
     assert second.json()["duplicates"] == 1
     docs = client.get(f"/api/documents?case_id={case['id']}", headers=AUTH).json()
-    assert any(doc["status"] == "duplicate" for doc in docs)
+    assert len(docs) == 1
+    assert docs[0]["status"] != "duplicate"
 
 
 def test_workflow_summary_flags_overdue_and_due_soon_invoices():
@@ -911,6 +912,99 @@ def test_zoho_email_integration_start_requests_update_scope():
 def test_is_zoho_message_unread_treats_status_one_as_unread():
     assert main.is_zoho_message_unread({"status": "1"}) is True
     assert main.is_zoho_message_unread({"status": "0"}) is False
+
+
+def test_process_email_payload_ignores_system_zoho_messages():
+    reset_state()
+    payload = main.EmailWebhook(
+        **{
+            "from": "welcome@zoho.com",
+            "subject": "Welcome aboard! Your new inbox is here",
+            "attachments": [
+                main.EmailAttachment(filename="welcome.png", content_base64=base64.b64encode(b"abc").decode("utf-8"), content_type="image/png")
+            ],
+        }
+    )
+
+    result = asyncio.run(main.process_email_payload(payload))
+
+    assert result["attachments_accepted"] == 0
+    assert result["attachments_ignored"] == 1
+    assert result["ignored"][0]["reason"] == "ignored_system_sender"
+
+
+def test_process_email_payload_deduplicates_same_attachment_in_one_message(monkeypatch):
+    reset_state()
+
+    async def fake_route(**kwargs):
+        return {
+            "case": None,
+            "document": {"id": "doc-1", "name": kwargs["filename"]},
+            "duplicate": False,
+            "auto_created_case": False,
+            "decision": {},
+        }
+
+    monkeypatch.setattr(main, "route_incoming_document", fake_route)
+    encoded = base64.b64encode(b"same-file").decode("utf-8")
+    payload = main.EmailWebhook(
+        **{
+            "from": "client@example.com",
+            "subject": "Residence permit",
+            "attachments": [
+                main.EmailAttachment(filename="IMG_1203.png", content_base64=encoded, content_type="image/png"),
+                main.EmailAttachment(filename="IMG_1203-copy.png", content_base64=encoded, content_type="image/png"),
+            ],
+        }
+    )
+
+    result = asyncio.run(main.process_email_payload(payload))
+
+    assert result["attachments_processed"] == 2
+    assert result["attachments_accepted"] == 1
+    assert result["attachments_ignored"] == 1
+    assert result["ignored"][0]["reason"] == "duplicate_attachment_in_same_message"
+
+
+def test_route_incoming_document_returns_existing_duplicate_without_new_upload(monkeypatch):
+    reset_state()
+    existing = {
+        "id": "doc-existing",
+        "case_id": "case-1",
+        "name": "IMG_1203.png",
+        "document_type": "unknown",
+        "extracted": {"document_type": "unknown", "confidence": 0.1},
+        "status": "duplicate",
+    }
+
+    async def fake_find(_content_hash):
+        return existing
+
+    async def fake_get_case(case_id):
+        return {"id": case_id, "client_name": "Roman", "firm_id": "firm-1"}
+
+    async def fail_upload(*_args, **_kwargs):
+        raise AssertionError("upload_bytes should not be called for duplicates")
+
+    monkeypatch.setattr(main, "db_find_document_by_hash", fake_find)
+    monkeypatch.setattr(main, "db_get_case", fake_get_case)
+    monkeypatch.setattr(main, "upload_bytes", fail_upload)
+
+    result = asyncio.run(
+        main.route_incoming_document(
+            filename="IMG_1203.png",
+            content=b"same-file",
+            content_type="image/png",
+            source="email",
+            sender_email="client@example.com",
+            subject="Residence permit",
+            user_id="user_1",
+        )
+    )
+
+    assert result["duplicate"] is True
+    assert result["document"]["id"] == "doc-existing"
+    assert result["document"]["status"] == "duplicate"
 
 
 def test_db_get_email_integrations_falls_back_to_r2(monkeypatch):

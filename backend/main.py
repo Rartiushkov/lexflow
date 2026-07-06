@@ -1687,6 +1687,32 @@ async def route_incoming_document(
     actor = await ensure_actor_context({"id": user_id, "email": sender_email or f"{user_id}@lexflow.local", "name": sender_email or user_id})
     content_hash = hashlib.sha256(content).hexdigest()
     duplicate = await db_find_document_by_hash(content_hash)
+    if duplicate:
+        duplicate_case = await db_get_case(duplicate.get("case_id")) if duplicate.get("case_id") else None
+        duplicate_fields = duplicate.get("extracted", {}) or {}
+        duplicate_document_type = canonical_document_type(duplicate.get("document_type", "unknown"), duplicate.get("name", filename))
+        intake_decision = build_intake_decision(
+            matched_case=duplicate_case,
+            match_reason="email" if sender_email and duplicate_case else "none",
+            match_score=0.98 if sender_email and duplicate_case else 0.0,
+            status="duplicate",
+            document_type=duplicate_document_type,
+            auto_created=False,
+            duplicate=True,
+            fields=duplicate_fields,
+        )
+        return {
+            "case": duplicate_case,
+            "document": {
+                **duplicate,
+                "status": "duplicate",
+                "automation_note": f"duplicate_of:{duplicate.get('id')}",
+                "automation_decision": intake_decision,
+            },
+            "duplicate": True,
+            "auto_created_case": False,
+            "decision": intake_decision,
+        }
     ocr = await run_ocr(content, filename)
     fields = parse_document_text(ocr.get("raw_text", ""), filename)
     fields["ocr_provider"] = ocr.get("provider", "none")
@@ -1702,15 +1728,11 @@ async def route_incoming_document(
         auto_created = True
 
     case_id = matched_case["id"] if matched_case else "unrecognized"
-    uploaded = await upload_bytes(case_id, filename, content_type, content, source=source)
     type_exists = await case_has_document_type(matched_case, document_type) if matched_case else False
     status = "assigned" if matched_case else "unrecognized"
     automation_note = "routed"
     manual_review_required = False
-    if duplicate:
-        status = "duplicate"
-        automation_note = f"duplicate_of:{duplicate.get('id')}"
-    elif type_exists:
+    if type_exists:
         status = "needs_review"
         automation_note = f"document_type_already_exists:{document_type}"
         manual_review_required = True
@@ -1718,6 +1740,7 @@ async def route_incoming_document(
         status = "needs_review"
         automation_note = "low_confidence_scan"
         manual_review_required = True
+    uploaded = await upload_bytes(case_id, filename, content_type, content, source=source)
 
     intake_decision = build_intake_decision(
         matched_case=matched_case,
@@ -1726,7 +1749,7 @@ async def route_incoming_document(
         status=status,
         document_type=document_type,
         auto_created=auto_created,
-        duplicate=bool(duplicate),
+        duplicate=False,
         fields=fields,
     )
 
@@ -2932,6 +2955,15 @@ IGNORED_EMAIL_ATTACHMENT_HINTS = (
 )
 
 SUPPORTED_INTAKE_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".tif", ".tiff"}
+IGNORED_EMAIL_SENDERS = {
+    "welcome@zoho.com",
+    "no-reply@zoho.com",
+    "noreply@zoho.com",
+}
+IGNORED_EMAIL_SUBJECT_HINTS = (
+    "welcome aboard",
+    "your new inbox is here",
+)
 
 
 def is_relevant_email_attachment(filename: str, content_type: str = "", subject: str = "") -> tuple[bool, str]:
@@ -2961,20 +2993,50 @@ def is_relevant_email_attachment(filename: str, content_type: str = "", subject:
     return False, "unsupported_content_type"
 
 
+def should_ignore_email_message(sender_email: str = "", subject: str = "") -> tuple[bool, str]:
+    normalized_sender = (sender_email or "").lower().strip()
+    normalized_subject = (subject or "").lower().strip()
+    if normalized_sender in IGNORED_EMAIL_SENDERS:
+        return True, "ignored_system_sender"
+    if any(hint in normalized_subject for hint in IGNORED_EMAIL_SUBJECT_HINTS):
+        return True, "ignored_system_subject"
+    return False, ""
+
+
 async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optional[str] = None) -> dict:
     from_email = payload.from_.lower().strip()
+    ignore_message, ignore_reason = should_ignore_email_message(from_email, payload.subject)
+    if ignore_message:
+        return {
+            "matched_cases": [],
+            "created_cases": [],
+            "attachments_processed": len(payload.attachments),
+            "attachments_accepted": 0,
+            "attachments_ignored": len(payload.attachments),
+            "ignored": [{"filename": att.filename, "reason": ignore_reason} for att in payload.attachments],
+            "duplicates": 0,
+            "documents": [],
+            "decisions": [],
+            "case_summaries": [],
+        }
     matched = []
     created = []
     documents = []
     decisions = []
     duplicates = 0
     ignored = []
+    seen_attachment_hashes: set[str] = set()
     for att in payload.attachments:
         allowed, reason = is_relevant_email_attachment(att.filename, att.content_type or "", payload.subject)
         if not allowed:
             ignored.append({"filename": att.filename, "reason": reason})
             continue
         content = base64.b64decode(att.content_base64)
+        content_hash = hashlib.sha256(content).hexdigest()
+        if content_hash in seen_attachment_hashes:
+            ignored.append({"filename": att.filename, "reason": "duplicate_attachment_in_same_message"})
+            continue
+        seen_attachment_hashes.add(content_hash)
         result = await route_incoming_document(
             filename=att.filename,
             content=content,
