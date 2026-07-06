@@ -208,6 +208,36 @@ def test_case_upload_returns_extracted_fields_and_updated_case(monkeypatch):
     assert payload["case"]["extracted"]["passport_number"] == "C12345678"
 
 
+def test_case_upload_duplicate_returns_existing_document_without_creating_new():
+    reset_state()
+    case = create_case()
+    payload = make_pdf([
+        "Passport",
+        "Name: Anna Schmidt",
+        "Passport number: C12345678",
+        "Date of birth: 01.02.1990",
+    ])
+
+    first = client.post(
+        f"/api/cases/{case['id']}/upload",
+        headers=AUTH,
+        files={"file": ("passport.pdf", payload, "application/pdf")},
+    )
+    second = client.post(
+        f"/api/cases/{case['id']}/upload",
+        headers=AUTH,
+        files={"file": ("passport.pdf", payload, "application/pdf")},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    second_payload = second.json()
+    assert second_payload["document_status"] == "duplicate"
+    assert second_payload["document_id"] == first.json()["document_id"]
+    docs = client.get(f"/api/documents?case_id={case['id']}", headers=AUTH).json()
+    assert len(docs) == 1
+
+
 def test_case_parse_merges_fields_from_multiple_documents(monkeypatch):
     reset_state()
     case = create_case(name="Roman", email="roman@example.com")

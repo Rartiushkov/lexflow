@@ -2555,6 +2555,28 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     content = await file.read()
+    content_hash = hashlib.sha256(content).hexdigest()
+    duplicate = await db_find_document_by_hash(content_hash)
+    if duplicate and duplicate.get("status") == "duplicate":
+        origin_id = parse_duplicate_origin_id(duplicate.get("automation_note", ""))
+        origin_doc = await db_get_document(origin_id) if origin_id and origin_id != duplicate.get("id") else None
+        duplicate = origin_doc or duplicate
+    if duplicate:
+        updated_case = await db_get_case(case_id)
+        return {
+            "name": duplicate.get("name", file.filename or "document.pdf"),
+            "key": duplicate.get("key", ""),
+            "url": duplicate.get("url", ""),
+            "source": duplicate.get("source", "lawyer" if user else "client"),
+            "status": "duplicate",
+            "size": duplicate.get("size", len(content)),
+            "content_type": duplicate.get("content_type", file.content_type or "application/octet-stream"),
+            "document_id": duplicate.get("id", ""),
+            "document_status": "duplicate",
+            "document_type": duplicate.get("document_type", "unknown"),
+            "extracted": duplicate.get("extracted", {}) or {},
+            "case": updated_case or case,
+        }
     upload = await upload_bytes(case_id, file.filename or "document.pdf", file.content_type or "application/octet-stream", content, source="lawyer" if user else "client")
     ocr = await run_ocr(content, file.filename or "document.pdf")
     extracted = parse_document_text(ocr.get("raw_text", ""), file.filename or "document.pdf")
@@ -2563,17 +2585,11 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     document_type = canonical_document_type(extracted.get("document_type", "unknown"), file.filename or "document.pdf")
     extracted["document_type"] = document_type
     document_id = str(uuid.uuid4())
-    content_hash = hashlib.sha256(content).hexdigest()
-    duplicate = await db_find_document_by_hash(content_hash)
     type_exists = await case_has_document_type(case, document_type)
     status = "assigned"
     manual_review_required = False
     automation_note = "case_upload"
-    if duplicate:
-        status = "duplicate"
-        automation_note = f"duplicate_of:{duplicate.get('id')}"
-        manual_review_required = True
-    elif type_exists:
+    if type_exists:
         status = "needs_review"
         automation_note = f"document_type_already_exists:{document_type}"
         manual_review_required = True
