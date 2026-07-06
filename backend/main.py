@@ -20,7 +20,7 @@ from typing import Optional
 from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -1922,8 +1922,8 @@ async def public_email_integrations_debug_poll(email: str):
 
 
 @app.get("/api/public/email-integrations/debug/messages")
-async def public_email_integrations_debug_messages(email: str, limit: int = 5):
-    target = (email or "").lower().strip()
+async def public_email_integrations_debug_messages(mailbox_email: str = Query(..., alias="email"), limit: int = 5):
+    target = (mailbox_email or "").lower().strip()
     if not target:
         raise HTTPException(status_code=400, detail="Email is required")
     rows = await db_get_email_integrations(active_only=True)
