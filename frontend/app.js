@@ -841,6 +841,10 @@ function setActiveNav() {
   });
 }
 
+function setViewHydrated() {
+  document.body.classList.remove('view-hydrating');
+}
+
 // ─── Init ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   renderUser();

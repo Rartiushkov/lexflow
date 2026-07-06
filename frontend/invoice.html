@@ -7,10 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20" />
+  <link rel="stylesheet" href="./styles.css?v=24" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
-<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+<body class="dashboard view-hydrating" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
     <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
     <nav class="sidebar-nav">
@@ -46,7 +46,7 @@
         <button class="btn btn-primary" id="btn-save-invoice">Save invoice</button>
       </div>
     </div>
-    <div class="page-content">
+    <div class="page-content" data-view-hydrate>
       <div class="page-header">
         <div>
           <div class="page-title" id="invoice-title">Invoice</div>
@@ -266,7 +266,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=19"></script>
+  <script src="./app.js?v=21"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const invoiceId = params.get('id');
@@ -312,6 +312,7 @@
         accent: '#3db87a', logo_data_url: null,
       },
     ];
+    const DEFAULT_TEMPLATE_IDS = new Set(DEFAULT_TEMPLATES.map(tpl => tpl.id));
 
     function ensureDefaultTemplates() {
       const existing = getInvoiceTemplates();
@@ -322,6 +323,13 @@
 
     function getBuilderTemplates() {
       try { return JSON.parse(localStorage.getItem('lf_invoice_templates_v2') || '[]'); } catch { return []; }
+    }
+
+    function isLegacyBuilderTemplate(template, builderIds) {
+      if (!template || DEFAULT_TEMPLATE_IDS.has(template.id)) return false;
+      if (template._saved_from_invoice) return false;
+      if (template._from_builder) return !builderIds.has(template.id);
+      return !builderIds.has(template.id) && /^tpl[-_]/i.test(template.id || '');
     }
 
     function builderTplToInvoiceTpl(bt) {
@@ -548,13 +556,13 @@
 
     function getActiveInvoiceTemplates() {
       const builderIds = new Set(getBuilderTemplates().map(t => t.id));
-      return getInvoiceTemplates().filter(t => !t._from_builder || builderIds.has(t.id));
+      return getInvoiceTemplates().filter(t => !isLegacyBuilderTemplate(t, builderIds));
     }
 
     function cleanOrphanBuilderTemplates() {
       const builderIds = new Set(getBuilderTemplates().map(t => t.id));
       const all = getInvoiceTemplates();
-      const clean = all.filter(t => !t._from_builder || builderIds.has(t.id));
+      const clean = all.filter(t => !isLegacyBuilderTemplate(t, builderIds));
       if (clean.length !== all.length) {
         try { localStorage.setItem('lexflow_invoice_templates', JSON.stringify(clean)); } catch {}
       }
@@ -985,7 +993,7 @@
         }).from(wrapper).save();
       });
       document.getElementById('btn-save-template')?.addEventListener('click', () => {
-        const saved = upsertInvoiceTemplate(collectTemplate());
+        const saved = upsertInvoiceTemplate({ ...collectTemplate(), _saved_from_invoice: true });
         renderTemplateSelects(saved.id);
         showToast('Template saved', 'success');
         populateTemplateForm(saved);
@@ -1217,11 +1225,24 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      await requireAuth();
       ensureDefaultTemplates();
       cleanOrphanBuilderTemplates();
       bindForm();
       initCanvas();
+
+      const cachedInvoice = invoiceId ? getInvoiceById(invoiceId) : null;
+      const cachedCase = caseId ? getCachedCaseDetail(caseId) : null;
+      const initialInvoice = cachedInvoice || (cachedCase
+        ? createDraftFromCase(cachedCase, {
+            items: [{ id: uid('line'), description: `${cachedCase.case_type || cachedCase.type || 'Legal matter'} legal service`, quantity: 1, unit_price: 1190 }],
+          })
+        : createInvoiceDraft({ case_id: caseId || '' }));
+      const initialTemplate = getInvoiceTemplateById(initialInvoice.template_id) || getInvoiceTemplates()[0];
+      populateTemplateForm(initialTemplate);
+      populateForm(initialInvoice);
+      setViewHydrated();
+
+      await requireAuth();
 
       // Close modal on backdrop click
       document.getElementById('send-modal').addEventListener('click', (e) => {
@@ -1317,9 +1338,10 @@
           invoice = invoice || createInvoiceDraft({ case_id: caseId });
         }
       }
-      const defaultTemplate = getInvoiceTemplates()[0];
+      const defaultTemplate = getInvoiceTemplateById(invoice?.template_id) || getInvoiceTemplates()[0];
       populateTemplateForm(defaultTemplate);
       populateForm(invoice || createInvoiceDraft({ template_id: defaultTemplate?.id || '' }));
+      setViewHydrated();
       if (invoiceId || getInvoiceForCase(formState.invoice.case_id || caseId)) {
         syncServicesToCase(formState.invoice);
       }

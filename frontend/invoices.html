@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=23" />
+  <link rel="stylesheet" href="./styles.css?v=24" />
 </head>
-<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+<body class="dashboard view-hydrating" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
     <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
     <nav class="sidebar-nav">
@@ -38,7 +38,7 @@
         <a href="invoice.html?action=new" class="btn btn-primary">+ New invoice</a>
       </div>
     </div>
-    <div class="page-content">
+    <div class="page-content" data-view-hydrate>
       <div class="page-header">
         <div>
           <div class="page-title">Invoices</div>
@@ -61,7 +61,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=20"></script>
+  <script src="./app.js?v=21"></script>
   <script>
     function renderInvoices() {
       const list = document.getElementById('invoice-list');
@@ -81,8 +81,10 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       renderInvoices();
+      setViewHydrated();
       await requireAuth();
       renderInvoices();
+      setViewHydrated();
     });
   </script>
 </body>

@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=23" />
+  <link rel="stylesheet" href="./styles.css?v=24" />
 </head>
-<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+<body class="dashboard view-hydrating" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
     <a href="/index.html" class="sidebar-brand">
       <span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span>
@@ -69,7 +69,7 @@
       </div>
     </div>
 
-    <div class="page-content">
+    <div class="page-content" data-view-hydrate>
       <!-- Duplicate warning banner (hidden by default) -->
       <div id="duplicate-banner" style="display:none;background:rgba(196,100,90,0.1);border:1px solid rgba(196,100,90,0.3);border-radius:var(--radius);padding:12px 18px;margin-bottom:18px;display:none;align-items:center;gap:12px;">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c4645a" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.5"/></svg>
@@ -316,7 +316,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=20"></script>
+  <script src="./app.js?v=21"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -704,6 +704,7 @@
         render(c);
         renderControlCenter(center);
         checkDuplicate(c.client_email, c.client_name);
+        setViewHydrated();
       } catch (err) {
         try {
           const c = await get(`/api/cases/${caseId}`, { toastOnError: false });
@@ -712,11 +713,13 @@
           render(c);
           renderControlCenter({ case: c, control_state: c.control_state || {}, notifications: [] });
           checkDuplicate(c.client_email, c.client_name);
+          setViewHydrated();
         } catch {
           if (!cached) showToast(err.message || 'Unable to load case', 'error');
           document.getElementById('case-title').textContent = 'Case unavailable';
           document.getElementById('breadcrumb-name').textContent = 'Case';
           document.getElementById('case-meta').textContent = 'This case could not be loaded.';
+          setViewHydrated();
         }
       }
     }
@@ -939,6 +942,7 @@
         render(cached);
         renderControlCenter({ case: cached, control_state: cached.control_state || {}, notifications: cached.notifications || [] });
       }
+      setViewHydrated();
       await requireAuth();
       loadCase();
 
