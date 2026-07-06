@@ -3255,6 +3255,27 @@ async def zoho_inbox_folder_id(access_token: str, account_id: str) -> str:
     return str(inbox["folderId"])
 
 
+def is_zoho_message_unread(item: dict) -> bool:
+    unread_candidates = (
+        item.get("isUnread"),
+        item.get("unread"),
+        item.get("read"),
+        item.get("status"),
+        item.get("messageStatus"),
+    )
+    for value in unread_candidates:
+        if isinstance(value, bool):
+            if value is True:
+                return True
+            continue
+        normalized = str(value or "").strip().lower()
+        if normalized in {"unread", "not_read", "0", "false"}:
+            return True
+        if normalized in {"read", "1", "true"}:
+            return False
+    return False
+
+
 async def gmail_message_to_attachments(access_token: str, message_id: str) -> tuple[str, str, list[EmailAttachment]]:
     message = await gmail_api_get_json(f"messages/{message_id}", access_token, params={"format": "full"})
     headers = {item.get("name", "").lower(): item.get("value", "") for item in message.get("payload", {}).get("headers", [])}
@@ -3370,6 +3391,18 @@ async def process_email_integration(integration: dict) -> dict:
             },
         )
         messages = listing_response.json().get("data") or []
+        if not messages:
+            fallback_response = await zoho_api_get(
+                f"/api/accounts/{account_id}/messages/view",
+                ready["access_token"],
+                params={
+                    "folderId": folder_id,
+                    "limit": int(ready.get("poll_limit") or 10),
+                    "sortorder": "false",
+                },
+            )
+            fallback_messages = fallback_response.json().get("data") or []
+            messages = [item for item in fallback_messages if is_zoho_message_unread(item)]
         attachments_total = 0
         messages_with_attachments = 0
         messages_without_attachments = 0
