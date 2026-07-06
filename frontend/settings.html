@@ -414,6 +414,21 @@
       }).join('');
     }
 
+    function hasMeaningfulPollDebug(debugPayload) {
+      const integrations = Array.isArray(debugPayload?.integrations) ? debugPayload.integrations : [];
+      return integrations.some((item) => {
+        const debug = item.poll_debug || {};
+        return Boolean(
+          debug.status ||
+          debug.last_error ||
+          debug.last_polled_at ||
+          debug.messages_seen ||
+          debug.attachments_total ||
+          debug.processed_count
+        );
+      });
+    }
+
     function renderSettingsFromCache() {
       renderProfileFromCache();
       const cachedIntegrations = readWorkEmailListCache();
@@ -488,6 +503,7 @@
       syncEmailIntegrationPanels(resolvedIntegrations);
       renderIntegrationTable(resolvedIntegrations);
       renderEmailPollDebug(debugPayload);
+      return { appConfig, profile, integrations: resolvedIntegrations, debugPayload };
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -503,7 +519,19 @@
       syncEmailIntegrationPanels(initialIntegrations);
       await requireAuth();
       try {
-        await loadSettings();
+        let loaded = await loadSettings();
+        if ((loaded?.integrations || []).length && !hasMeaningfulPollDebug(loaded?.debugPayload)) {
+          try {
+            await post('/api/gmail/poll', {}, { toastOnError: false });
+          } catch (err) {
+            const host = document.getElementById('email-poll-debug');
+            if (host) {
+              host.className = '';
+              host.innerHTML = `<div style="color:var(--red);font-size:13px;">${err?.message || 'Work email poll failed'}</div>`;
+            }
+          }
+          loaded = await loadSettings();
+        }
       } catch {
         renderSettingsFromCache();
       }
