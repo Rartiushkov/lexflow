@@ -802,12 +802,7 @@
       });
 
       // Documents
-      const incomingDocs = getDocumentsForCase(c.id);
-      const mergedDocs = [...(c.docs || []), ...incomingDocs.map(d => ({
-        id: d.id, document_id: d.id, key: d.key || '',
-        name: d.name, status: 'attached',
-        uploaded_at: d.uploaded_at, data_url: d.data_url || d.url,
-      }))];
+      const mergedDocs = mergeCaseDocuments(c);
       document.getElementById('doc-count').textContent = mergedDocs.length;
       const list = document.getElementById('doc-list');
       if (mergedDocs.length) {
@@ -824,7 +819,7 @@
             : d.status === 'attached' || d.status === 'assigned' || d.status === 'uploaded'
               ? 'badge-green'
               : 'badge-gray';
-          _docMap[i] = { url: localUrl, name: d.name, docId, docKey };
+          _docMap[i] = { url: localUrl, name: d.name, docId, docKey, caseId: c.id };
           return `
           <div class="table-row case-doc-row">
             <div class="case-doc-name">${d.name}</div>
@@ -880,15 +875,24 @@
         list.querySelectorAll('[data-delete-case-doc]').forEach(btn => {
           btn.addEventListener('click', async () => {
             const ref = btn.dataset.deleteCaseDoc;
+            const row = btn.closest('.case-doc-row');
+            const entry = Object.values(_docMap).find(item => item.docId === ref || item.docKey === ref) || null;
+            const optimisticId = entry?.docId || ref;
+            const optimisticKey = entry?.docKey || '';
+            removeDocumentFromLocalState(optimisticId, optimisticKey, c.id);
+            const optimisticCase = getCachedCaseDetail(c.id) || { ...c, docs: (c.docs || []).filter(item => !(item.document_id === optimisticId || (optimisticKey && item.key === optimisticKey))) };
+            currentCase = optimisticCase;
+            render(optimisticCase);
+            if (row) row.style.opacity = '0.55';
             try {
               if (ref.startsWith('doc-')) await deleteDocumentRemote(ref);
               else await api('DELETE', `/api/cases/${caseId}/documents/${encodeURIComponent(ref)}`);
               showToast('Document deleted', 'success');
             } catch {
-              deleteIncomingDocumentLocal(ref);
-              showToast('Removed locally', 'success');
+              showToast('Delete failed, reloading state', 'error');
+              loadCase();
+              return;
             }
-            loadCase();
           });
         });
       } else {

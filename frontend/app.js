@@ -474,8 +474,49 @@ function saveIncomingDocuments(documents) {
   localStorage.setItem(LS_INCOMING_DOCUMENTS, JSON.stringify(documents));
 }
 
+function sameDocumentRef(item, documentId, documentKey = '') {
+  if (!item) return false;
+  return item.id === documentId
+    || item.document_id === documentId
+    || (documentKey && item.key === documentKey);
+}
+
+function removeDocumentFromLocalState(documentId, documentKey = '', caseId = '') {
+  const nextIncoming = getIncomingDocuments().filter(item => !sameDocumentRef(item, documentId, documentKey));
+  saveIncomingDocuments(nextIncoming);
+
+  const cache = getCaseDetailsCache();
+  const touchedCaseIds = new Set();
+  Object.entries(cache).forEach(([cachedCaseId, item]) => {
+    const docs = Array.isArray(item?.docs) ? item.docs : [];
+    const nextDocs = docs.filter(doc => !sameDocumentRef(doc, documentId, documentKey));
+    if (nextDocs.length !== docs.length) {
+      cache[cachedCaseId] = { ...item, docs: nextDocs };
+      touchedCaseIds.add(cachedCaseId);
+    }
+  });
+  if (Object.keys(cache).length) saveCaseDetailsCache(cache);
+
+  const cases = getCaseDirectory();
+  const nextCases = cases.map(item => {
+    if (!item?.id) return item;
+    if (caseId && item.id === caseId) {
+      const cached = cache[item.id];
+      const docCount = cached?.docs?.length;
+      return docCount == null ? item : { ...item, doc_count: docCount };
+    }
+    if (touchedCaseIds.has(item.id)) {
+      const cached = cache[item.id];
+      const docCount = cached?.docs?.length;
+      return docCount == null ? item : { ...item, doc_count: docCount };
+    }
+    return item;
+  });
+  saveCaseDirectory(nextCases);
+}
+
 function deleteIncomingDocumentLocal(documentId) {
-  saveIncomingDocuments(getIncomingDocuments().filter(item => item.id !== documentId));
+  removeDocumentFromLocalState(documentId);
 }
 
 async function deleteDocumentRemote(documentId) {
@@ -485,10 +526,10 @@ async function deleteDocumentRemote(documentId) {
   }
   try {
     await api('DELETE', `/api/documents/${documentId}`);
-    deleteIncomingDocumentLocal(documentId);
+    removeDocumentFromLocalState(documentId);
     return true;
   } catch {
-    deleteIncomingDocumentLocal(documentId);
+    removeDocumentFromLocalState(documentId);
     return false;
   }
 }
@@ -512,6 +553,44 @@ function matchDocumentToCase(fileName, cases = getCaseDirectory()) {
 
 function getDocumentsForCase(caseId) {
   return getIncomingDocuments().filter(item => item.case_id === caseId && item.status === 'assigned');
+}
+
+function mergeCaseDocuments(caseData) {
+  const serverDocs = Array.isArray(caseData?.docs) ? caseData.docs : [];
+  const localDocs = caseData?.id ? getDocumentsForCase(caseData.id) : [];
+  const merged = [];
+  const seen = new Set();
+
+  const pushDoc = (doc, normalized = false) => {
+    if (!doc) return;
+    const item = normalized ? doc : {
+      id: doc.id || doc.document_id || doc.key || '',
+      document_id: doc.document_id || doc.id || '',
+      key: doc.key || '',
+      name: doc.name || 'Document',
+      status: doc.status || 'attached',
+      uploaded_at: doc.uploaded_at,
+      data_url: doc.data_url || doc.url || '',
+      url: doc.url || '',
+    };
+    const ref = item.document_id || item.id || item.key || `${item.name}:${item.uploaded_at || ''}`;
+    if (!ref || seen.has(ref)) return;
+    seen.add(ref);
+    merged.push(item);
+  };
+
+  serverDocs.forEach(doc => pushDoc(doc, false));
+  localDocs.forEach(doc => pushDoc({
+    id: doc.id,
+    document_id: doc.id,
+    key: doc.key || '',
+    name: doc.name,
+    status: doc.status || 'attached',
+    uploaded_at: doc.uploaded_at,
+    data_url: doc.data_url || doc.url || '',
+    url: doc.url || '',
+  }, true));
+  return merged;
 }
 
 async function fileToDataUrl(file) {
