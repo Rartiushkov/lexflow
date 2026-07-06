@@ -197,7 +197,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=19"></script>
   <script>
     // Live date/time in topbar
     (function updateDate() {
@@ -536,26 +536,38 @@
       `).join('');
     }
 
+    function normalizeWorkflowSummary(summary) {
+      return {
+        actions: Array.isArray(summary?.actions) ? summary.actions : [],
+        notifications: Array.isArray(summary?.notifications) ? summary.notifications : [],
+      };
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       const cachedCases = getCaseDirectory();
+      const cachedSummary = normalizeWorkflowSummary(getWorkflowSummaryCache());
       if (cachedCases.length) {
         renderDashboard(cachedCases);
-        renderWorkflowSummary({ actions: [], notifications: [] });
+      } else {
+        renderDashboard([]);
       }
+      renderWorkflowSummary(cachedSummary);
       try {
         const cases = await get('/api/cases', { toastOnError: false });
         setCaseDirectory(cases);
         renderDashboard(cases);
         try {
-          renderWorkflowSummary(await get('/api/workflow/summary', { toastOnError: false }));
+          const summary = normalizeWorkflowSummary(await get('/api/workflow/summary', { toastOnError: false }));
+          saveWorkflowSummaryCache(summary);
+          renderWorkflowSummary(summary);
         } catch {
-          renderWorkflowSummary({ actions: [] });
+          renderWorkflowSummary(cachedSummary);
         }
       } catch (err) {
         if (!cachedCases.length) {
           renderDashboard([]);
-          renderWorkflowSummary({ actions: [] });
+          renderWorkflowSummary(cachedSummary);
         }
       }
     });

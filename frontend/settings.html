@@ -144,7 +144,7 @@
       </div>
     </div>
   </div>
-  <script src="./app.js?v=18"></script>
+  <script src="./app.js?v=19"></script>
   <script>
     const WORK_EMAIL_CACHE_KEY = 'lexflow_work_email_cache';
     const WORK_EMAIL_LIST_CACHE_KEY = 'lexflow_work_email_integrations_cache';
@@ -280,7 +280,16 @@
         : '<div class="kanban-empty">No work email connected yet.</div>';
     }
 
+    function renderProfileFromCache() {
+      const profile = getSettingsProfileCache();
+      if (!profile) return;
+      document.getElementById('firm-name').value = profile.firm?.name || '';
+      document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
+      document.getElementById('full-name').value = profile.profile?.full_name || '';
+    }
+
     function renderSettingsFromCache() {
+      renderProfileFromCache();
       const cachedIntegrations = readWorkEmailListCache();
       const cachedSingle = readWorkEmailCache();
       const fallback = cachedSingle ? [cachedSingle] : [];
@@ -320,6 +329,7 @@
         get('/api/settings/profile', { toastOnError: false }),
         get('/api/email-integrations', { toastOnError: false }),
       ]);
+      saveSettingsProfileCache(profile);
       document.getElementById('firm-name').value = profile.firm?.name || '';
       document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
       document.getElementById('full-name').value = profile.profile?.full_name || '';
@@ -359,11 +369,22 @@
         renderSettingsFromCache();
       }
       document.getElementById('btn-save-settings').addEventListener('click', async () => {
-        await post('/api/settings/profile', {
+        const profilePayload = {
           firm_name: document.getElementById('firm-name').value,
           vat_id: document.getElementById('vat-id').value,
           full_name: document.getElementById('full-name').value,
+        };
+        saveSettingsProfileCache({
+          firm: {
+            name: profilePayload.firm_name,
+            vat_id: profilePayload.vat_id,
+          },
+          profile: {
+            vat_id: profilePayload.vat_id,
+            full_name: profilePayload.full_name,
+          },
         });
+        await post('/api/settings/profile', profilePayload);
         showToast('Settings saved', 'success');
       });
       document.getElementById('btn-connect-google-gmail').addEventListener('click', async () => {

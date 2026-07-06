@@ -266,7 +266,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=19"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const invoiceId = params.get('id');
@@ -1205,6 +1205,17 @@
       });
     }
 
+    function createDraftFromCase(caseData, overrides = {}) {
+      if (!caseData) return createInvoiceDraft(overrides);
+      return createInvoiceDraft({
+        case_id: caseData.id || overrides.case_id,
+        client_name: caseData.client_name || '',
+        client_email: caseData.client_email || '',
+        notes: `${caseData.case_type || caseData.type || 'Legal matter'} · ${caseData.destination || caseData.country || ''}`.replace(/ · $/, ''),
+        ...overrides,
+      });
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
       ensureDefaultTemplates();
@@ -1264,13 +1275,9 @@
 
       if (!invoice && prefill) {
         const effCaseId = prefill.case_id || caseId;
-        try {
-          const c = await get(`/api/cases/${effCaseId}`);
-          invoice = createInvoiceDraft({
-            case_id: c.id,
-            client_name: c.client_name,
-            client_email: c.client_email,
-            notes: `${c.case_type} · ${c.destination}`,
+        const cachedCase = effCaseId ? getCachedCaseDetail(effCaseId) : null;
+        if (cachedCase) {
+          invoice = createDraftFromCase(cachedCase, {
             items: (prefill.items || []).map(it => ({
               id: uid('line'),
               description: it.description,
@@ -1278,21 +1285,36 @@
               unit_price: it.unit_price ?? 0,
             })),
           });
+        }
+        try {
+          const c = await get(`/api/cases/${effCaseId}`);
+          invoice = createDraftFromCase(c, {
+            items: (prefill.items || []).map(it => ({
+              id: uid('line'),
+              description: it.description,
+              quantity: it.quantity ?? 1,
+              unit_price: it.unit_price ?? 0,
+            })),
+          });
+          cacheCaseDetail(c);
         } catch {
-          invoice = createInvoiceDraft({ case_id: effCaseId });
+          invoice = invoice || createInvoiceDraft({ case_id: effCaseId });
         }
       } else if (!invoice && caseId) {
+        const cachedCase = getCachedCaseDetail(caseId);
+        if (cachedCase) {
+          invoice = createDraftFromCase(cachedCase, {
+            items: [{ id: uid('line'), description: `${cachedCase.case_type || cachedCase.type || 'Legal matter'} legal service`, quantity: 1, unit_price: 1190 }],
+          });
+        }
         try {
           const c = await get(`/api/cases/${caseId}`);
-          invoice = createInvoiceDraft({
-            case_id: c.id,
-            client_name: c.client_name,
-            client_email: c.client_email,
-            notes: `${c.case_type} · ${c.destination}`,
+          invoice = createDraftFromCase(c, {
             items: [{ id: uid('line'), description: `${c.case_type} legal service`, quantity: 1, unit_price: 1190 }],
           });
+          cacheCaseDetail(c);
         } catch {
-          invoice = createInvoiceDraft({ case_id: caseId });
+          invoice = invoice || createInvoiceDraft({ case_id: caseId });
         }
       }
       const defaultTemplate = getInvoiceTemplates()[0];

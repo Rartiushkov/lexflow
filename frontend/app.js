@@ -14,6 +14,8 @@ const LS_INVOICE_TEMPLATES = 'lexflow_invoice_templates';
 const LS_CASE_DIRECTORY = 'lexflow_case_directory';
 const LS_CASE_DETAILS = 'lexflow_case_details';
 const LS_INCOMING_DOCUMENTS = 'lexflow_incoming_documents';
+const LS_SETTINGS_PROFILE = 'lexflow_settings_profile';
+const LS_WORKFLOW_SUMMARY = 'lexflow_workflow_summary';
 const OAUTH_REDIRECT_FLAG_KEY = 'lexflow_oauth_redirect_started_at';
 const OAUTH_REDIRECT_FLAG_TTL_MS = 2 * 60 * 1000;
 
@@ -426,13 +428,43 @@ function getIncomingDocuments() {
   }
 }
 
+function getSettingsProfileCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_SETTINGS_PROFILE) || 'null');
+    return raw && typeof raw === 'object' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSettingsProfileCache(profile) {
+  if (!profile || typeof profile !== 'object') return;
+  localStorage.setItem(LS_SETTINGS_PROFILE, JSON.stringify(profile));
+}
+
+function getWorkflowSummaryCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_WORKFLOW_SUMMARY) || 'null');
+    return raw && typeof raw === 'object' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveWorkflowSummaryCache(summary) {
+  if (!summary || typeof summary !== 'object') return;
+  localStorage.setItem(LS_WORKFLOW_SUMMARY, JSON.stringify(summary));
+}
+
 async function fetchIncomingDocuments(filters = {}) {
   const query = new URLSearchParams();
   if (filters.status) query.set('status', filters.status);
   if (filters.case_id) query.set('case_id', filters.case_id);
   try {
     const docs = await get(`/api/documents${query.toString() ? `?${query}` : ''}`, { toastOnError: false });
-    return Array.isArray(docs) ? docs : [];
+    const normalized = Array.isArray(docs) ? docs : [];
+    saveIncomingDocuments(normalized);
+    return normalized;
   } catch {
     return getIncomingDocuments();
   }

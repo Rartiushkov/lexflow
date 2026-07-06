@@ -97,7 +97,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=19"></script>
   <script>
     async function loadCasesForMatching() {
       try {
@@ -117,10 +117,9 @@
       });
     }
 
-    async function renderIntakeLists() {
+    function renderIntakeLists(docs = getIncomingDocuments()) {
       const assignedHost = document.getElementById('assigned-list');
       const unrecognizedHost = document.getElementById('unrecognized-list');
-      const docs = await fetchIncomingDocuments();
       const assigned = docs.filter(item => item.status === 'assigned');
       const unrecognized = docs.filter(item => item.status === 'unrecognized');
 
@@ -153,25 +152,30 @@
         button.addEventListener('click', async () => {
           const docId = button.dataset.deleteDoc;
           await deleteDocumentRemote(docId);
-          await renderIntakeLists();
+          renderIntakeLists();
           showToast('Document deleted', 'success');
         });
       });
+    }
+
+    async function refreshIntakeLists() {
+      const docs = await fetchIncomingDocuments();
+      renderIntakeLists(docs);
     }
 
     async function handleIntakeFiles(fileList) {
       const created = await intakeDocuments(Array.from(fileList), getCaseDirectory());
       const assignedCount = created.filter(item => item.status === 'assigned').length;
       const unknownCount = created.filter(item => item.status === 'unrecognized').length;
-      await renderIntakeLists();
+      renderIntakeLists();
       showToast(`Uploaded ${created.length}. Assigned: ${assignedCount}. Unrecognized: ${unknownCount}.`, 'success');
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
       await requireAuth();
-      await renderIntakeLists();
+      renderIntakeLists();
       await loadCasesForMatching();
-      await renderIntakeLists();
+      await refreshIntakeLists();
 
       document.querySelectorAll('[data-doc-tab]').forEach(button => {
         button.addEventListener('click', () => switchDocTab(button.dataset.docTab));
