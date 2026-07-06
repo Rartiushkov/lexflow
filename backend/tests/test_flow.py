@@ -865,3 +865,12 @@ def test_run_email_poll_for_integrations_collects_errors_when_requested(monkeypa
     assert len(result["runs"]) == 1
     assert len(result["errors"]) == 1
     assert result["errors"][0]["integration_id"] == "bad-1"
+
+
+def test_poll_all_active_email_integrations_once_reports_no_integrations():
+    reset_state()
+
+    result = asyncio.run(main.poll_all_active_email_integrations_once())
+
+    assert result["count"] == 0
+    assert result["has_integrations"] is False

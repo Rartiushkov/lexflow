@@ -66,6 +66,10 @@ ZOHO_MAIL_API_BASE = os.environ.get("ZOHO_MAIL_API_BASE", "https://mail.zoho.com
 ENABLE_TEST_AUTH = os.environ.get("LEXFLOW_TEST_AUTH", "") == "1"
 EMAIL_AUTO_POLL_ENABLED = os.environ.get("EMAIL_AUTO_POLL_ENABLED", "1") == "1" and not ENABLE_TEST_AUTH
 EMAIL_AUTO_POLL_INTERVAL_SECONDS = max(15, int(os.environ.get("EMAIL_AUTO_POLL_INTERVAL_SECONDS", "30") or "30"))
+EMAIL_AUTO_POLL_IDLE_INTERVAL_SECONDS = max(
+    EMAIL_AUTO_POLL_INTERVAL_SECONDS,
+    int(os.environ.get("EMAIL_AUTO_POLL_IDLE_INTERVAL_SECONDS", "900") or "900"),
+)
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
@@ -3311,7 +3315,7 @@ async def poll_all_active_email_integrations_once() -> dict:
         await db_get_email_integrations(active_only=True)
     )
     if not integrations:
-        return {"runs": [], "count": 0, "errors": []}
+        return {"runs": [], "count": 0, "errors": [], "has_integrations": False}
 
     lock = getattr(app.state, "email_poll_lock", None)
     if lock is None:
@@ -3319,17 +3323,24 @@ async def poll_all_active_email_integrations_once() -> dict:
         app.state.email_poll_lock = lock
 
     if lock.locked():
-        return {"runs": [], "count": 0, "errors": [], "skipped": True}
+        return {"runs": [], "count": 0, "errors": [], "skipped": True, "has_integrations": True}
 
     async with lock:
-        return await run_email_poll_for_integrations(integrations, continue_on_error=True)
+        result = await run_email_poll_for_integrations(integrations, continue_on_error=True)
+        return {
+            **result,
+            "has_integrations": True,
+        }
 
 
 async def auto_email_poll_loop():
     await asyncio.sleep(8)
     while True:
+        sleep_seconds = EMAIL_AUTO_POLL_INTERVAL_SECONDS
         try:
             result = await poll_all_active_email_integrations_once()
+            if not result.get("has_integrations", True):
+                sleep_seconds = EMAIL_AUTO_POLL_IDLE_INTERVAL_SECONDS
             if result.get("count") or result.get("errors"):
                 print(
                     "Auto email poll completed",
@@ -3343,7 +3354,7 @@ async def auto_email_poll_loop():
             raise
         except Exception as exc:
             print(f"Auto email poll loop failed: {exc}")
-        await asyncio.sleep(EMAIL_AUTO_POLL_INTERVAL_SECONDS)
+        await asyncio.sleep(sleep_seconds)
 
 
 @app.on_event("startup")
@@ -3482,4 +3493,5 @@ async def public_config():
         "zoho_email_oauth_enabled": bool(ZOHO_OAUTH_CLIENT_ID and ZOHO_OAUTH_CLIENT_SECRET),
         "email_auto_poll_enabled": EMAIL_AUTO_POLL_ENABLED,
         "email_auto_poll_interval_seconds": EMAIL_AUTO_POLL_INTERVAL_SECONDS,
+        "email_auto_poll_idle_interval_seconds": EMAIL_AUTO_POLL_IDLE_INTERVAL_SECONDS,
     }
