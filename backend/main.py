@@ -122,6 +122,7 @@ memory_notifications: dict[str, dict] = {}
 
 app.state.email_poll_lock = None
 app.state.email_poll_task = None
+app.state.email_poll_debug = {}
 
 
 def utc_now():
@@ -236,6 +237,35 @@ def mask_integration(row: dict) -> dict:
         "refresh_token": "********" if row.get("refresh_token") else "",
         "access_token": "",
     }
+
+
+def trim_poll_debug_text(value: str, limit: int = 280) -> str:
+    text = (value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "..."
+
+
+def record_email_poll_debug(integration: dict, **patch) -> dict:
+    bucket = getattr(app.state, "email_poll_debug", None)
+    if bucket is None:
+        bucket = {}
+        app.state.email_poll_debug = bucket
+    integration_id = integration.get("id") or "unknown"
+    current = bucket.get(integration_id, {})
+    next_state = {
+        **current,
+        **patch,
+        "integration_id": integration_id,
+        "email": integration.get("email", current.get("email", "")),
+        "provider": integration.get("provider", current.get("provider", "")),
+        "auth_type": integration.get("auth_type", current.get("auth_type", "")),
+        "updated_at": utc_now(),
+    }
+    if "last_error" in next_state:
+        next_state["last_error"] = trim_poll_debug_text(next_state.get("last_error", ""))
+    bucket[integration_id] = next_state
+    return next_state
 
 
 def is_usable_email_integration(row: dict) -> bool:
@@ -1805,6 +1835,31 @@ async def list_email_integrations(user: dict = Depends(get_current_user)):
     return normalized
 
 
+@app.get("/api/email-integrations/debug")
+async def email_integrations_debug(user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    rows = await db_get_email_integrations(firm_id=actor["firm"]["id"])
+    runtime_ids = {
+        item.get("id")
+        for item in pick_runtime_email_integrations(rows)
+    }
+    bucket = getattr(app.state, "email_poll_debug", {}) or {}
+    return {
+        "generated_at": utc_now(),
+        "auto_poll_enabled": EMAIL_AUTO_POLL_ENABLED,
+        "auto_poll_interval_seconds": EMAIL_AUTO_POLL_INTERVAL_SECONDS,
+        "auto_poll_idle_interval_seconds": EMAIL_AUTO_POLL_IDLE_INTERVAL_SECONDS,
+        "integrations": [
+            {
+                **mask_integration(row),
+                "runtime_selected": row.get("id") in runtime_ids,
+                "poll_debug": bucket.get(row.get("id"), {}),
+            }
+            for row in rows
+        ],
+    }
+
+
 @app.post("/api/email-integrations")
 async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
@@ -3148,6 +3203,16 @@ async def gmail_message_to_attachments(access_token: str, message_id: str) -> tu
 
 async def process_email_integration(integration: dict) -> dict:
     processed = []
+    record_email_poll_debug(
+        integration,
+        status="running",
+        last_error="",
+        messages_seen=0,
+        messages_with_attachments=0,
+        messages_without_attachments=0,
+        attachments_total=0,
+        processed_count=0,
+    )
     if integration.get("provider") == "gmail" and integration.get("auth_type") == "oauth":
         ready = await ensure_google_integration_access_token(integration)
         access_token = ready["access_token"]
@@ -3159,14 +3224,21 @@ async def process_email_integration(integration: dict) -> dict:
                 "maxResults": int(ready.get("poll_limit") or 10),
             },
         )
+        messages_seen = len(listing.get("messages", []) or [])
+        attachments_total = 0
+        messages_with_attachments = 0
+        messages_without_attachments = 0
         for item in listing.get("messages", []) or []:
             message_id = item.get("id")
             if not message_id:
                 continue
             from_header, subject, attachments = await gmail_message_to_attachments(access_token, message_id)
             if not attachments:
+                messages_without_attachments += 1
                 await gmail_api_post_json(f"messages/{message_id}/modify", access_token, body={"removeLabelIds": ["UNREAD"]})
                 continue
+            messages_with_attachments += 1
+            attachments_total += len(attachments)
             sender = parseaddr(from_header)[1]
             result = await process_email_payload(EmailWebhook(
                 **{"from": sender, "subject": subject, "attachments": attachments}
@@ -3179,9 +3251,22 @@ async def process_email_integration(integration: dict) -> dict:
                 "subject": subject,
                 **result,
             })
+        record_email_poll_debug(
+            ready,
+            status="ok",
+            messages_seen=messages_seen,
+            messages_with_attachments=messages_with_attachments,
+            messages_without_attachments=messages_without_attachments,
+            attachments_total=attachments_total,
+            processed_count=len(processed),
+            last_error="",
+            last_polled_at=utc_now(),
+            last_processed_message_id=processed[-1]["message_id"] if processed else "",
+        )
         await db_upsert_email_integration({
             **ready,
             "last_polled_at": utc_now(),
+            "last_processed_message_id": processed[-1]["message_id"] if processed else ready.get("last_processed_message_id", ""),
             "updated_at": utc_now(),
         })
         return {"integration_id": ready["id"], "email": ready["email"], "processed": processed, "count": len(processed)}
@@ -3202,6 +3287,9 @@ async def process_email_integration(integration: dict) -> dict:
             },
         )
         messages = listing_response.json().get("data") or []
+        attachments_total = 0
+        messages_with_attachments = 0
+        messages_without_attachments = 0
         for item in messages:
             message_id = str(item.get("messageId") or "")
             if not message_id:
@@ -3215,6 +3303,7 @@ async def process_email_integration(integration: dict) -> dict:
             attachments = extract_gmail_attachments(message)
             thread_id = str(item.get("threadId") or "")
             if not attachments:
+                messages_without_attachments += 1
                 await zoho_api_put_json(
                     f"/api/accounts/{account_id}/updatemessage",
                     ready["access_token"],
@@ -3225,6 +3314,8 @@ async def process_email_integration(integration: dict) -> dict:
                     },
                 )
                 continue
+            messages_with_attachments += 1
+            attachments_total += len(attachments)
             sender = parseaddr(message.get("From", ""))[1]
             subject = message.get("Subject", "")
             result = await process_email_payload(
@@ -3247,10 +3338,24 @@ async def process_email_integration(integration: dict) -> dict:
                 "subject": subject,
                 **result,
             })
+        record_email_poll_debug(
+            ready,
+            status="ok",
+            messages_seen=len(messages),
+            messages_with_attachments=messages_with_attachments,
+            messages_without_attachments=messages_without_attachments,
+            attachments_total=attachments_total,
+            processed_count=len(processed),
+            last_error="",
+            last_polled_at=utc_now(),
+            account_id=account_id,
+            last_processed_message_id=processed[-1]["message_id"] if processed else "",
+        )
         await db_upsert_email_integration({
             **ready,
             "account_id": account_id,
             "last_polled_at": utc_now(),
+            "last_processed_message_id": processed[-1]["message_id"] if processed else ready.get("last_processed_message_id", ""),
             "updated_at": utc_now(),
         })
         return {"integration_id": ready["id"], "email": ready["email"], "processed": processed, "count": len(processed)}
@@ -3262,6 +3367,9 @@ async def process_email_integration(integration: dict) -> dict:
         if status != "OK":
             raise HTTPException(status_code=502, detail=f"Gmail search failed for {integration['email']}")
         message_ids = data[0].split()[: int(integration.get("poll_limit") or 10)]
+        attachments_total = 0
+        messages_with_attachments = 0
+        messages_without_attachments = 0
         for message_id in message_ids:
             fetch_status, fetch_data = mailbox.fetch(message_id, "(RFC822)")
             if fetch_status != "OK" or not fetch_data:
@@ -3270,8 +3378,11 @@ async def process_email_integration(integration: dict) -> dict:
             message = email.message_from_bytes(raw)
             attachments = extract_gmail_attachments(message)
             if not attachments:
+                messages_without_attachments += 1
                 mailbox.store(message_id, "+FLAGS", "\\Seen")
                 continue
+            messages_with_attachments += 1
+            attachments_total += len(attachments)
             sender = parseaddr(message.get("From", ""))[1]
             subject = message.get("Subject", "")
             result = await process_email_payload(EmailWebhook(
@@ -3285,9 +3396,22 @@ async def process_email_integration(integration: dict) -> dict:
                 "subject": subject,
                 **result,
             })
+    record_email_poll_debug(
+        integration,
+        status="ok",
+        messages_seen=len(message_ids),
+        messages_with_attachments=messages_with_attachments,
+        messages_without_attachments=messages_without_attachments,
+        attachments_total=attachments_total,
+        processed_count=len(processed),
+        last_error="",
+        last_polled_at=utc_now(),
+        last_processed_message_id=processed[-1]["message_id"] if processed else "",
+    )
     await db_upsert_email_integration({
         **integration,
         "last_polled_at": utc_now(),
+        "last_processed_message_id": processed[-1]["message_id"] if processed else integration.get("last_processed_message_id", ""),
         "updated_at": utc_now(),
     })
     return {"integration_id": integration["id"], "email": integration["email"], "processed": processed, "count": len(processed)}
@@ -3301,6 +3425,12 @@ async def run_email_poll_for_integrations(integrations: list[dict], *, continue_
             runs.append(await process_email_integration(integration))
         except HTTPException as exc:
             message = str(exc.detail)
+            record_email_poll_debug(
+                integration,
+                status="error",
+                last_error=message,
+                last_polled_at=utc_now(),
+            )
             if not continue_on_error:
                 raise HTTPException(status_code=exc.status_code, detail=message)
             errors.append({
@@ -3311,6 +3441,12 @@ async def run_email_poll_for_integrations(integrations: list[dict], *, continue_
         except Exception as exc:
             message = f"Work email poll failed for {integration.get('email')}: {exc}"
             print(message)
+            record_email_poll_debug(
+                integration,
+                status="error",
+                last_error=message,
+                last_polled_at=utc_now(),
+            )
             if not continue_on_error:
                 raise HTTPException(status_code=502, detail=message)
             errors.append({

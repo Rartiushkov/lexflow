@@ -44,6 +44,7 @@ def reset_state():
     main.memory_firms.clear()
     main.memory_email_integrations.clear()
     main.memory_notifications.clear()
+    main.app.state.email_poll_debug = {}
 
 
 def create_case(name="Anna Schmidt", email="anna@example.com", auth=AUTH):
@@ -925,6 +926,46 @@ def test_poll_gmail_uses_oauth_integration_even_without_active_flag(monkeypatch)
     payload = response.json()
     assert payload["count"] == 0
     assert payload["runs"][0]["integration_id"] == "oauth-1"
+
+
+def test_email_integrations_debug_reports_last_poll_error(monkeypatch):
+    reset_state()
+    actor = asyncio.run(main.ensure_actor_context({"id": "user_1", "email": "user_1@example.com", "name": "User One"}))
+    main.memory_email_integrations["oauth-zoho"] = {
+        "id": "oauth-zoho",
+        "provider": "zoho",
+        "auth_type": "oauth",
+        "email": "firm@zohomail.com",
+        "app_password": "",
+        "access_token": "token",
+        "refresh_token": "refresh",
+        "account_id": "123",
+        "token_expires_at": None,
+        "imap_host": "imap.zoho.com",
+        "mailbox": "INBOX",
+        "poll_limit": 10,
+        "active": True,
+        "lawyer_id": "user_1",
+        "firm_id": actor["firm"]["id"],
+        "created_at": main.utc_now(),
+        "updated_at": main.utc_now(),
+        "last_polled_at": None,
+        "last_processed_message_id": "",
+    }
+
+    async def broken_process(_integration):
+        raise main.HTTPException(status_code=502, detail="Zoho Mail API request failed: HTTP 401 invalid token")
+
+    monkeypatch.setattr(main, "process_email_integration", broken_process)
+
+    response = client.post("/api/gmail/poll", headers=AUTH)
+    assert response.status_code == 502
+
+    debug = client.get("/api/email-integrations/debug", headers=AUTH)
+    assert debug.status_code == 200
+    payload = debug.json()
+    assert payload["integrations"][0]["poll_debug"]["status"] == "error"
+    assert "invalid token" in payload["integrations"][0]["poll_debug"]["last_error"]
 
 
 def test_pick_runtime_email_integrations_prefers_oauth_per_email():

@@ -144,6 +144,7 @@
           </div>
           </div>
           <div id="gmail-integrations" style="margin-top:16px;"></div>
+          <div id="email-poll-debug" class="kanban-empty" style="margin-top:16px;">Inbox diagnostics will appear here after the next poll.</div>
         </div>
       </div>
     </div>
@@ -370,6 +371,49 @@
       document.getElementById('full-name').value = profile.profile?.full_name || '';
     }
 
+    function renderEmailPollDebug(debugPayload) {
+      const host = document.getElementById('email-poll-debug');
+      if (!host) return;
+      const integrations = Array.isArray(debugPayload?.integrations) ? debugPayload.integrations : [];
+      if (!integrations.length) {
+        host.className = 'kanban-empty';
+        host.textContent = 'Inbox diagnostics will appear here after the next poll.';
+        return;
+      }
+      host.className = '';
+      host.innerHTML = integrations.map((item) => {
+        const debug = item.poll_debug || {};
+        const status = debug.status || 'idle';
+        const badgeClass = status === 'ok'
+          ? 'badge-green'
+          : status === 'error'
+            ? 'badge-red'
+            : 'badge-gray';
+        return `
+          <div class="card" style="margin-top:12px;border-color:rgba(255,255,255,.08);">
+            <div class="card-body" style="display:grid;gap:10px;">
+              <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+                <div>
+                  <div style="font-weight:700;">${item.email || 'Connected inbox'}</div>
+                  <div class="panel-subtitle">${item.provider === 'zoho' ? 'Zoho' : 'Google'} ${item.auth_type === 'oauth' ? 'OAuth' : 'IMAP'}${item.runtime_selected ? ' · active runtime' : ''}</div>
+                </div>
+                <span class="badge ${badgeClass}">${status}</span>
+              </div>
+              <div class="table-row" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
+                <span>seen: <strong>${debug.messages_seen ?? 0}</strong></span>
+                <span>with files: <strong>${debug.messages_with_attachments ?? 0}</strong></span>
+                <span>files: <strong>${debug.attachments_total ?? 0}</strong></span>
+                <span>processed: <strong>${debug.processed_count ?? 0}</strong></span>
+              </div>
+              <div class="panel-subtitle">last poll: ${debug.last_polled_at || item.last_polled_at || 'not yet'}</div>
+              ${debug.last_processed_message_id ? `<div class="panel-subtitle">last message id: ${debug.last_processed_message_id}</div>` : ''}
+              ${debug.last_error ? `<div style="color:var(--red);font-size:13px;">${debug.last_error}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
     function renderSettingsFromCache() {
       renderProfileFromCache();
       const cachedIntegrations = readWorkEmailListCache();
@@ -379,6 +423,7 @@
       renderWorkEmailStatus(integrations);
       syncEmailIntegrationPanels(integrations);
       renderIntegrationTable(integrations);
+      renderEmailPollDebug(null);
     }
 
     function restoreManualImapDraft() {
@@ -411,6 +456,7 @@
         get('/api/settings/profile', { toastOnError: false }),
         get('/api/email-integrations', { toastOnError: false }),
       ]);
+      const debugPayload = await get('/api/email-integrations/debug', { toastOnError: false }).catch(() => null);
       const fallbackList = readWorkEmailListCache();
       const fallbackSingle = readWorkEmailCache();
       const resolvedIntegrations = Array.isArray(integrations) && integrations.length
@@ -441,6 +487,7 @@
       }
       syncEmailIntegrationPanels(resolvedIntegrations);
       renderIntegrationTable(resolvedIntegrations);
+      renderEmailPollDebug(debugPayload);
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
