@@ -1172,7 +1172,33 @@ body.dashboard .dashboard-main {
 .table-row.clickable:hover { background: var(--surface-2); }
 
 .case-doc-row {
-  grid-template-columns: minmax(0, 1.4fr) 130px 120px 100px;
+  grid-template-columns: minmax(0, 1fr) 110px 132px minmax(132px, auto);
+}
+
+.case-doc-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.case-doc-date {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.case-doc-status {
+  min-width: 0;
+}
+
+.case-doc-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .table-actions {

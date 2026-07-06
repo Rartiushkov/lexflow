@@ -819,13 +819,18 @@
           const docId = d.document_id || d.id || '';
           const docKey = d.key || '';
           const canPreview = !!(localUrl || docId || docKey);
+          const statusClass = d.status === 'needs_review'
+            ? 'badge-yellow'
+            : d.status === 'attached' || d.status === 'assigned' || d.status === 'uploaded'
+              ? 'badge-green'
+              : 'badge-gray';
           _docMap[i] = { url: localUrl, name: d.name, docId, docKey };
           return `
-          <div class="table-row case-doc-row" style="grid-template-columns:1fr 100px 80px auto;">
-            <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${d.name}</div>
-            <div style="color:var(--muted);font-size:12px;">${formatDate(d.uploaded_at)}</div>
-            <div><span class="badge badge-green">${d.status}</span></div>
-            <div style="display:flex;gap:6px;align-items:center;">
+          <div class="table-row case-doc-row">
+            <div class="case-doc-name">${d.name}</div>
+            <div class="case-doc-date">${formatDate(d.uploaded_at)}</div>
+            <div class="case-doc-status"><span class="badge ${statusClass}">${d.status}</span></div>
+            <div class="case-doc-actions">
               ${canPreview ? `<button class="btn btn-outline btn-sm" type="button" data-preview-idx="${i}">Preview</button>` : ''}
               <button class="btn btn-outline btn-sm" type="button" data-delete-case-doc="${d.document_id || d.key || d.id || d.name}">Del</button>
             </div>
