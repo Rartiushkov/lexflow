@@ -1538,7 +1538,27 @@ async def update_settings_profile(req: UpdateSettingsRequest, user: dict = Depen
 async def list_email_integrations(user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
     rows = await db_get_email_integrations(firm_id=actor["firm"]["id"])
-    return [mask_integration(row) for row in rows]
+    normalized = []
+    for row in rows:
+        current = row
+        if row.get("provider") == "zoho" and row.get("auth_type") == "oauth":
+            try:
+                ready = await ensure_zoho_integration_access_token(row)
+                profile = await fetch_zoho_account_profile(ready["access_token"])
+                if profile["email"] != ready.get("email") or profile["account_id"] != str(ready.get("account_id") or ""):
+                    current = {
+                        **ready,
+                        "email": profile["email"],
+                        "account_id": profile["account_id"],
+                        "updated_at": utc_now(),
+                    }
+                    current = await db_upsert_email_integration(current)
+                else:
+                    current = ready
+            except Exception:
+                current = row
+        normalized.append(mask_integration(current))
+    return normalized
 
 
 @app.post("/api/email-integrations")
@@ -2573,11 +2593,25 @@ async def zoho_api_put_json(path: str, access_token: str, *, body: Optional[dict
 
 
 def parse_zoho_primary_email(account: dict) -> str:
+    # Zoho account identity can differ from the actual mailbox address
+    # when the user signed up via Google or uses alternate login aliases.
+    mailbox_address = (account.get("mailboxAddress") or "").lower().strip()
+    if mailbox_address:
+        return mailbox_address
+
     addresses = account.get("emailAddress") or []
     for item in addresses:
-        if item.get("isPrimary"):
+        if item.get("isPrimary") and item.get("mailId"):
             return (item.get("mailId") or "").lower().strip()
-    return (account.get("primaryEmailAddress") or account.get("incomingUserName") or account.get("mailboxAddress") or "").lower().strip()
+    for item in addresses:
+        if item.get("mailId"):
+            return (item.get("mailId") or "").lower().strip()
+
+    return (
+        account.get("incomingUserName")
+        or account.get("primaryEmailAddress")
+        or ""
+    ).lower().strip()
 
 
 async def fetch_zoho_account_profile(access_token: str) -> dict:
@@ -2677,7 +2711,16 @@ async def zoho_email_integration_callback(code: Optional[str] = None, state: Opt
         "last_processed_message_id": "",
     }
     existing = await db_get_email_integrations(lawyer_id=payload["user_id"], firm_id=payload["firm_id"])
-    matched = next((item for item in existing if item.get("provider") == "zoho" and item.get("email") == profile["email"]), None)
+    matched = next(
+        (
+            item for item in existing
+            if item.get("provider") == "zoho" and item.get("auth_type") == "oauth"
+        ),
+        None,
+    ) or next(
+        (item for item in existing if item.get("provider") == "zoho" and item.get("email") == profile["email"]),
+        None,
+    )
     if matched:
         integration["id"] = matched["id"]
         integration["created_at"] = matched.get("created_at", utc_now())
