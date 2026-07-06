@@ -472,20 +472,14 @@
         get('/api/email-integrations', { toastOnError: false }),
       ]);
       const debugPayload = await get('/api/email-integrations/debug', { toastOnError: false }).catch(() => null);
-      const fallbackList = readWorkEmailListCache();
-      const fallbackSingle = readWorkEmailCache();
-      const resolvedIntegrations = Array.isArray(integrations) && integrations.length
-        ? integrations
-        : (fallbackList.length ? fallbackList : (fallbackSingle ? [fallbackSingle] : []));
+      const resolvedIntegrations = Array.isArray(integrations) ? integrations : [];
       saveSettingsProfileCache(profile);
       document.getElementById('firm-name').value = profile.firm?.name || '';
       document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
       document.getElementById('full-name').value = profile.profile?.full_name || '';
       document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
       document.getElementById('btn-connect-zoho-email').disabled = !appConfig.zoho_email_oauth_enabled;
-      if (Array.isArray(integrations) && integrations.length) {
-        writeWorkEmailListCache(integrations);
-      }
+      writeWorkEmailListCache(resolvedIntegrations);
       renderWorkEmailStatus(resolvedIntegrations);
       const preferred = pickPreferredIntegration(resolvedIntegrations);
       if (preferred) {
@@ -499,6 +493,8 @@
           poll_limit: preferred.poll_limit || 10,
           active: preferred.active,
         });
+      } else {
+        localStorage.removeItem(WORK_EMAIL_CACHE_KEY);
       }
       syncEmailIntegrationPanels(resolvedIntegrations);
       renderIntegrationTable(resolvedIntegrations);
