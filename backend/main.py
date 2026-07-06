@@ -1052,6 +1052,20 @@ def infer_route_code(case: dict) -> str:
     return "EU_GENERAL"
 
 
+def describe_match_reason(reason: str) -> str:
+    mapping = {
+        "email": "Matched by sender email.",
+        "passport": "Matched by passport number.",
+        "dob": "Matched by date of birth.",
+        "name": "Matched by extracted full name.",
+        "employer": "Matched by employer information.",
+        "filename": "Matched by client name in the filename.",
+        "none": "No confident case match was found.",
+    }
+    parts = [mapping.get(part, f"Matched by {part}.") for part in (reason or "none").split(",") if part]
+    return " ".join(dict.fromkeys(parts)) if parts else mapping["none"]
+
+
 def document_is_active(doc: dict) -> bool:
     return doc.get("status") not in {"duplicate", "archived"}
 
@@ -1106,7 +1120,13 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
             active_document_count += 1
     requirement_states = []
     missing_codes = []
+    missing_labels = []
     blocking_missing = []
+    blocking_missing_labels = []
+    completed_codes = []
+    completed_labels = []
+    review_codes = []
+    review_labels = []
     open_reviews = 0
     risk_flags = []
     actions = []
@@ -1126,14 +1146,20 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
         review_docs = [doc for doc in matched_docs if document_is_review_blocked(doc)]
         if matched_docs and not review_docs:
             state = "complete"
+            completed_codes.append(requirement["code"])
+            completed_labels.append(requirement["label"])
         elif matched_docs:
             state = "needs_review"
             open_reviews += 1
+            review_codes.append(requirement["code"])
+            review_labels.append(requirement["label"])
         else:
             state = "missing"
             missing_codes.append(requirement["code"])
+            missing_labels.append(requirement["label"])
             if requirement["blocker"]:
                 blocking_missing.append(requirement["code"])
+                blocking_missing_labels.append(requirement["label"])
         requirement_states.append({
             "code": requirement["code"],
             "label": requirement["label"],
@@ -1209,11 +1235,22 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
     else:
         priority_reasons.append("Case is in regular active intake.")
     next_step = actions[0]["label"] if actions else "Ready for legal review"
+    request_line = ""
+    if blocking_missing_labels:
+        request_line = f"Please upload: {', '.join(blocking_missing_labels)}."
+    elif missing_labels:
+        request_line = f"Recommended next uploads: {', '.join(missing_labels)}."
     return {
         "route_code": route_code,
         "requirements": requirement_states,
         "missing_codes": missing_codes,
+        "missing_labels": missing_labels,
         "blocking_missing_codes": blocking_missing,
+        "blocking_missing_labels": blocking_missing_labels,
+        "completed_codes": completed_codes,
+        "completed_labels": completed_labels,
+        "review_codes": review_codes,
+        "review_labels": review_labels,
         "open_review_count": open_reviews,
         "unrecognized_count": unrecognized_count,
         "duplicate_count": duplicate_count,
@@ -1225,7 +1262,52 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
         "auto_priority": auto_priority,
         "priority_reasons": priority_reasons,
         "next_step": next_step,
+        "document_plan": {
+            "required_documents": [item["label"] for item in requirement_states],
+            "completed_documents": completed_labels,
+            "missing_documents": missing_labels,
+            "review_documents": review_labels,
+            "recommended_request": request_line,
+        },
         "updated_at": utc_now(),
+    }
+
+
+def build_intake_decision(*, matched_case: Optional[dict], match_reason: str, match_score: float, status: str, document_type: str, auto_created: bool, duplicate: bool, fields: dict) -> dict:
+    confidence = float(fields.get("confidence") or 0)
+    if duplicate:
+        action = "ignore_as_duplicate"
+    elif auto_created:
+        action = "create_case_and_attach"
+    elif matched_case and status == "assigned":
+        action = "attach_to_existing_case"
+    elif matched_case and status == "needs_review":
+        action = "attach_with_review"
+    else:
+        action = "hold_for_manual_review"
+
+    reasons = []
+    if match_reason and match_reason != "none":
+        reasons.append(describe_match_reason(match_reason))
+    if document_type != "unknown":
+        reasons.append(f"Document classified as {document_type.replace('_', ' ')}.")
+    if confidence:
+        reasons.append(f"Extraction confidence {round(confidence, 2)}.")
+    if status == "needs_review":
+        reasons.append("The document needs human review before it can fully unblock the case.")
+    if status == "unrecognized":
+        reasons.append("The system could not confidently assign this document to a case.")
+
+    return {
+        "action": action,
+        "matched_case_id": matched_case.get("id") if matched_case else None,
+        "match_reason": match_reason,
+        "match_score": round(match_score, 3),
+        "document_type": document_type,
+        "extraction_confidence": round(confidence, 2),
+        "status": status,
+        "auto_created_case": auto_created,
+        "explanation": " ".join(reasons).strip(),
     }
 
 
@@ -1507,6 +1589,17 @@ async def route_incoming_document(
         automation_note = "low_confidence_scan"
         manual_review_required = True
 
+    intake_decision = build_intake_decision(
+        matched_case=matched_case,
+        match_reason=match_reason,
+        match_score=match_score,
+        status=status,
+        document_type=document_type,
+        auto_created=auto_created,
+        duplicate=bool(duplicate),
+        fields=fields,
+    )
+
     document = {
         "id": str(uuid.uuid4()),
         "lawyer_id": user_id,
@@ -1525,6 +1618,9 @@ async def route_incoming_document(
         "document_family": document_type,
         "automation_status": "auto_created_case" if auto_created else match_reason,
         "automation_note": automation_note,
+        "automation_decision": intake_decision,
+        "match_reason": match_reason,
+        "match_score": round(match_score, 3),
         "manual_review_required": manual_review_required,
         "quality_status": "poor" if document_type == "unknown" and float(fields.get("confidence") or 0) < 0.55 else "acceptable",
         "authenticity_status": "pending" if document_type in {"marriage_certificate", "birth_certificate"} else "not_applicable",
@@ -1534,18 +1630,31 @@ async def route_incoming_document(
         "updated_at": utc_now(),
     }
     saved = await db_create_document(document)
+    updated_case = matched_case
     if matched_case and status != "duplicate":
         docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"], "document_type": document_type, "status": status}]
-        await db_update_case(matched_case["id"], {"docs": docs, "extracted": {**matched_case.get("extracted", {}), **fields}, "updated_at": utc_now()})
-        await refresh_case_control(matched_case["id"], trigger=f"document_routed:{source}")
+        updated_case = await db_update_case(matched_case["id"], {
+            "docs": docs,
+            "extracted": {**matched_case.get("extracted", {}), **fields},
+            "last_intake_decision": intake_decision,
+            "updated_at": utc_now(),
+        }) or {**matched_case, "docs": docs, "extracted": {**matched_case.get("extracted", {}), **fields}, "last_intake_decision": intake_decision}
+        updated_case = await refresh_case_control(matched_case["id"], trigger=f"document_routed:{source}") or updated_case
+        await log_case_event(updated_case, "document_intake_routed", {
+            "document_id": saved["id"],
+            "document_type": document_type,
+            "status": status,
+            "decision": intake_decision,
+        })
     await store_extraction_evaluation(matched_case["id"] if matched_case else "", saved["id"], fields)
     return {
         "document": saved,
-        "case": matched_case,
+        "case": updated_case,
         "auto_created_case": auto_created,
         "match_reason": match_reason,
         "match_score": match_score,
         "duplicate": bool(duplicate),
+        "decision": intake_decision,
     }
 
 
@@ -2542,6 +2651,7 @@ async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optiona
     matched = []
     created = []
     documents = []
+    decisions = []
     duplicates = 0
     ignored = []
     for att in payload.attachments:
@@ -2566,6 +2676,25 @@ async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optiona
         if result["duplicate"]:
             duplicates += 1
         documents.append(result["document"])
+        decisions.append(result.get("decision", {}))
+
+    case_summaries = []
+    seen_case_ids = []
+    for case_id in matched:
+        if case_id in seen_case_ids:
+            continue
+        seen_case_ids.append(case_id)
+        case = await db_get_case(case_id)
+        if not case:
+            continue
+        control_state = case.get("control_state", {}) or {}
+        case_summaries.append({
+            "case_id": case_id,
+            "client_name": case.get("client_name", ""),
+            "next_step": control_state.get("next_step", ""),
+            "missing_documents": (control_state.get("document_plan") or {}).get("missing_documents", []),
+            "recommended_request": (control_state.get("document_plan") or {}).get("recommended_request", ""),
+        })
     return {
         "matched_cases": sorted(set(matched)),
         "created_cases": sorted(set(created)),
@@ -2575,6 +2704,8 @@ async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optiona
         "ignored": ignored,
         "duplicates": duplicates,
         "documents": documents,
+        "decisions": decisions,
+        "case_summaries": case_summaries,
     }
 
 
