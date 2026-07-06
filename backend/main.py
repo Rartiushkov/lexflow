@@ -1921,6 +1921,69 @@ async def public_email_integrations_debug_poll(email: str):
     }
 
 
+@app.get("/api/public/email-integrations/debug/messages")
+async def public_email_integrations_debug_messages(email: str, limit: int = 5):
+    target = (email or "").lower().strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Email is required")
+    rows = await db_get_email_integrations(active_only=True)
+    match = next((row for row in rows if (row.get("email") or "").lower().strip() == target), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    limit = max(1, min(int(limit or 5), 10))
+
+    if match.get("provider") == "zoho" and match.get("auth_type") == "oauth":
+        ready = await ensure_zoho_integration_access_token(match)
+        account_id = ready.get("account_id") or (await fetch_zoho_account_profile(ready["access_token"]))["account_id"]
+        folder_id = await zoho_inbox_folder_id(ready["access_token"], account_id)
+        response = await zoho_api_get(
+            f"/api/accounts/{account_id}/messages/view",
+            ready["access_token"],
+            params={
+                "folderId": folder_id,
+                "limit": limit,
+                "sortorder": "false",
+            },
+        )
+        items = response.json().get("data") or []
+        inspected = []
+        for item in items[:limit]:
+            message_id = str(item.get("messageId") or "")
+            raw_response = await zoho_api_get(
+                f"/api/accounts/{account_id}/messages/{message_id}/originalmessage",
+                ready["access_token"],
+            ) if message_id else None
+            mime_payload = (((raw_response.json() or {}).get("data") or {}).get("content") or "") if raw_response else ""
+            message = email.message_from_string(mime_payload) if mime_payload else None
+            attachments = extract_gmail_attachments(message) if message else []
+            inspected.append({
+                "message_id": message_id,
+                "thread_id": str(item.get("threadId") or ""),
+                "api_subject": item.get("subject") or "",
+                "mime_subject": message.get("Subject", "") if message else "",
+                "api_from": item.get("senderAddress") or item.get("fromAddress") or "",
+                "mime_from": parseaddr(message.get("From", ""))[1] if message else "",
+                "is_unread_inferred": is_zoho_message_unread(item),
+                "raw_flags": {
+                    "isUnread": item.get("isUnread"),
+                    "unread": item.get("unread"),
+                    "read": item.get("read"),
+                    "status": item.get("status"),
+                    "messageStatus": item.get("messageStatus"),
+                },
+                "attachment_count": len(attachments),
+                "attachment_names": [att.filename for att in attachments[:10]],
+            })
+        return {
+            "generated_at": utc_now(),
+            "email": target,
+            "provider": "zoho",
+            "messages": inspected,
+        }
+
+    raise HTTPException(status_code=400, detail="Message inspection is only enabled for Zoho OAuth debug right now")
+
+
 @app.post("/api/email-integrations")
 async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
