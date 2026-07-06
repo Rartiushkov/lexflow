@@ -804,3 +804,64 @@ def test_pick_runtime_email_integrations_prefers_oauth_per_email():
 
     assert len(picked) == 1
     assert picked[0]["id"] == "oauth-1"
+
+
+def test_pick_runtime_email_integrations_by_workspace_keeps_one_per_firm():
+    rows = [
+        {
+            "id": "firm-1-oauth",
+            "provider": "zoho",
+            "auth_type": "oauth",
+            "email": "firm1@zohomail.com",
+            "refresh_token": "refresh-1",
+            "active": True,
+            "firm_id": "firm-1",
+            "updated_at": "2026-07-06T10:00:00Z",
+        },
+        {
+            "id": "firm-1-manual",
+            "provider": "gmail",
+            "auth_type": "app_password",
+            "email": "firm1@zohomail.com",
+            "app_password": "secret",
+            "active": True,
+            "firm_id": "firm-1",
+            "updated_at": "2026-07-06T09:00:00Z",
+        },
+        {
+            "id": "firm-2-oauth",
+            "provider": "gmail",
+            "auth_type": "oauth",
+            "email": "firm2@gmail.com",
+            "refresh_token": "refresh-2",
+            "active": True,
+            "firm_id": "firm-2",
+            "updated_at": "2026-07-06T08:00:00Z",
+        },
+    ]
+
+    picked = main.pick_runtime_email_integrations_by_workspace(rows)
+
+    assert len(picked) == 2
+    assert {item["id"] for item in picked} == {"firm-1-oauth", "firm-2-oauth"}
+
+
+def test_run_email_poll_for_integrations_collects_errors_when_requested(monkeypatch):
+    rows = [
+        {"id": "ok-1", "email": "ok@example.com"},
+        {"id": "bad-1", "email": "bad@example.com"},
+    ]
+
+    async def fake_process(integration):
+        if integration["id"] == "bad-1":
+            raise RuntimeError("boom")
+        return {"integration_id": integration["id"], "email": integration["email"], "processed": [], "count": 2}
+
+    monkeypatch.setattr(main, "process_email_integration", fake_process)
+
+    result = asyncio.run(main.run_email_poll_for_integrations(rows, continue_on_error=True))
+
+    assert result["count"] == 2
+    assert len(result["runs"]) == 1
+    assert len(result["errors"]) == 1
+    assert result["errors"][0]["integration_id"] == "bad-1"

@@ -76,22 +76,22 @@
           </div>
         </div>
         <div class="card-body">
-          <div class="integration-status-card" id="work-email-status-card">
-            <div>
-              <div class="integration-status-label">Work email status</div>
-              <div class="integration-status-value" id="work-email-status-value">Not connected</div>
-              <div class="panel-subtitle" id="work-email-status-note">Connect a Gmail or Zoho inbox to route documents automatically.</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <span class="badge badge-gray" id="work-email-status-badge">offline</span>
-              <button class="btn btn-outline btn-sm" id="btn-disconnect-email" style="display:none;color:var(--red);">Disconnect</button>
+        <div class="integration-status-card" id="work-email-status-card">
+          <div>
+            <div class="integration-status-label">Work email status</div>
+            <div class="integration-status-value" id="work-email-status-value">Not connected</div>
+            <div class="panel-subtitle" id="work-email-status-note">Connect a Gmail or Zoho inbox and new mail will flow into LexFlow automatically.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="badge badge-gray" id="work-email-status-badge">offline</span>
+            <button class="btn btn-outline btn-sm" id="btn-disconnect-email" style="display:none;color:var(--red);">Disconnect</button>
             </div>
           </div>
 
           <div id="gmail-oauth-panel" style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
             <div style="min-width:240px;">
               <div style="font-weight:600;">Recommended: OAuth inbox connection</div>
-              <div class="panel-subtitle">Connect Gmail or Zoho without storing a permanent mailbox password.</div>
+              <div class="panel-subtitle">Connect Gmail or Zoho once. LexFlow will keep watching the inbox automatically.</div>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
@@ -99,7 +99,6 @@
                 <span class="btn-zoho-mark">Z</span>
                 <span>Connect Zoho</span>
               </button>
-              <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run inbox poll</button>
             </div>
           </div>
 
@@ -202,7 +201,6 @@
       const badge = document.getElementById('work-email-status-badge');
       const value = document.getElementById('work-email-status-value');
       const note = document.getElementById('work-email-status-note');
-      const pollBtn = document.getElementById('btn-poll-gmail');
       const disconnectBtn = document.getElementById('btn-disconnect-email');
       const table = document.getElementById('gmail-integrations');
 
@@ -214,10 +212,9 @@
         if (value) value.textContent = current.email || 'Connected inbox';
         if (note) {
           note.textContent = current.auth_type === 'oauth'
-            ? `${current.provider === 'zoho' ? 'Zoho' : 'Google'} OAuth is active for this workspace.`
-            : 'Manual IMAP is saved for this workspace.';
+            ? `${current.provider === 'zoho' ? 'Zoho' : 'Google'} OAuth is active and inbox sync runs automatically for this workspace.`
+            : 'Manual IMAP is saved and inbox sync runs automatically for this workspace.';
         }
-        if (pollBtn) pollBtn.disabled = current.active === false;
         if (disconnectBtn) disconnectBtn.style.display = 'inline-flex';
       }
 
@@ -294,7 +291,7 @@
         badge.className = 'badge badge-gray';
         badge.textContent = 'offline';
         value.textContent = 'Not connected';
-        note.textContent = 'Connect a Gmail or Zoho inbox to route documents automatically.';
+        note.textContent = 'Connect a Gmail or Zoho inbox and new mail will flow into LexFlow automatically.';
         if (disconnectBtn) disconnectBtn.style.display = 'none';
         return;
       }
@@ -302,8 +299,8 @@
       badge.textContent = current.active === false ? 'inactive' : 'connected';
       value.textContent = current.email || 'Connected inbox';
       note.textContent = current.auth_type === 'oauth'
-        ? `${current.provider === 'zoho' ? 'Zoho' : 'Google'} OAuth is active for this workspace.`
-        : 'Manual IMAP is saved for this workspace.';
+        ? `${current.provider === 'zoho' ? 'Zoho' : 'Google'} OAuth is active and inbox sync runs automatically for this workspace.`
+        : 'Manual IMAP is saved and inbox sync runs automatically for this workspace.';
       if (disconnectBtn) {
         disconnectBtn.style.display = 'inline-flex';
         disconnectBtn._integrationId = current?.id;
@@ -314,14 +311,12 @@
       const cached = readWorkEmailCache();
       const current = pickPreferredIntegration(integrations, cached);
       const isOauth = current?.auth_type === 'oauth' && current?.active !== false;
-      const hasConnection = !!current && current.active !== false;
       const toggleRow = document.getElementById('manual-imap-toggle-row');
       const toggle = document.getElementById('toggle-manual-imap');
       const manualPanel = document.getElementById('manual-imap-panel');
       const oauthPanel = document.getElementById('gmail-oauth-panel');
       const connectBtn = document.getElementById('btn-connect-google-gmail');
       const connectZohoBtn = document.getElementById('btn-connect-zoho-email');
-      const pollBtn = document.getElementById('btn-poll-gmail');
 
       if (toggleRow) {
         toggleRow.style.display = isOauth ? 'none' : 'flex';
@@ -342,20 +337,6 @@
       if (connectZohoBtn) {
         connectZohoBtn.style.display = 'inline-flex';
       }
-      if (pollBtn) {
-        pollBtn.disabled = !hasConnection;
-      }
-    }
-
-    function humanizeGmailPollError(err) {
-      const message = err?.message || '';
-      if (message.includes('Gmail API has not been used in project') || message.includes('gmail.googleapis.com/overview')) {
-        return 'Google connected, but Gmail API is not enabled in your Google Cloud project yet. Open Google Cloud, enable Gmail API for this project, wait 1-2 minutes, then run poll again.';
-      }
-      if (message.includes('No usable Gmail integration found')) {
-        return 'Google inbox is not fully saved on the backend yet. Refresh settings once and try again.';
-      }
-      return message || 'Gmail poll failed';
     }
 
     function renderIntegrationTable(integrations) {
@@ -524,14 +505,6 @@
         document.getElementById('gmail-password').value = '';
         showToast('Gmail integration saved', 'success');
         await loadSettings();
-      });
-      document.getElementById('btn-poll-gmail').addEventListener('click', async () => {
-        try {
-          const result = await post('/api/gmail/poll', {});
-          showToast(`Processed ${result.count} email batch(es)`, 'success');
-        } catch (err) {
-          showToast(humanizeGmailPollError(err), 'error');
-        }
       });
       document.getElementById('btn-disconnect-email')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-disconnect-email');

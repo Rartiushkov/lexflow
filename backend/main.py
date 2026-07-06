@@ -1,4 +1,6 @@
+import asyncio
 import base64
+import contextlib
 import email
 import html
 import hashlib
@@ -62,6 +64,8 @@ ZOHO_OAUTH_STATE_SECRET = os.environ.get("ZOHO_OAUTH_STATE_SECRET", SUPABASE_SER
 ZOHO_ACCOUNTS_BASE = os.environ.get("ZOHO_ACCOUNTS_BASE", "https://accounts.zoho.com").rstrip("/")
 ZOHO_MAIL_API_BASE = os.environ.get("ZOHO_MAIL_API_BASE", "https://mail.zoho.com").rstrip("/")
 ENABLE_TEST_AUTH = os.environ.get("LEXFLOW_TEST_AUTH", "") == "1"
+EMAIL_AUTO_POLL_ENABLED = os.environ.get("EMAIL_AUTO_POLL_ENABLED", "1") == "1" and not ENABLE_TEST_AUTH
+EMAIL_AUTO_POLL_INTERVAL_SECONDS = max(15, int(os.environ.get("EMAIL_AUTO_POLL_INTERVAL_SECONDS", "30") or "30"))
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
 USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
@@ -111,6 +115,9 @@ memory_profiles: dict[str, dict] = {}
 memory_firms: dict[str, dict] = {}
 memory_email_integrations: dict[str, dict] = {}
 memory_notifications: dict[str, dict] = {}
+
+app.state.email_poll_lock = None
+app.state.email_poll_task = None
 
 
 def utc_now():
@@ -260,6 +267,30 @@ def pick_runtime_email_integrations(rows: list[dict]) -> list[dict]:
         email_key = (row.get("email") or "").lower().strip() or row.get("id") or str(uuid.uuid4())
         preferred_by_email.setdefault(email_key, row)
     return list(preferred_by_email.values())
+
+
+def workspace_key_for_integration(row: dict) -> str:
+    firm_id = (row or {}).get("firm_id")
+    if firm_id:
+        return f"firm:{firm_id}"
+    lawyer_id = (row or {}).get("lawyer_id")
+    if lawyer_id:
+        return f"lawyer:{lawyer_id}"
+    email_value = (row or {}).get("email")
+    if email_value:
+        return f"email:{email_value.lower().strip()}"
+    return f"integration:{(row or {}).get('id', 'unknown')}"
+
+
+def pick_runtime_email_integrations_by_workspace(rows: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in rows or []:
+        grouped.setdefault(workspace_key_for_integration(row), []).append(row)
+
+    picked: list[dict] = []
+    for group_rows in grouped.values():
+        picked.extend(pick_runtime_email_integrations(group_rows))
+    return picked
 
 
 def strip_unsupported_case_fields(data: dict) -> dict:
@@ -3243,6 +3274,101 @@ async def process_email_integration(integration: dict) -> dict:
     return {"integration_id": integration["id"], "email": integration["email"], "processed": processed, "count": len(processed)}
 
 
+async def run_email_poll_for_integrations(integrations: list[dict], *, continue_on_error: bool = False) -> dict:
+    runs = []
+    errors = []
+    for integration in integrations:
+        try:
+            runs.append(await process_email_integration(integration))
+        except HTTPException as exc:
+            message = str(exc.detail)
+            if not continue_on_error:
+                raise HTTPException(status_code=exc.status_code, detail=message)
+            errors.append({
+                "integration_id": integration.get("id"),
+                "email": integration.get("email"),
+                "message": message,
+            })
+        except Exception as exc:
+            message = f"Work email poll failed for {integration.get('email')}: {exc}"
+            print(message)
+            if not continue_on_error:
+                raise HTTPException(status_code=502, detail=message)
+            errors.append({
+                "integration_id": integration.get("id"),
+                "email": integration.get("email"),
+                "message": message,
+            })
+    return {
+        "runs": runs,
+        "count": sum(item["count"] for item in runs),
+        "errors": errors,
+    }
+
+
+async def poll_all_active_email_integrations_once() -> dict:
+    integrations = pick_runtime_email_integrations_by_workspace(
+        await db_get_email_integrations(active_only=True)
+    )
+    if not integrations:
+        return {"runs": [], "count": 0, "errors": []}
+
+    lock = getattr(app.state, "email_poll_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        app.state.email_poll_lock = lock
+
+    if lock.locked():
+        return {"runs": [], "count": 0, "errors": [], "skipped": True}
+
+    async with lock:
+        return await run_email_poll_for_integrations(integrations, continue_on_error=True)
+
+
+async def auto_email_poll_loop():
+    await asyncio.sleep(8)
+    while True:
+        try:
+            result = await poll_all_active_email_integrations_once()
+            if result.get("count") or result.get("errors"):
+                print(
+                    "Auto email poll completed",
+                    json.dumps({
+                        "count": result.get("count", 0),
+                        "errors": len(result.get("errors") or []),
+                        "skipped": bool(result.get("skipped")),
+                    }),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"Auto email poll loop failed: {exc}")
+        await asyncio.sleep(EMAIL_AUTO_POLL_INTERVAL_SECONDS)
+
+
+@app.on_event("startup")
+async def start_auto_email_poll_loop():
+    if not EMAIL_AUTO_POLL_ENABLED:
+        print("Auto email poll is disabled")
+        return
+    if getattr(app.state, "email_poll_lock", None) is None:
+        app.state.email_poll_lock = asyncio.Lock()
+    if getattr(app.state, "email_poll_task", None) is None:
+        app.state.email_poll_task = asyncio.create_task(auto_email_poll_loop())
+        print(f"Auto email poll started with {EMAIL_AUTO_POLL_INTERVAL_SECONDS}s interval")
+
+
+@app.on_event("shutdown")
+async def stop_auto_email_poll_loop():
+    task = getattr(app.state, "email_poll_task", None)
+    if task is None:
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    app.state.email_poll_task = None
+
+
 @app.post("/api/gmail/poll")
 async def poll_gmail(user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
@@ -3269,16 +3395,7 @@ async def poll_gmail(user: dict = Depends(get_current_user)):
             status_code=400,
             detail="No usable work email integration found for this workspace. Reconnect Google or Zoho work email, or save manual IMAP settings."
         )
-    runs = []
-    for integration in integrations:
-        try:
-            runs.append(await process_email_integration(integration))
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Work email poll failed for {integration.get('email')}: {e}")
-            raise HTTPException(status_code=502, detail=f"Work email poll failed for {integration.get('email')}")
-    return {"runs": runs, "count": sum(item["count"] for item in runs)}
+    return await run_email_poll_for_integrations(integrations)
 
 
 # ─── OCR pipeline ───────────────────────────────────────
@@ -3363,4 +3480,6 @@ async def public_config():
         "supabase_anon_key": SUPABASE_ANON_KEY,
         "google_email_oauth_enabled": bool(GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET),
         "zoho_email_oauth_enabled": bool(ZOHO_OAUTH_CLIENT_ID and ZOHO_OAUTH_CLIENT_SECRET),
+        "email_auto_poll_enabled": EMAIL_AUTO_POLL_ENABLED,
+        "email_auto_poll_interval_seconds": EMAIL_AUTO_POLL_INTERVAL_SECONDS,
     }
