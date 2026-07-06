@@ -1860,6 +1860,66 @@ async def email_integrations_debug(user: dict = Depends(get_current_user)):
     }
 
 
+@app.get("/api/public/email-integrations/debug")
+async def public_email_integrations_debug(email: str):
+    target = (email or "").lower().strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Email is required")
+    rows = await db_get_email_integrations(active_only=True)
+    match = next((row for row in rows if (row.get("email") or "").lower().strip() == target), None)
+    if not match:
+        return {
+            "generated_at": utc_now(),
+            "found": False,
+            "email": target,
+        }
+    runtime_ids = {
+        item.get("id")
+        for item in pick_runtime_email_integrations(rows)
+    }
+    bucket = getattr(app.state, "email_poll_debug", {}) or {}
+    debug = bucket.get(match.get("id"), {})
+    return {
+        "generated_at": utc_now(),
+        "found": True,
+        "email": target,
+        "provider": match.get("provider"),
+        "auth_type": match.get("auth_type"),
+        "active": match.get("active"),
+        "runtime_selected": match.get("id") in runtime_ids,
+        "last_polled_at": match.get("last_polled_at"),
+        "last_processed_message_id": match.get("last_processed_message_id") or "",
+        "poll_debug": {
+            "status": debug.get("status", ""),
+            "messages_seen": debug.get("messages_seen", 0),
+            "messages_with_attachments": debug.get("messages_with_attachments", 0),
+            "messages_without_attachments": debug.get("messages_without_attachments", 0),
+            "attachments_total": debug.get("attachments_total", 0),
+            "processed_count": debug.get("processed_count", 0),
+            "last_error": debug.get("last_error", ""),
+            "last_polled_at": debug.get("last_polled_at", ""),
+            "last_processed_message_id": debug.get("last_processed_message_id", ""),
+        },
+    }
+
+
+@app.post("/api/public/email-integrations/debug/poll")
+async def public_email_integrations_debug_poll(email: str):
+    target = (email or "").lower().strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Email is required")
+    rows = await db_get_email_integrations(active_only=True)
+    match = next((row for row in rows if (row.get("email") or "").lower().strip() == target), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    result = await run_email_poll_for_integrations([match], continue_on_error=True)
+    return {
+        "generated_at": utc_now(),
+        "email": target,
+        **result,
+    }
+
+
 @app.post("/api/email-integrations")
 async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
