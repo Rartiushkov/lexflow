@@ -8,8 +8,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css?v=21" />
+  <style>
+    .settings-cache-pending [data-settings-hydrate] {
+      opacity: 0;
+    }
+  </style>
 </head>
-<body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
+<body class="dashboard settings-cache-pending" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
     <a href="/index.html" class="sidebar-brand"><span class="brand-mark" style="width:28px;height:28px;font-size:13px;">Lf</span><span class="brand-name">LexFlow</span></a>
     <nav class="sidebar-nav">
@@ -37,7 +42,7 @@
     </div>
     <div class="page-content">
       <div class="page-header"><div><div class="page-title">Settings</div><div class="page-subtitle">Workspace preferences and account setup.</div></div></div>
-      <div class="card" style="max-width:720px;margin-bottom:20px;">
+      <div class="card" data-settings-hydrate style="max-width:720px;margin-bottom:20px;">
         <div class="card-body">
           <div class="form-group">
             <label class="form-label">Law firm name</label>
@@ -63,7 +68,7 @@
         </div>
       </div>
 
-      <div class="card" style="max-width:720px;">
+      <div class="card" data-settings-hydrate style="max-width:720px;">
         <div class="card-header">
           <div>
             <div class="card-title">Connect work email</div>
@@ -144,6 +149,92 @@
       </div>
     </div>
   </div>
+  <script>
+    (function bootstrapSettingsCache() {
+      const parse = (key, fallback) => {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch {
+          return fallback;
+        }
+      };
+
+      const profile = parse('lexflow_settings_profile', null);
+      if (profile) {
+        const firmName = document.getElementById('firm-name');
+        const vatId = document.getElementById('vat-id');
+        const fullName = document.getElementById('full-name');
+        if (firmName) firmName.value = profile.firm?.name || '';
+        if (vatId) vatId.value = profile.firm?.vat_id || profile.profile?.vat_id || '';
+        if (fullName) fullName.value = profile.profile?.full_name || '';
+      }
+
+      const cachedSingle = parse('lexflow_work_email_cache', null);
+      const cachedList = parse('lexflow_work_email_integrations_cache', []);
+      const integrations = Array.isArray(cachedList) && cachedList.length
+        ? cachedList.filter(Boolean)
+        : (cachedSingle ? [cachedSingle] : []);
+
+      const current = integrations
+        .map((item, index) => {
+          const isActive = item?.active !== false;
+          const isOauth = item?.auth_type === 'oauth';
+          const hasToken = Boolean(item?.refresh_token || item?.access_token || isOauth);
+          return {
+            item,
+            score: (isActive ? 100 : 0) + (isOauth ? 20 : 0) + (hasToken ? 10 : 0) - index,
+          };
+        })
+        .sort((a, b) => b.score - a.score)[0]?.item || null;
+
+      if (cachedSingle) {
+        const email = document.getElementById('gmail-email');
+        const host = document.getElementById('gmail-host');
+        const mailbox = document.getElementById('gmail-mailbox');
+        const pollLimit = document.getElementById('gmail-poll-limit');
+        if (email && cachedSingle.email) email.value = cachedSingle.email;
+        if (host && cachedSingle.imap_host) host.value = cachedSingle.imap_host;
+        if (mailbox && cachedSingle.mailbox) mailbox.value = cachedSingle.mailbox;
+        if (pollLimit && cachedSingle.poll_limit) pollLimit.value = cachedSingle.poll_limit;
+      }
+
+      const badge = document.getElementById('work-email-status-badge');
+      const value = document.getElementById('work-email-status-value');
+      const note = document.getElementById('work-email-status-note');
+      const pollBtn = document.getElementById('btn-poll-gmail');
+      const disconnectBtn = document.getElementById('btn-disconnect-email');
+      const table = document.getElementById('gmail-integrations');
+
+      if (current) {
+        if (badge) {
+          badge.className = 'badge badge-green';
+          badge.textContent = current.active === false ? 'inactive' : 'connected';
+        }
+        if (value) value.textContent = current.email || 'Connected inbox';
+        if (note) {
+          note.textContent = current.auth_type === 'oauth'
+            ? `${current.provider === 'zoho' ? 'Zoho' : 'Google'} OAuth is active for this workspace.`
+            : 'Manual IMAP is saved for this workspace.';
+        }
+        if (pollBtn) pollBtn.disabled = current.active === false;
+        if (disconnectBtn) disconnectBtn.style.display = 'inline-flex';
+      }
+
+      if (table && integrations.length) {
+        table.innerHTML = integrations.map(item => `
+          <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
+            <span><strong>${item.email || ''}</strong></span>
+            <span>${item.auth_type === 'oauth' ? `${(item.provider || 'google').toUpperCase()} OAuth` : 'App password'}</span>
+            <span>${item.mailbox || 'INBOX'}</span>
+            <span><span class="badge ${item.active === false ? 'badge-gray' : 'badge-green'}">${item.active === false ? 'inactive' : 'active'}</span></span>
+          </div>
+        `).join('');
+      }
+
+      document.body.classList.remove('settings-cache-pending');
+    })();
+  </script>
   <script src="./app.js?v=19"></script>
   <script>
     const WORK_EMAIL_CACHE_KEY = 'lexflow_work_email_cache';
