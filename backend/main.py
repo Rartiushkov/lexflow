@@ -149,6 +149,14 @@ def name_from_email(address: str) -> str:
     return " ".join(part.capitalize() for part in parts[:3]) or "New client"
 
 
+def normalize_identity_text(value: str) -> str:
+    return normalize_lookup(value or "")
+
+
+def normalize_identity_code(value: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "", (value or "").upper())
+
+
 def parse_date(value: str) -> Optional[date]:
     if not value:
         return None
@@ -1310,12 +1318,93 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
             if case.get("client_email", "").lower().strip() == sender:
                 return case, "email", 0.98
 
-    full_name = fields.get("full_name", "")
-    normalized_name = normalize_lookup(full_name)
-    if normalized_name:
-        for case in cases:
-            if normalize_lookup(case.get("client_name", "")) == normalized_name:
-                return case, "ocr_name", float(fields.get("confidence") or 0.7)
+    documents = await db_get_documents()
+    docs_by_case: dict[str, list[dict]] = {}
+    for document in documents:
+        case_id = document.get("case_id")
+        if not case_id:
+            continue
+        docs_by_case.setdefault(case_id, []).append(document)
+
+    incoming_name = normalize_identity_text(fields.get("full_name", ""))
+    incoming_passport = normalize_identity_code(fields.get("passport_number", ""))
+    incoming_dob = fields.get("date_of_birth", "")
+    incoming_employer = normalize_identity_text(fields.get("employer", ""))
+
+    def collect_case_identities(case: dict) -> dict:
+        extracted_sources = [case.get("extracted", {}) or {}]
+        for item in docs_by_case.get(case.get("id", ""), []):
+            extracted_sources.append(item.get("extracted", {}) or {})
+
+        names = {
+            normalize_identity_text(value)
+            for value in [case.get("client_name", "")] + [src.get("full_name", "") for src in extracted_sources]
+            if normalize_identity_text(value)
+        }
+        emails = {
+            (value or "").lower().strip()
+            for value in [case.get("client_email", "")] + [src.get("email", "") for src in extracted_sources]
+            if (value or "").strip()
+        }
+        passports = {
+            normalize_identity_code(src.get("passport_number", ""))
+            for src in extracted_sources
+            if normalize_identity_code(src.get("passport_number", ""))
+        }
+        dobs = {
+            src.get("date_of_birth", "")
+            for src in extracted_sources
+            if src.get("date_of_birth", "")
+        }
+        employers = {
+            normalize_identity_text(src.get("employer", ""))
+            for src in extracted_sources
+            if normalize_identity_text(src.get("employer", ""))
+        }
+        return {
+            "names": names,
+            "emails": emails,
+            "passports": passports,
+            "dobs": dobs,
+            "employers": employers,
+        }
+
+    scored_matches = []
+    for case in cases:
+        identities = collect_case_identities(case)
+        score = 0.0
+        reasons: list[str] = []
+
+        if sender and sender in identities["emails"]:
+            score += 0.99
+            reasons.append("email")
+        if incoming_passport and incoming_passport in identities["passports"]:
+            score += 0.97
+            reasons.append("passport")
+        if incoming_dob and incoming_dob in identities["dobs"]:
+            score += 0.55
+            reasons.append("dob")
+        if incoming_name and incoming_name in identities["names"]:
+            score += max(0.4, float(fields.get("confidence") or 0.7))
+            reasons.append("name")
+        if incoming_employer and incoming_employer in identities["employers"]:
+            score += 0.28
+            reasons.append("employer")
+
+        if "passport" in reasons and "dob" in reasons:
+            score += 0.2
+        if "name" in reasons and "dob" in reasons:
+            score += 0.14
+        if "email" in reasons and "name" in reasons:
+            score += 0.08
+
+        if score > 0:
+            scored_matches.append((case, ",".join(reasons), min(score, 0.995)))
+
+    if scored_matches:
+        best_case, best_reason, best_score = sorted(scored_matches, key=lambda item: item[2], reverse=True)[0]
+        if best_score >= 0.78:
+            return best_case, best_reason, round(best_score, 3)
 
     filename_lookup = normalize_lookup(filename)
     for case in cases:
@@ -1324,6 +1413,17 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
             return case, "filename", 0.75
 
     return None, "none", 0.0
+
+
+def should_auto_create_case(fields: dict, sender_email: str) -> bool:
+    confidence = float(fields.get("confidence") or 0)
+    has_email = bool((sender_email or fields.get("email") or "").strip())
+    has_name = bool(normalize_identity_text(fields.get("full_name", "")))
+    has_passport = bool(normalize_identity_code(fields.get("passport_number", "")))
+    has_dob = bool(fields.get("date_of_birth", ""))
+    has_employer = bool(normalize_identity_text(fields.get("employer", "")))
+    strong_identity = has_passport or (has_name and has_dob) or (has_name and has_email) or (has_name and has_employer)
+    return confidence >= 0.45 and strong_identity
 
 
 async def create_case_from_document(sender_email: str, subject: str, fields: dict, user_id: str) -> dict:
@@ -1385,7 +1485,7 @@ async def route_incoming_document(
     cases = await db_get_cases()
     matched_case, match_reason, match_score = await find_case_for_document(sender_email, filename, fields, cases)
     auto_created = False
-    if not matched_case and (fields.get("full_name") or sender_email) and float(fields.get("confidence") or 0) >= 0.45:
+    if not matched_case and should_auto_create_case(fields, sender_email):
         matched_case = await create_case_from_document(sender_email, subject, fields, user_id)
         auto_created = True
 
