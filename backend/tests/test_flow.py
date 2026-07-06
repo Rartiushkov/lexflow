@@ -165,6 +165,49 @@ def test_case_upload_creates_document_and_delete_removes_it():
     assert docs_after.json() == []
 
 
+def test_mistral_ocr_to_raw_text_uses_page_markdown():
+    raw_text, confidence, pages = main.mistral_ocr_to_raw_text({
+        "pages": [
+            {
+                "index": 0,
+                "markdown": "Passport\nName: Anna Schmidt\nPassport number: C12345678",
+                "confidence_scores": {"average_page_confidence_score": 0.91},
+            },
+            {
+                "index": 1,
+                "markdown": "Date of birth: 01.02.1990",
+                "confidence_scores": {"average_page_confidence_score": 0.87},
+            },
+        ]
+    })
+
+    assert "Passport number: C12345678" in raw_text
+    assert "Date of birth: 01.02.1990" in raw_text
+    assert confidence > 0.88
+    assert pages[0]["method"] == "mistral_markdown"
+
+
+def test_case_upload_returns_extracted_fields_and_updated_case(monkeypatch):
+    reset_state()
+    case = create_case()
+
+    async def fake_run_ocr(*_args, **_kwargs):
+        return {"raw_text": "Passport\nName: Anna Schmidt\nPassport number: C12345678\nDate of birth: 01.02.1990", "provider": "mistral", "confidence": 0.93, "pages": []}
+
+    monkeypatch.setattr(main, "run_ocr", fake_run_ocr)
+
+    response = client.post(
+        f"/api/cases/{case['id']}/upload",
+        headers=AUTH,
+        files={"file": ("passport.png", b"fake image", "image/png")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["extracted"]["passport_number"] == "C12345678"
+    assert payload["case"]["extracted"]["passport_number"] == "C12345678"
+
+
 def test_case_patch_succeeds_even_if_control_refresh_fails(monkeypatch):
     reset_state()
     case = create_case()

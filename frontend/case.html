@@ -1012,7 +1012,17 @@
       document.getElementById('btn-upload')?.addEventListener('click', () => input.click());
       input?.addEventListener('change', async () => {
         for (const file of input.files) {
-          try { await upload(`/api/cases/${caseId}/upload`, file); showToast(`${file.name} uploaded`, 'success'); }
+          try {
+            const result = await upload(`/api/cases/${caseId}/upload`, file);
+            if (result?.case) {
+              cacheCaseDetail(result.case);
+              upsertLocalCase(result.case);
+              render(result.case);
+            } else if (result?.extracted) {
+              fillFieldsFromExtracted(result.extracted);
+            }
+            showToast(`${file.name} uploaded`, 'success');
+          }
           catch { showToast(`${file.name} upload failed`, 'error'); }
         }
         loadCase();

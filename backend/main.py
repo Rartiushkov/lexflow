@@ -170,6 +170,32 @@ def parse_duplicate_origin_id(value: str) -> str:
     return ""
 
 
+def mistral_ocr_to_raw_text(payload: dict) -> tuple[str, float, list[dict]]:
+    pages = payload.get("pages") or []
+    markdown_parts = []
+    normalized_pages = []
+    confidences = []
+    for index, page in enumerate(pages):
+        markdown = (page.get("markdown") or "").strip()
+        if markdown:
+            markdown_parts.append(markdown)
+        normalized_pages.append({
+            "page": page.get("index", index) + 1 if page.get("index") is not None else index + 1,
+            "chars": len(markdown),
+            "method": "mistral_markdown",
+        })
+        confidence_scores = page.get("confidence_scores") or {}
+        average_confidence = confidence_scores.get("average_page_confidence_score")
+        if average_confidence is not None:
+            try:
+                confidences.append(float(average_confidence))
+            except Exception:
+                pass
+    raw_text = "\n\n".join(part for part in markdown_parts if part).strip()
+    confidence = sum(confidences) / len(confidences) if confidences else (0.82 if raw_text else 0.0)
+    return raw_text, confidence, normalized_pages
+
+
 def infer_case_type(document_type: str, subject: str = "") -> str:
     lookup = f"{document_type} {subject}".lower()
     if "blue card" in lookup:
@@ -1052,7 +1078,6 @@ async def run_ocr(content: bytes, filename: str) -> dict:
         }
     try:
         encoded = base64.b64encode(content).decode("utf-8")
-        mime = "application/pdf" if filename.lower().endswith(".pdf") else "image/jpeg"
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(
                 "https://api.mistral.ai/v1/ocr",
@@ -1068,7 +1093,11 @@ async def run_ocr(content: bytes, filename: str) -> dict:
             )
             r.raise_for_status()
             result = r.json()
+            raw_text, confidence, pages = mistral_ocr_to_raw_text(result)
             result["provider"] = "mistral"
+            result["raw_text"] = raw_text
+            result["confidence"] = confidence
+            result["pages"] = pages
             result["local_attempt"] = local_result
             return result
     except Exception as e:
@@ -2542,7 +2571,15 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
     await db_update_case(case_id, {"docs": docs, "extracted": {**case.get("extracted", {}), **extracted}, "updated_at": utc_now()})
     await store_extraction_evaluation(case_id, saved_doc["id"], extracted)
     await refresh_case_control(case_id, trigger=f"case_upload:{document_type}")
-    return {**upload, "document_id": saved_doc["id"]}
+    updated_case = await db_get_case(case_id)
+    return {
+        **upload,
+        "document_id": saved_doc["id"],
+        "document_status": status,
+        "document_type": document_type,
+        "extracted": extracted,
+        "case": updated_case or case,
+    }
 
 
 @app.get("/api/documents")
