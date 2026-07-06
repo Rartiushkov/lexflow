@@ -2000,7 +2000,7 @@ async def start_zoho_email_integration(user: dict = Depends(get_current_user)):
         "response_type": "code",
         "access_type": "offline",
         "prompt": "consent",
-        "scope": "ZohoMail.accounts.READ,ZohoMail.folders.READ,ZohoMail.messages.READ",
+        "scope": "ZohoMail.accounts.READ,ZohoMail.folders.READ,ZohoMail.messages.READ,ZohoMail.messages.UPDATE",
         "state": state,
     })
     return {"auth_url": f"{ZOHO_ACCOUNTS_BASE}/oauth/v2/auth?{query}"}
@@ -2969,6 +2969,11 @@ async def zoho_api_put_json(path: str, access_token: str, *, body: Optional[dict
         detail = response.text.strip()
         if len(detail) > 300:
             detail = detail[:300] + "..."
+        if response.status_code == 401 and "INVALID_OAUTHSCOPE" in detail:
+            raise HTTPException(
+                status_code=502,
+                detail="Zoho OAuth token is missing message update scope. Reconnect Zoho work email to refresh permissions."
+            )
         raise HTTPException(status_code=502, detail=f"Zoho Mail API write request failed: HTTP {response.status_code} {detail}")
     return response.json() if response.text else {}
 

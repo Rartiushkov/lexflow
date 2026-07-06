@@ -891,6 +891,23 @@ def test_google_email_integration_start_returns_auth_url():
         main.GOOGLE_OAUTH_CLIENT_SECRET = original_client_secret
 
 
+def test_zoho_email_integration_start_requests_update_scope():
+    reset_state()
+    original_client_id = main.ZOHO_OAUTH_CLIENT_ID
+    original_client_secret = main.ZOHO_OAUTH_CLIENT_SECRET
+    try:
+        main.ZOHO_OAUTH_CLIENT_ID = "zoho-client-id"
+        main.ZOHO_OAUTH_CLIENT_SECRET = "zoho-client-secret"
+        response = client.post("/api/email-integrations/zoho/start", headers=AUTH)
+        assert response.status_code == 200
+        auth_url = response.json()["auth_url"]
+        assert "accounts.zoho.com" in auth_url
+        assert "ZohoMail.messages.UPDATE" in auth_url
+    finally:
+        main.ZOHO_OAUTH_CLIENT_ID = original_client_id
+        main.ZOHO_OAUTH_CLIENT_SECRET = original_client_secret
+
+
 def test_poll_gmail_uses_oauth_integration_even_without_active_flag(monkeypatch):
     reset_state()
     actor = asyncio.run(main.ensure_actor_context({"id": "user_1", "email": "user_1@example.com", "name": "User One"}))
