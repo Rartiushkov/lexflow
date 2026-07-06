@@ -355,14 +355,17 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      await requireAuth();
       restoreManualImapDraft();
       bindManualImapDraftAutosave();
       renderSettingsFromCache();
+      const cachedIntegrations = readWorkEmailListCache();
+      const cachedSingle = readWorkEmailCache();
+      const initialIntegrations = cachedIntegrations.length ? cachedIntegrations : (cachedSingle ? [cachedSingle] : []);
       document.getElementById('toggle-manual-imap').addEventListener('change', (event) => {
-        syncEmailIntegrationPanels([]);
+        syncEmailIntegrationPanels(initialIntegrations);
       });
-      syncEmailIntegrationPanels([]);
+      syncEmailIntegrationPanels(initialIntegrations);
+      await requireAuth();
       try {
         await loadSettings();
       } catch {
