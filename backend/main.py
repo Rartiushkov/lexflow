@@ -1995,6 +1995,30 @@ async def public_email_integrations_debug_messages(mailbox_email: str = Query(..
     raise HTTPException(status_code=400, detail="Message inspection is only enabled for Zoho OAuth debug right now")
 
 
+@app.get("/api/public/email-integrations/debug/all")
+async def public_email_integrations_debug_all(limit: int = 20):
+    rows = await db_get_email_integrations()
+    limit = max(1, min(int(limit or 20), 100))
+    return {
+        "generated_at": utc_now(),
+        "count": len(rows),
+        "items": [
+            {
+                "id": row.get("id"),
+                "email": row.get("email"),
+                "provider": row.get("provider"),
+                "auth_type": row.get("auth_type"),
+                "active": row.get("active"),
+                "lawyer_id": row.get("lawyer_id"),
+                "firm_id": row.get("firm_id"),
+                "updated_at": row.get("updated_at"),
+                "last_polled_at": row.get("last_polled_at"),
+            }
+            for row in rows[:limit]
+        ],
+    }
+
+
 @app.post("/api/email-integrations")
 async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
