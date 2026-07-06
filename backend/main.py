@@ -1899,6 +1899,7 @@ async def public_email_integrations_debug(email: str):
             "last_error": debug.get("last_error", ""),
             "last_polled_at": debug.get("last_polled_at", ""),
             "last_processed_message_id": debug.get("last_processed_message_id", ""),
+            "mark_read_failures": debug.get("mark_read_failures", []),
         },
     }
 
@@ -2978,6 +2979,24 @@ async def zoho_api_put_json(path: str, access_token: str, *, body: Optional[dict
     return response.json() if response.text else {}
 
 
+async def try_mark_zoho_message_read(access_token: str, account_id: str, message_id: str, thread_id: str = "") -> Optional[str]:
+    body = {
+        "mode": "markAsRead",
+        "messageId": [message_id],
+    }
+    if thread_id:
+        body["threadId"] = [thread_id]
+    try:
+        await zoho_api_put_json(
+            f"/api/accounts/{account_id}/updatemessage",
+            access_token,
+            body=body,
+        )
+        return None
+    except HTTPException as exc:
+        return str(exc.detail)
+
+
 def parse_zoho_primary_email(account: dict) -> str:
     # Zoho account identity can differ from the actual mailbox address
     # when the user signed up via Google or uses alternate login aliases.
@@ -3354,6 +3373,7 @@ async def process_email_integration(integration: dict) -> dict:
         attachments_total = 0
         messages_with_attachments = 0
         messages_without_attachments = 0
+        mark_read_failures = []
         for item in messages:
             message_id = str(item.get("messageId") or "")
             if not message_id:
@@ -3368,15 +3388,12 @@ async def process_email_integration(integration: dict) -> dict:
             thread_id = str(item.get("threadId") or "")
             if not attachments:
                 messages_without_attachments += 1
-                await zoho_api_put_json(
-                    f"/api/accounts/{account_id}/updatemessage",
-                    ready["access_token"],
-                    body={
-                        "mode": "markAsRead",
-                        "messageId": [message_id],
-                        "threadId": [thread_id] if thread_id else [],
-                    },
-                )
+                mark_error = await try_mark_zoho_message_read(ready["access_token"], account_id, message_id, thread_id)
+                if mark_error:
+                    mark_read_failures.append({
+                        "message_id": message_id,
+                        "reason": trim_poll_debug_text(mark_error, 120),
+                    })
                 continue
             messages_with_attachments += 1
             attachments_total += len(attachments)
@@ -3386,15 +3403,12 @@ async def process_email_integration(integration: dict) -> dict:
                 EmailWebhook(**{"from": sender, "subject": subject, "attachments": attachments}),
                 owner_user_id=ready.get("lawyer_id"),
             )
-            await zoho_api_put_json(
-                f"/api/accounts/{account_id}/updatemessage",
-                ready["access_token"],
-                body={
-                    "mode": "markAsRead",
-                    "messageId": [message_id],
-                    "threadId": [thread_id] if thread_id else [],
-                },
-            )
+            mark_error = await try_mark_zoho_message_read(ready["access_token"], account_id, message_id, thread_id)
+            if mark_error:
+                mark_read_failures.append({
+                    "message_id": message_id,
+                    "reason": trim_poll_debug_text(mark_error, 120),
+                })
             processed.append({
                 "integration_id": ready["id"],
                 "message_id": message_id,
@@ -3414,6 +3428,7 @@ async def process_email_integration(integration: dict) -> dict:
             last_polled_at=utc_now(),
             account_id=account_id,
             last_processed_message_id=processed[-1]["message_id"] if processed else "",
+            mark_read_failures=mark_read_failures[:5],
         )
         await db_upsert_email_integration({
             **ready,
