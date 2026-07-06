@@ -169,6 +169,39 @@ button { font-family: inherit; cursor: pointer; }
   border-color: var(--border-2);
 }
 
+.btn-zoho {
+  background: linear-gradient(180deg, #ff7a2f 0%, #e95b1a 100%);
+  color: #fff7ef;
+  border-color: rgba(255, 180, 128, 0.34);
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(233, 91, 26, 0.18), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+
+.btn-zoho:hover {
+  background: linear-gradient(180deg, #ff8845 0%, #f06422 100%);
+  border-color: rgba(255, 198, 158, 0.46);
+  color: #fffdf9;
+}
+
+.btn-zoho:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.btn-zoho-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--muted);

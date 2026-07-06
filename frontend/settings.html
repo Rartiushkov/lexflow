@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20" />
+  <link rel="stylesheet" href="./styles.css?v=21" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -90,7 +90,10 @@
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
-              <button class="btn btn-outline" id="btn-connect-zoho-email" type="button">Connect Zoho</button>
+              <button class="btn btn-zoho" id="btn-connect-zoho-email" type="button">
+                <span class="btn-zoho-mark">Z</span>
+                <span>Connect Zoho</span>
+              </button>
               <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run inbox poll</button>
             </div>
           </div>
@@ -366,14 +369,30 @@
       document.getElementById('btn-connect-google-gmail').addEventListener('click', async () => {
         const prev = readWorkEmailCache() || {};
         writeWorkEmailCache({ ...prev, provider: 'gmail', auth_type: 'oauth', active: true });
-        const result = await post('/api/email-integrations/google/start', {});
-        window.location.href = result.auth_url;
+        try {
+          const result = await post('/api/email-integrations/google/start', {});
+          if (!result?.auth_url) throw new Error('Google OAuth URL was not returned by the backend');
+          window.location.assign(result.auth_url);
+        } catch (err) {
+          showToast(err?.message || 'Could not start Google OAuth', 'error');
+        }
       });
       document.getElementById('btn-connect-zoho-email').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-connect-zoho-email');
         const prev = readWorkEmailCache() || {};
         writeWorkEmailCache({ ...prev, provider: 'zoho', auth_type: 'oauth', active: true });
-        const result = await post('/api/email-integrations/zoho/start', {});
-        window.location.href = result.auth_url;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-zoho-mark">Z</span><span>Opening Zoho...</span>';
+        try {
+          const result = await post('/api/email-integrations/zoho/start', {});
+          if (!result?.auth_url) throw new Error('Zoho OAuth URL was not returned by the backend');
+          window.location.assign(result.auth_url);
+        } catch (err) {
+          btn.disabled = false;
+          btn.innerHTML = original;
+          showToast(err?.message || 'Could not start Zoho OAuth', 'error');
+        }
       });
       document.getElementById('btn-save-gmail').addEventListener('click', async () => {
         const payload = {
@@ -430,6 +449,13 @@
         const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
         window.history.replaceState({}, document.title, next);
         await loadSettings();
+      }
+      if (params.get('zoho_connected') === '0') {
+        showToast(`Zoho OAuth failed${params.get('reason') ? `: ${params.get('reason')}` : ''}`, 'error');
+        params.delete('zoho_connected');
+        params.delete('reason');
+        const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, document.title, next);
       }
     });
   </script>
