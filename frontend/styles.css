@@ -1172,7 +1172,7 @@ body.dashboard .dashboard-main {
 .table-row.clickable:hover { background: var(--surface-2); }
 
 .case-doc-row {
-  grid-template-columns: minmax(0, 1fr) 110px 132px minmax(132px, auto);
+  grid-template-columns: minmax(0, 1fr) 110px 150px 168px;
 }
 
 .case-doc-name {
@@ -1191,6 +1191,8 @@ body.dashboard .dashboard-main {
 
 .case-doc-status {
   min-width: 0;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .case-doc-actions {
@@ -1198,7 +1200,12 @@ body.dashboard .dashboard-main {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.case-doc-actions .btn {
+  flex: 0 0 auto;
 }
 
 .table-actions {
