@@ -843,10 +843,11 @@ function setActiveNav() {
 
 // ─── Init ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!getToken()) {
-    await syncSessionFromSupabase();
-  }
   renderUser();
   bindSignout();
   setActiveNav();
+  if (!getToken()) {
+    await syncSessionFromSupabase();
+    renderUser();
+  }
 });

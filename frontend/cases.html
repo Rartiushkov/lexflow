@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20" />
+  <link rel="stylesheet" href="./styles.css?v=23" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -45,7 +45,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=20"></script>
   <script>
     function priorityBadge(priority) {
       const map = {
@@ -57,7 +57,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      await requireAuth();
       const list = document.getElementById('cases-list');
       const renderCases = (cases) => {
         list.innerHTML = cases.map(c => `
@@ -74,7 +73,10 @@
       const cached = getCaseDirectory();
       if (cached.length) {
         renderCases(cached);
+      } else {
+        list.innerHTML = `<div class="table-row"><span>No cases yet.</span><span></span><span></span><span></span><span></span><span></span></div>`;
       }
+      await requireAuth();
       try {
         const cases = await get('/api/cases', { toastOnError: false });
         setCaseDirectory(cases);

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=21" />
+  <link rel="stylesheet" href="./styles.css?v=23" />
   <style>
     .settings-cache-pending [data-settings-hydrate] {
       opacity: 0;
@@ -232,7 +232,7 @@
       document.body.classList.remove('settings-cache-pending');
     })();
   </script>
-  <script src="./app.js?v=19"></script>
+  <script src="./app.js?v=20"></script>
   <script>
     const WORK_EMAIL_CACHE_KEY = 'lexflow_work_email_cache';
     const WORK_EMAIL_LIST_CACHE_KEY = 'lexflow_work_email_integrations_cache';
@@ -339,9 +339,19 @@
       }
     }
 
+    function resolveDisplayIntegrations(integrations) {
+      const liveItems = Array.isArray(integrations) ? integrations.filter(Boolean) : [];
+      if (liveItems.length) return liveItems;
+      const cachedList = readWorkEmailListCache();
+      if (cachedList.length) return cachedList;
+      const cachedSingle = readWorkEmailCache();
+      return cachedSingle ? [cachedSingle] : [];
+    }
+
     function renderIntegrationTable(integrations) {
-      document.getElementById('gmail-integrations').innerHTML = integrations.length
-        ? integrations.map(item => `
+      const items = resolveDisplayIntegrations(integrations);
+      document.getElementById('gmail-integrations').innerHTML = items.length
+        ? items.map(item => `
           <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
             <span><strong>${item.email}</strong></span>
             <span>${item.auth_type === 'oauth' ? `${(item.provider || 'google').toUpperCase()} OAuth` : 'App password'}</span>
@@ -401,15 +411,22 @@
         get('/api/settings/profile', { toastOnError: false }),
         get('/api/email-integrations', { toastOnError: false }),
       ]);
+      const fallbackList = readWorkEmailListCache();
+      const fallbackSingle = readWorkEmailCache();
+      const resolvedIntegrations = Array.isArray(integrations) && integrations.length
+        ? integrations
+        : (fallbackList.length ? fallbackList : (fallbackSingle ? [fallbackSingle] : []));
       saveSettingsProfileCache(profile);
       document.getElementById('firm-name').value = profile.firm?.name || '';
       document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
       document.getElementById('full-name').value = profile.profile?.full_name || '';
       document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
       document.getElementById('btn-connect-zoho-email').disabled = !appConfig.zoho_email_oauth_enabled;
-      writeWorkEmailListCache(integrations);
-      renderWorkEmailStatus(integrations);
-      const preferred = pickPreferredIntegration(integrations);
+      if (Array.isArray(integrations) && integrations.length) {
+        writeWorkEmailListCache(integrations);
+      }
+      renderWorkEmailStatus(resolvedIntegrations);
+      const preferred = pickPreferredIntegration(resolvedIntegrations);
       if (preferred) {
         writeWorkEmailCache({
           id: preferred.id,
@@ -422,8 +439,8 @@
           active: preferred.active,
         });
       }
-      syncEmailIntegrationPanels(integrations);
-      renderIntegrationTable(integrations);
+      syncEmailIntegrationPanels(resolvedIntegrations);
+      renderIntegrationTable(resolvedIntegrations);
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
