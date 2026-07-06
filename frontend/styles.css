@@ -1993,6 +1993,100 @@ a.queue-row:hover .queue-client strong {
   color: #ffffff;
 }
 
+.intake-brain-card {
+  margin-top: 16px;
+}
+
+.intake-brain-grid,
+.intake-intel-grid {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.intake-brain-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.intake-intel-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.intake-brain-stat,
+.intake-intel-stat {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+}
+
+.intake-brain-stat span,
+.intake-intel-stat span,
+.intake-intel-label,
+.intake-intel-request-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.intake-brain-stat strong,
+.intake-intel-stat strong,
+.intake-intel-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.intake-brain-actions,
+.intake-intel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.intake-brain-feed,
+.intake-intel-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.intake-brain-item,
+.intake-intel-request {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+  padding: 12px 14px;
+}
+
+.intake-brain-item-head,
+.intake-intel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.intake-brain-item-copy,
+.intake-intel-copy,
+.intake-intel-request-copy,
+.intake-doc-explainer,
+.intake-doc-type {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.intake-doc-explainer,
+.intake-doc-type {
+  margin-top: 6px;
+}
+
 .invoice-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -3310,6 +3404,11 @@ body.auth.auth-loading .auth-loading-screen {
     gap: 8px;
   }
 
+  .intake-brain-grid,
+  .intake-intel-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .intake-table-head {
     display: none;
   }
@@ -3355,6 +3454,8 @@ body.auth.auth-loading .auth-loading-screen {
     max-width: none;
   }
   .system-card-wide { grid-column: span 1; }
+  .intake-brain-grid,
+  .intake-intel-grid { grid-template-columns: 1fr; }
   body.dashboard {
     display: block;
   }

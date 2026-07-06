@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20" />
+  <link rel="stylesheet" href="./styles.css?v=22" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -58,6 +58,18 @@
         </div>
       </div>
 
+      <div class="card intake-brain-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Intake brain</div>
+            <div class="panel-subtitle">How the system is routing, reviewing, and planning next document steps.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="intake-brain-summary"></div>
+        </div>
+      </div>
+
       <div class="card intake-upload-card">
         <div class="card-body">
           <div class="intake-dropzone" id="intake-dropzone">
@@ -99,6 +111,59 @@
 
   <script src="./app.js?v=19"></script>
   <script>
+    function renderIntakeBrain(docs = getIncomingDocuments()) {
+      const host = document.getElementById('intake-brain-summary');
+      const decisions = docs.map(item => item.automation_decision).filter(Boolean);
+      const actionCounts = decisions.reduce((acc, decision) => {
+        const key = decision.action || 'unknown';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+      const reviewDocs = docs.filter(item => item.status === 'needs_review' || item.manual_review_required);
+      const createdCases = decisions.filter(item => item.action === 'create_case_and_attach').length;
+      const attachedCases = decisions.filter(item => item.action === 'attach_to_existing_case').length;
+      const heldDocs = decisions.filter(item => item.action === 'hold_for_manual_review').length;
+
+      const topRows = [
+        { label: 'Created cases', value: createdCases },
+        { label: 'Attached cleanly', value: attachedCases },
+        { label: 'Held for review', value: heldDocs },
+        { label: 'Review docs', value: reviewDocs.length },
+      ];
+
+      const recent = docs
+        .filter(item => item.automation_decision)
+        .sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0))
+        .slice(0, 3);
+
+      host.innerHTML = `
+        <div class="intake-brain-grid">
+          ${topRows.map(item => `
+            <div class="intake-brain-stat">
+              <span>${item.label}</span>
+              <strong>${item.value}</strong>
+            </div>
+          `).join('')}
+        </div>
+        <div class="intake-brain-actions">
+          ${Object.keys(actionCounts).length ? Object.entries(actionCounts).map(([action, count]) => `
+            <span class="badge badge-gray">${action.replaceAll('_', ' ')} · ${count}</span>
+          `).join('') : '<span class="kanban-empty">No AI intake decisions yet.</span>'}
+        </div>
+        <div class="intake-brain-feed">
+          ${recent.length ? recent.map(doc => `
+            <div class="intake-brain-item">
+              <div class="intake-brain-item-head">
+                <strong>${doc.name}</strong>
+                <span class="badge ${doc.status === 'assigned' ? 'badge-green' : doc.status === 'needs_review' ? 'badge-yellow' : 'badge-red'}">${doc.automation_decision.action.replaceAll('_', ' ')}</span>
+              </div>
+              <div class="intake-brain-item-copy">${doc.automation_decision.explanation || 'The intake brain processed this document.'}</div>
+            </div>
+          `).join('') : '<div class="kanban-empty">New routed documents will appear here with the system reasoning.</div>'}
+        </div>
+      `;
+    }
+
     async function loadCasesForMatching() {
       try {
         const cases = await get('/api/cases', { toastOnError: false });
@@ -128,6 +193,7 @@
       document.getElementById('stat-unrecognized-docs').textContent = unrecognized.length;
       document.getElementById('assigned-count').textContent = assigned.length;
       document.getElementById('unrecognized-count').textContent = unrecognized.length;
+      renderIntakeBrain(docs);
 
       const renderRows = (items, unrecognized = false) => {
         if (!items.length) {
@@ -135,9 +201,15 @@
         }
         return items.map(doc => `
           <div class="intake-table intake-row">
-            <span><strong>${doc.name}</strong></span>
+            <span>
+              <strong>${doc.name}</strong>
+              ${doc.automation_decision?.explanation ? `<div class="intake-doc-explainer">${doc.automation_decision.explanation}</div>` : ''}
+            </span>
             <span>${doc.case_id ? `<a href="case.html?id=${doc.case_id}">${doc.case_name}</a>` : '—'}</span>
-            <span><span class="badge ${doc.status === 'assigned' ? 'badge-green' : 'badge-yellow'}">${doc.status}</span></span>
+            <span>
+              <span class="badge ${doc.status === 'assigned' ? 'badge-green' : doc.status === 'needs_review' ? 'badge-yellow' : 'badge-red'}">${doc.status}</span>
+              ${doc.document_type ? `<div class="intake-doc-type">${doc.document_type.replaceAll('_', ' ')}</div>` : ''}
+            </span>
             <span>${formatDate(doc.uploaded_at)}</span>
             <span class="table-actions">
               ${doc.data_url || doc.url ? `<a class="btn btn-outline btn-sm" href="${doc.data_url || doc.url}" download="${doc.name}">Open</a>` : ''}

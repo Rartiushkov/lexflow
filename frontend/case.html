@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20" />
+  <link rel="stylesheet" href="./styles.css?v=22" />
 </head>
 <body class="dashboard" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -258,6 +258,13 @@
             </div>
           </div>
 
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-header"><span class="card-title">Intake intelligence</span></div>
+            <div class="card-body">
+              <div id="intake-intelligence-block"><p style="color:var(--muted);">Loading intake intelligence…</p></div>
+            </div>
+          </div>
+
           <!-- Document checklist -->
           <div class="card" style="margin-bottom:16px;">
             <div class="card-header"><span class="card-title">Document checklist</span></div>
@@ -309,7 +316,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=19"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const caseId = params.get('id') || '1';
@@ -506,6 +513,48 @@
       });
     }
 
+    function renderIntakeIntelligence(caseData, state = {}) {
+      const host = document.getElementById('intake-intelligence-block');
+      if (!host) return;
+      const decision = caseData?.last_intake_decision || null;
+      const plan = state.document_plan || {};
+      const missing = plan.missing_documents || [];
+      const review = plan.review_documents || [];
+      const completed = plan.completed_documents || [];
+      host.innerHTML = `
+        <div class="intake-intel-shell">
+          <div class="intake-intel-head">
+            <div>
+              <div class="intake-intel-label">Latest intake decision</div>
+              <div class="intake-intel-title">${decision ? escapeHtml(decision.action.replaceAll('_', ' ')) : 'No decision yet'}</div>
+            </div>
+            ${decision ? `<span class="badge ${decision.status === 'assigned' ? 'badge-green' : decision.status === 'needs_review' ? 'badge-yellow' : 'badge-red'}">${escapeHtml(decision.status)}</span>` : ''}
+          </div>
+          <div class="intake-intel-copy">${escapeHtml(decision?.explanation || 'As new documents arrive, LexFlow will explain why it attached, created, or held the file for review.')}</div>
+          <div class="intake-intel-grid">
+            <div class="intake-intel-stat"><span>Completed</span><strong>${completed.length}</strong></div>
+            <div class="intake-intel-stat"><span>Missing</span><strong>${missing.length}</strong></div>
+            <div class="intake-intel-stat"><span>Review</span><strong>${review.length}</strong></div>
+          </div>
+          <div class="intake-intel-tags">
+            ${completed.map(item => `<span class="badge badge-green">${escapeHtml(item)}</span>`).join('')}
+            ${missing.map(item => `<span class="badge badge-red">${escapeHtml(item)}</span>`).join('')}
+            ${review.map(item => `<span class="badge badge-yellow">${escapeHtml(item)}</span>`).join('')}
+          </div>
+          ${plan.recommended_request ? `
+            <div class="intake-intel-request">
+              <div class="intake-intel-request-label">Recommended client request</div>
+              <div class="intake-intel-request-copy">${escapeHtml(plan.recommended_request)}</div>
+              <button class="btn btn-outline btn-sm" type="button" id="btn-draft-intake-request">Draft message</button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+      document.getElementById('btn-draft-intake-request')?.addEventListener('click', () => {
+        focusPortalComposer(plan.recommended_request);
+      });
+    }
+
     function renderControlCenter(center) {
       const host = document.getElementById('control-center-block');
       const state = center?.control_state || {};
@@ -611,6 +660,7 @@
         const sel = document.getElementById('stage-select');
         if (sel) sel.value = center.case.stage;
       }
+      renderIntakeIntelligence(center?.case, state);
       host.querySelectorAll('[data-action-index]').forEach(button => {
         button.addEventListener('click', () => {
           const action = actions[Number(button.dataset.actionIndex)];
