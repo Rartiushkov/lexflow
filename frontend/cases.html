@@ -47,6 +47,20 @@
 
   <script src="./app.js?v=21"></script>
   <script>
+    function renderCasesSkeleton() {
+      const list = document.getElementById('cases-list');
+      list.innerHTML = Array.from({ length: 5 }).map(() => `
+        <div class="skeleton-row" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 1fr;">
+          <div class="skeleton skeleton-line lg"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line sm"></div>
+          <div class="skeleton skeleton-line sm"></div>
+          <div class="skeleton skeleton-line md"></div>
+        </div>
+      `).join('');
+    }
+
     function priorityBadge(priority) {
       const map = {
         high: 'badge-red',
@@ -74,7 +88,7 @@
       if (cached.length) {
         renderCases(cached);
       } else {
-        list.innerHTML = `<div class="table-row"><span>No cases yet.</span><span></span><span></span><span></span><span></span><span></span></div>`;
+        renderCasesSkeleton();
       }
       setViewHydrated();
       await requireAuth();

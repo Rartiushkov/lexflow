@@ -111,6 +111,31 @@
 
   <script src="./app.js?v=21"></script>
   <script>
+    function renderIntakeSkeleton() {
+      document.getElementById('stat-total-docs').textContent = '—';
+      document.getElementById('stat-assigned-docs').textContent = '—';
+      document.getElementById('stat-unrecognized-docs').textContent = '—';
+      document.getElementById('intake-brain-summary').innerHTML = `
+        <div class="skeleton-row" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+          <div class="skeleton skeleton-stat"></div>
+          <div class="skeleton skeleton-stat"></div>
+          <div class="skeleton skeleton-stat"></div>
+          <div class="skeleton skeleton-stat"></div>
+        </div>
+      `;
+      const rows = Array.from({ length: 4 }).map(() => `
+        <div class="skeleton-row" style="grid-template-columns:1.6fr 1fr 1fr .8fr .8fr;">
+          <div class="skeleton skeleton-line lg"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line sm"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line sm"></div>
+        </div>
+      `).join('');
+      document.getElementById('assigned-list').innerHTML = rows;
+      document.getElementById('unrecognized-list').innerHTML = rows;
+    }
+
     function renderIntakeBrain(docs = getIncomingDocuments()) {
       const host = document.getElementById('intake-brain-summary');
       const decisions = docs.map(item => item.automation_decision).filter(Boolean);
@@ -244,7 +269,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      renderIntakeLists();
+      const cachedDocs = getIncomingDocuments();
+      if (cachedDocs.length) renderIntakeLists(cachedDocs);
+      else renderIntakeSkeleton();
       setViewHydrated();
       await requireAuth();
       await loadCasesForMatching();

@@ -63,9 +63,28 @@
 
   <script src="./app.js?v=21"></script>
   <script>
+    function renderInvoicesSkeleton() {
+      const list = document.getElementById('invoice-list');
+      list.innerHTML = Array.from({ length: 5 }).map(() => `
+        <div class="skeleton-row" style="grid-template-columns:1fr 1.1fr .8fr .8fr .8fr .8fr .9fr;">
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line lg"></div>
+          <div class="skeleton skeleton-line sm"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line md"></div>
+          <div class="skeleton skeleton-line sm"></div>
+        </div>
+      `).join('');
+    }
+
     function renderInvoices() {
       const list = document.getElementById('invoice-list');
       const invoices = getInvoices();
+      if (!invoices.length) {
+        list.innerHTML = `<div class="kanban-empty">No invoices yet.</div>`;
+        return;
+      }
       list.innerHTML = invoices.map(invoice => `
         <a class="invoice-table invoice-row-link" href="invoice.html?id=${invoice.id}">
           <span><strong>${invoice.number}</strong></span>
@@ -80,7 +99,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-      renderInvoices();
+      const cached = getInvoices();
+      if (cached.length) renderInvoices();
+      else renderInvoicesSkeleton();
       setViewHydrated();
       await requireAuth();
       renderInvoices();

@@ -199,6 +199,31 @@
 
   <script src="./app.js?v=21"></script>
   <script>
+    function renderDashboardSkeleton() {
+      document.getElementById('stat-open').textContent = '—';
+      document.getElementById('stat-payment').textContent = '—';
+      document.getElementById('stat-processing').textContent = '—';
+      document.getElementById('stat-ready').textContent = '—';
+      document.getElementById('automation-list').innerHTML = Array.from({ length: 3 }).map(() => `
+        <div class="skeleton-row" style="grid-template-columns:1fr 56px;">
+          <div>
+            <div class="skeleton skeleton-line lg"></div>
+            <div class="skeleton skeleton-line md"></div>
+          </div>
+          <div class="skeleton skeleton-line sm"></div>
+        </div>
+      `).join('');
+      document.getElementById('protocol-alerts').innerHTML = Array.from({ length: 3 }).map(() => `
+        <div class="skeleton-row" style="grid-template-columns:70px 1fr;">
+          <div class="skeleton skeleton-line sm"></div>
+          <div>
+            <div class="skeleton skeleton-line lg"></div>
+            <div class="skeleton skeleton-line md"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
     // Live date/time in topbar
     (function updateDate() {
       const el = document.getElementById('topbar-date');
@@ -546,12 +571,17 @@
     document.addEventListener('DOMContentLoaded', async () => {
       const cachedCases = getCaseDirectory();
       const cachedSummary = normalizeWorkflowSummary(getWorkflowSummaryCache());
+      const hasCachedSummary = cachedSummary.actions.length || cachedSummary.notifications.length;
       if (cachedCases.length) {
         renderDashboard(cachedCases);
-      } else {
+      } else if (hasCachedSummary) {
         renderDashboard([]);
+      } else {
+        renderDashboardSkeleton();
       }
-      renderWorkflowSummary(cachedSummary);
+      if (hasCachedSummary) {
+        renderWorkflowSummary(cachedSummary);
+      }
       setViewHydrated();
       await requireAuth();
       try {

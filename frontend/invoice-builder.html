@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=20" />
+  <link rel="stylesheet" href="./styles.css?v=24" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     /* ── Builder layout ── */
@@ -516,13 +516,14 @@
     </div>
   </div>
 
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=21"></script>
   <script>
   /* ═══════════════════════════════════════════
      INVOICE BUILDER — Builder + Templates tabs
   ═══════════════════════════════════════════ */
   const SAVE_KEY = 'lf_builder_blocks';
   const TEMPLATES_KEY = 'lf_invoice_templates_v2';
+  const DEFAULT_INVOICE_TEMPLATE_IDS = new Set(['tpl-standard', 'tpl-retainer', 'tpl-disbursements']);
   let blocks = [];       // { id, type, x, y, w, data, fontSize, color }
   let selectedId = null;
   let activeTemplateId = null;  // id of currently loaded template
@@ -951,7 +952,13 @@
       const builderIds = new Set(getTemplates().map(t => t.id));
       const INV_KEY = 'lexflow_invoice_templates';
       const invTpls = JSON.parse(localStorage.getItem(INV_KEY) || '[]');
-      const cleaned = invTpls.filter(t => !t._from_builder || builderIds.has(t.id));
+      const cleaned = invTpls.filter(t => {
+        if (!t) return false;
+        if (DEFAULT_INVOICE_TEMPLATE_IDS.has(t.id) || t._saved_from_invoice) return true;
+        if (t._from_builder) return builderIds.has(t.id);
+        if (/^tpl[-_]/i.test(t.id || '')) return builderIds.has(t.id);
+        return true;
+      });
       if (cleaned.length !== invTpls.length) localStorage.setItem(INV_KEY, JSON.stringify(cleaned));
     } catch {}
   }
