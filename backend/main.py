@@ -1995,8 +1995,8 @@ async def public_email_integrations_debug_messages(mailbox_email: str = Query(..
     raise HTTPException(status_code=400, detail="Message inspection is only enabled for Zoho OAuth debug right now")
 
 
-@app.get("/api/public/email-integrations/debug/all")
-async def public_email_integrations_debug_all(limit: int = 20):
+@app.get("/api/public/debug-email-integrations-all")
+async def public_debug_email_integrations_all(limit: int = 20):
     rows = await db_get_email_integrations()
     limit = max(1, min(int(limit or 20), 100))
     return {
