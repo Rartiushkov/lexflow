@@ -908,6 +908,11 @@ def test_zoho_email_integration_start_requests_update_scope():
         main.ZOHO_OAUTH_CLIENT_SECRET = original_client_secret
 
 
+def test_is_zoho_message_unread_treats_status_one_as_unread():
+    assert main.is_zoho_message_unread({"status": "1"}) is True
+    assert main.is_zoho_message_unread({"status": "0"}) is False
+
+
 def test_poll_gmail_uses_oauth_integration_even_without_active_flag(monkeypatch):
     reset_state()
     actor = asyncio.run(main.ensure_actor_context({"id": "user_1", "email": "user_1@example.com", "name": "User One"}))

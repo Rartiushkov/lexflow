@@ -3395,7 +3395,11 @@ def is_zoho_message_unread(item: dict) -> bool:
         normalized = str(value or "").strip().lower()
         if normalized in {"unread", "not_read", "0", "false"}:
             return True
-        if normalized in {"read", "1", "true"}:
+        if normalized in {"read", "true"}:
+            return False
+        if normalized == "1":
+            return True
+        if normalized == "0":
             return False
     return False
 
