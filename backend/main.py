@@ -2998,15 +2998,30 @@ async def zoho_email_integration_callback(code: Optional[str] = None, state: Opt
 
 def extract_gmail_attachments(message: Message) -> list[EmailAttachment]:
     attachments = []
+    synthetic_index = 0
+    extension_by_type = {
+        "application/pdf": ".pdf",
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/heic": ".heic",
+        "image/tiff": ".tiff",
+    }
     for part in message.walk():
         filename = part.get_filename()
+        content_type = part.get_content_type() or "application/octet-stream"
+        disposition = (part.get_content_disposition() or "").lower().strip()
+        if not filename and (disposition in {"attachment", "inline"} or content_type.startswith("image/") or content_type == "application/pdf"):
+            synthetic_index += 1
+            filename = f"email-attachment-{synthetic_index}{extension_by_type.get(content_type, '')}"
         if not filename:
             continue
         content = part.get_payload(decode=True) or b""
         attachments.append(EmailAttachment(
             filename=filename,
             content_base64=base64.b64encode(content).decode("utf-8"),
-            content_type=part.get_content_type() or "application/octet-stream",
+            content_type=content_type,
         ))
     return attachments
 

@@ -347,6 +347,21 @@ def test_gmail_attachment_extractor_builds_webhook_payload():
     assert attachments[0].filename == "passport.pdf"
 
 
+def test_gmail_attachment_extractor_keeps_inline_image_without_filename():
+    reset_state()
+    message = main.EmailMessage()
+    message["From"] = "Client <client@example.com>"
+    message["Subject"] = "VNZH photo"
+    message.set_content("Attached.")
+    message.add_related(b"image-bytes", maintype="image", subtype="jpeg", cid="vnzh-photo")
+
+    attachments = main.extract_gmail_attachments(message)
+
+    assert len(attachments) == 1
+    assert attachments[0].filename.endswith(".jpg")
+    assert attachments[0].content_type == "image/jpeg"
+
+
 def test_process_email_payload_ignores_non_document_assets(monkeypatch):
     reset_state()
 
@@ -419,6 +434,25 @@ def make_pdf(lines):
     return buffer.getvalue()
 
 
+def email_attachment(filename, content, content_type="application/pdf"):
+    return {
+        "filename": filename,
+        "content_base64": base64.b64encode(content).decode("utf-8"),
+        "content_type": content_type,
+    }
+
+
+def post_email_payload(sender, subject, attachments):
+    return client.post(
+        "/api/webhook/email",
+        json={
+            "from": sender,
+            "subject": subject,
+            "attachments": attachments,
+        },
+    )
+
+
 def test_email_webhook_auto_creates_case_from_new_document():
     reset_state()
     content = make_pdf([
@@ -454,6 +488,122 @@ def test_email_webhook_auto_creates_case_from_new_document():
     docs = client.get(f"/api/documents?case_id={created['id']}", headers=AUTH).json()
     assert docs[0]["document_type"] == "passport"
     assert docs[0]["status"] == "assigned"
+
+
+def test_email_webhook_matches_follow_up_document_to_auto_created_case():
+    reset_state()
+    passport = make_pdf([
+        "Passport",
+        "Name: Mila Petrova",
+        "Passport number: Y76543210",
+        "Date of birth: 12.09.1993",
+        "Nationality: Russian",
+    ])
+    contract = make_pdf([
+        "Employment contract",
+        "Name: Mila Petrova",
+        "Passport number: Y76543210",
+        "Date of birth: 12.09.1993",
+        "Employer: Nordlicht GmbH",
+    ])
+
+    first = post_email_payload(
+        "mila.petrova@example.com",
+        "Initial VNZH package",
+        [email_attachment("passport-mila-petrova.pdf", passport)],
+    )
+    assert first.status_code == 200
+    created_case_id = first.json()["created_cases"][0]
+
+    second = post_email_payload(
+        "assistant@relocation-partner.com",
+        "Follow-up contract for Mila Petrova",
+        [email_attachment("employment-contract-mila-petrova.pdf", contract)],
+    )
+
+    assert second.status_code == 200
+    payload = second.json()
+    assert payload["created_cases"] == []
+    assert payload["matched_cases"] == [created_case_id]
+    assert payload["decisions"][0]["action"] == "attach_to_existing_case"
+    assert payload["decisions"][0]["match_reason"] == "passport,dob,name"
+
+    docs = client.get(f"/api/documents?case_id={created_case_id}", headers=AUTH)
+    assert docs.status_code == 200
+    names = {item["name"] for item in docs.json()}
+    assert "passport-mila-petrova.pdf" in names
+    assert "employment-contract-mila-petrova.pdf" in names
+
+
+def test_email_webhook_matches_existing_case_by_identity_not_sender():
+    reset_state()
+    case = create_case(name="Ivan Kuznetsov", email="ivan.personal@example.com")
+
+    passport_upload = client.post(
+        f"/api/cases/{case['id']}/upload",
+        headers=AUTH,
+        files={
+            "file": (
+                "passport-ivan-kuznetsov.pdf",
+                make_pdf([
+                    "Passport",
+                    "Name: Ivan Kuznetsov",
+                    "Passport number: P99887766",
+                    "Date of birth: 21.11.1988",
+                ]),
+                "application/pdf",
+            )
+        },
+    )
+    assert passport_upload.status_code == 200
+
+    insurance = make_pdf([
+        "Health insurance certificate",
+        "Name: Ivan Kuznetsov",
+        "Passport number: P99887766",
+        "Date of birth: 21.11.1988",
+        "Insurer: TK",
+    ])
+
+    response = post_email_payload(
+        "case.worker@agency.example",
+        "Insurance for Ivan Kuznetsov",
+        [email_attachment("health-insurance-ivan-kuznetsov.pdf", insurance)],
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["created_cases"] == []
+    assert payload["matched_cases"] == [case["id"]]
+    assert payload["decisions"][0]["match_score"] >= 0.9
+    assert payload["documents"][0]["case_id"] == case["id"]
+    assert payload["documents"][0]["status"] == "assigned"
+
+
+def test_email_webhook_keeps_weak_unknown_document_for_review_without_case_creation():
+    reset_state()
+    weak_scan = make_pdf([
+        "Scan copy",
+        "Please see attached",
+        "No clear identity data here",
+    ])
+
+    response = post_email_payload(
+        "unknown.sender@example.com",
+        "Document",
+        [email_attachment("scan-001.pdf", weak_scan)],
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["created_cases"] == []
+    assert payload["matched_cases"] == []
+    assert payload["decisions"][0]["action"] == "hold_for_manual_review"
+    assert payload["documents"][0]["status"] == "unrecognized"
+
+    cases = client.get("/api/cases", headers=AUTH)
+    assert cases.status_code == 200
+    assert cases.json() == []
 
 
 def test_email_webhook_detects_duplicate_document_by_hash():
