@@ -913,6 +913,31 @@ def test_is_zoho_message_unread_treats_status_one_as_unread():
     assert main.is_zoho_message_unread({"status": "0"}) is False
 
 
+def test_db_get_email_integrations_falls_back_to_r2(monkeypatch):
+    reset_state()
+    original_use_r2 = main.USE_R2
+    original_client = main.r2_client
+
+    class FakeBody:
+        def read(self):
+            return b'[{"id":"r2-1","email":"firm@zohomail.com","provider":"zoho","auth_type":"oauth","active":true,"firm_id":"firm-1","created_at":"2026-07-07T00:00:00+00:00"}]'
+
+    class FakeR2:
+        def get_object(self, **_kwargs):
+            return {"Body": FakeBody()}
+
+    try:
+        main.USE_R2 = True
+        main.r2_client = FakeR2()
+        rows = asyncio.run(main.db_get_email_integrations())
+        assert len(rows) == 1
+        assert rows[0]["id"] == "r2-1"
+        assert main.memory_email_integrations["r2-1"]["email"] == "firm@zohomail.com"
+    finally:
+        main.USE_R2 = original_use_r2
+        main.r2_client = original_client
+
+
 def test_poll_gmail_uses_oauth_integration_even_without_active_flag(monkeypatch):
     reset_state()
     actor = asyncio.run(main.ensure_actor_context({"id": "user_1", "email": "user_1@example.com", "name": "User One"}))

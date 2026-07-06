@@ -119,6 +119,7 @@ memory_profiles: dict[str, dict] = {}
 memory_firms: dict[str, dict] = {}
 memory_email_integrations: dict[str, dict] = {}
 memory_notifications: dict[str, dict] = {}
+EMAIL_INTEGRATIONS_R2_KEY = "_system/email_integrations.json"
 
 app.state.email_poll_lock = None
 app.state.email_poll_task = None
@@ -128,6 +129,34 @@ app.state.email_integration_db_debug = {}
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def load_email_integrations_from_r2() -> list[dict]:
+    if not USE_R2 or not r2_client:
+        return []
+    try:
+        obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=EMAIL_INTEGRATIONS_R2_KEY)
+        payload = obj["Body"].read().decode("utf-8")
+        data = json.loads(payload or "[]")
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict) and item.get("id")]
+    except Exception as e:
+        print(f"R2 email integrations load failed: {e}")
+    return []
+
+
+def save_email_integrations_to_r2(rows: list[dict]) -> None:
+    if not USE_R2 or not r2_client:
+        return
+    try:
+        r2_client.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=EMAIL_INTEGRATIONS_R2_KEY,
+            Body=json.dumps(rows, ensure_ascii=True).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as e:
+        print(f"R2 email integrations save failed: {e}")
 
 
 def normalize_lookup(value: str) -> str:
@@ -726,6 +755,7 @@ async def db_upsert_firm(data: dict) -> dict:
 
 
 async def db_upsert_email_integration(data: dict) -> dict:
+    result = None
     if USE_SUPABASE:
         try:
             res = supabase_client.table("email_integrations").upsert(data).execute()
@@ -735,7 +765,7 @@ async def db_upsert_email_integration(data: dict) -> dict:
                 "last_upsert_at": utc_now(),
                 "last_select_at": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_select_at", ""),
             }
-            return res.data[0]
+            result = res.data[0]
         except Exception as e:
             print(f"Supabase email integration upsert failed: {e}")
             app.state.email_integration_db_debug = {
@@ -744,18 +774,23 @@ async def db_upsert_email_integration(data: dict) -> dict:
                 "last_upsert_at": utc_now(),
                 "last_select_at": (getattr(app.state, "email_integration_db_debug", {}) or {}).get("last_select_at", ""),
             }
-    memory_email_integrations[data["id"]] = data
-    return data
+    payload = result or data
+    memory_email_integrations[payload["id"]] = payload
+    rows = [item for item in load_email_integrations_from_r2() if item.get("id") != payload["id"]]
+    rows.append(payload)
+    save_email_integrations_to_r2(sorted(rows, key=lambda item: item.get("created_at", ""), reverse=True))
+    return payload
 
 
 async def db_delete_email_integration(integration_id: str) -> bool:
     if USE_SUPABASE:
         try:
             supabase_client.table("email_integrations").delete().eq("id", integration_id).execute()
-            return True
         except Exception as e:
             print(f"Supabase email integration delete failed: {e}")
     memory_email_integrations.pop(integration_id, None)
+    rows = [item for item in load_email_integrations_from_r2() if item.get("id") != integration_id]
+    save_email_integrations_to_r2(rows)
     return True
 
 
@@ -786,6 +821,11 @@ async def db_get_email_integrations(*, lawyer_id: Optional[str] = None, firm_id:
                 "last_select_at": utc_now(),
             }
     rows = list(memory_email_integrations.values())
+    if not rows:
+        rows = load_email_integrations_from_r2()
+        if rows:
+            memory_email_integrations.clear()
+            memory_email_integrations.update({item["id"]: item for item in rows if item.get("id")})
     if active_only:
         rows = [item for item in rows if item.get("active")]
     if lawyer_id:
