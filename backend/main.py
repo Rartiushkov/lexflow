@@ -1865,8 +1865,9 @@ async def public_email_integrations_debug(email: str):
     target = (email or "").lower().strip()
     if not target:
         raise HTTPException(status_code=400, detail="Email is required")
-    rows = await db_get_email_integrations(active_only=True)
-    match = next((row for row in rows if (row.get("email") or "").lower().strip() == target), None)
+    all_rows = await db_get_email_integrations()
+    rows = [row for row in all_rows if (row.get("email") or "").lower().strip() == target]
+    match = rows[0] if rows else None
     if not match:
         return {
             "generated_at": utc_now(),
@@ -1875,7 +1876,7 @@ async def public_email_integrations_debug(email: str):
         }
     runtime_ids = {
         item.get("id")
-        for item in pick_runtime_email_integrations(rows)
+        for item in pick_runtime_email_integrations(all_rows)
     }
     bucket = getattr(app.state, "email_poll_debug", {}) or {}
     debug = bucket.get(match.get("id"), {})
@@ -1889,6 +1890,16 @@ async def public_email_integrations_debug(email: str):
         "runtime_selected": match.get("id") in runtime_ids,
         "last_polled_at": match.get("last_polled_at"),
         "last_processed_message_id": match.get("last_processed_message_id") or "",
+        "matching_rows": [
+            {
+                "id": row.get("id"),
+                "provider": row.get("provider"),
+                "auth_type": row.get("auth_type"),
+                "active": row.get("active"),
+                "updated_at": row.get("updated_at"),
+            }
+            for row in rows[:10]
+        ],
         "poll_debug": {
             "status": debug.get("status", ""),
             "messages_seen": debug.get("messages_seen", 0),
@@ -1909,7 +1920,7 @@ async def public_email_integrations_debug_poll(email: str):
     target = (email or "").lower().strip()
     if not target:
         raise HTTPException(status_code=400, detail="Email is required")
-    rows = await db_get_email_integrations(active_only=True)
+    rows = await db_get_email_integrations()
     match = next((row for row in rows if (row.get("email") or "").lower().strip() == target), None)
     if not match:
         raise HTTPException(status_code=404, detail="Integration not found")
@@ -1926,7 +1937,7 @@ async def public_email_integrations_debug_messages(mailbox_email: str = Query(..
     target = (mailbox_email or "").lower().strip()
     if not target:
         raise HTTPException(status_code=400, detail="Email is required")
-    rows = await db_get_email_integrations(active_only=True)
+    rows = await db_get_email_integrations()
     match = next((row for row in rows if (row.get("email") or "").lower().strip() == target), None)
     if not match:
         raise HTTPException(status_code=404, detail="Integration not found")
