@@ -56,6 +56,11 @@ BACKEND_PUBLIC_URL = os.environ.get("BACKEND_PUBLIC_URL", "http://localhost:8000
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 GOOGLE_OAUTH_STATE_SECRET = os.environ.get("GOOGLE_OAUTH_STATE_SECRET", SUPABASE_SERVICE_KEY or "dev-google-oauth-state-secret")
+ZOHO_OAUTH_CLIENT_ID = os.environ.get("ZOHO_OAUTH_CLIENT_ID", "")
+ZOHO_OAUTH_CLIENT_SECRET = os.environ.get("ZOHO_OAUTH_CLIENT_SECRET", "")
+ZOHO_OAUTH_STATE_SECRET = os.environ.get("ZOHO_OAUTH_STATE_SECRET", SUPABASE_SERVICE_KEY or "dev-zoho-oauth-state-secret")
+ZOHO_ACCOUNTS_BASE = os.environ.get("ZOHO_ACCOUNTS_BASE", "https://accounts.zoho.com").rstrip("/")
+ZOHO_MAIL_API_BASE = os.environ.get("ZOHO_MAIL_API_BASE", "https://mail.zoho.com").rstrip("/")
 ENABLE_TEST_AUTH = os.environ.get("LEXFLOW_TEST_AUTH", "") == "1"
 
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
@@ -163,19 +168,23 @@ def google_oauth_callback_url() -> str:
     return f"{BACKEND_PUBLIC_URL.rstrip('/')}/api/email-integrations/google/callback"
 
 
-def sign_google_state(payload: dict) -> str:
+def zoho_oauth_callback_url() -> str:
+    return f"{BACKEND_PUBLIC_URL.rstrip('/')}/api/email-integrations/zoho/callback"
+
+
+def sign_oauth_state(payload: dict, secret: str) -> str:
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     encoded = base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
-    signature = hmac.new(GOOGLE_OAUTH_STATE_SECRET.encode("utf-8"), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
+    signature = hmac.new(secret.encode("utf-8"), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{encoded}.{signature}"
 
 
-def verify_google_state(state: str) -> dict:
+def verify_oauth_state(state: str, secret: str) -> dict:
     try:
         encoded, signature = state.split(".", 1)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
-    expected = hmac.new(GOOGLE_OAUTH_STATE_SECRET.encode("utf-8"), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
+    expected = hmac.new(secret.encode("utf-8"), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=400, detail="Invalid OAuth state signature")
     padded = encoded + "=" * (-len(encoded) % 4)
@@ -183,6 +192,22 @@ def verify_google_state(state: str) -> dict:
     if payload.get("exp", 0) < int(datetime.now(timezone.utc).timestamp()):
         raise HTTPException(status_code=400, detail="OAuth state expired")
     return payload
+
+
+def sign_google_state(payload: dict) -> str:
+    return sign_oauth_state(payload, GOOGLE_OAUTH_STATE_SECRET)
+
+
+def verify_google_state(state: str) -> dict:
+    return verify_oauth_state(state, GOOGLE_OAUTH_STATE_SECRET)
+
+
+def sign_zoho_state(payload: dict) -> str:
+    return sign_oauth_state(payload, ZOHO_OAUTH_STATE_SECRET)
+
+
+def verify_zoho_state(state: str) -> dict:
+    return verify_oauth_state(state, ZOHO_OAUTH_STATE_SECRET)
 
 
 def mask_integration(row: dict) -> dict:
@@ -195,7 +220,7 @@ def mask_integration(row: dict) -> dict:
 
 
 def is_usable_email_integration(row: dict) -> bool:
-    if not row or row.get("provider") != "gmail":
+    if not row or row.get("provider") not in {"gmail", "zoho"}:
         return False
     auth_type = row.get("auth_type") or "app_password"
     if auth_type == "oauth":
@@ -1579,6 +1604,29 @@ async def start_google_email_integration(user: dict = Depends(get_current_user))
     return {"auth_url": f"https://accounts.google.com/o/oauth2/v2/auth?{query}"}
 
 
+@app.post("/api/email-integrations/zoho/start")
+async def start_zoho_email_integration(user: dict = Depends(get_current_user)):
+    actor = await ensure_actor_context(user)
+    if not ZOHO_OAUTH_CLIENT_ID or not ZOHO_OAUTH_CLIENT_SECRET:
+        raise HTTPException(status_code=400, detail="Zoho OAuth is not configured on the backend")
+    state = sign_zoho_state({
+        "user_id": user["id"],
+        "firm_id": actor["firm"]["id"],
+        "next": f"{FRONTEND_URL.rstrip('/')}/settings.html",
+        "exp": int(datetime.now(timezone.utc).timestamp()) + 600,
+    })
+    query = urlencode({
+        "client_id": ZOHO_OAUTH_CLIENT_ID,
+        "redirect_uri": zoho_oauth_callback_url(),
+        "response_type": "code",
+        "access_type": "offline",
+        "prompt": "consent",
+        "scope": "ZohoMail.accounts.READ,ZohoMail.folders.READ,ZohoMail.messages.READ",
+        "state": state,
+    })
+    return {"auth_url": f"{ZOHO_ACCOUNTS_BASE}/oauth/v2/auth?{query}"}
+
+
 # ─── Cases ─────────────────────────────────────────────
 class CreateCase(BaseModel):
     client_name: str
@@ -2453,6 +2501,99 @@ async def fetch_google_user_email(access_token: str) -> str:
     return (response.json().get("email") or "").lower().strip()
 
 
+async def exchange_zoho_code(code: str) -> dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"{ZOHO_ACCOUNTS_BASE}/oauth/v2/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": ZOHO_OAUTH_CLIENT_ID,
+                "client_secret": ZOHO_OAUTH_CLIENT_SECRET,
+                "redirect_uri": zoho_oauth_callback_url(),
+                "code": code,
+            },
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Zoho OAuth token exchange failed: HTTP {response.status_code}")
+    return response.json()
+
+
+async def refresh_zoho_access_token(refresh_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"{ZOHO_ACCOUNTS_BASE}/oauth/v2/token",
+            data={
+                "grant_type": "refresh_token",
+                "client_id": ZOHO_OAUTH_CLIENT_ID,
+                "client_secret": ZOHO_OAUTH_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+            },
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Zoho OAuth token refresh failed: HTTP {response.status_code}")
+    return response.json()
+
+
+async def zoho_api_get(path: str, access_token: str, *, params: Optional[dict] = None, accept: str = "application/json"):
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.get(
+            f"{ZOHO_MAIL_API_BASE}{path}",
+            params=params,
+            headers={
+                "Authorization": f"Zoho-oauthtoken {access_token}",
+                "Accept": accept,
+                "Content-Type": "application/json",
+            },
+        )
+    if response.status_code >= 400:
+        detail = response.text.strip()
+        if len(detail) > 300:
+            detail = detail[:300] + "..."
+        raise HTTPException(status_code=502, detail=f"Zoho Mail API request failed: HTTP {response.status_code} {detail}")
+    return response
+
+
+async def zoho_api_put_json(path: str, access_token: str, *, body: Optional[dict] = None) -> dict:
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.put(
+            f"{ZOHO_MAIL_API_BASE}{path}",
+            json=body or {},
+            headers={
+                "Authorization": f"Zoho-oauthtoken {access_token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+    if response.status_code >= 400:
+        detail = response.text.strip()
+        if len(detail) > 300:
+            detail = detail[:300] + "..."
+        raise HTTPException(status_code=502, detail=f"Zoho Mail API write request failed: HTTP {response.status_code} {detail}")
+    return response.json() if response.text else {}
+
+
+def parse_zoho_primary_email(account: dict) -> str:
+    addresses = account.get("emailAddress") or []
+    for item in addresses:
+        if item.get("isPrimary"):
+            return (item.get("mailId") or "").lower().strip()
+    return (account.get("primaryEmailAddress") or account.get("incomingUserName") or account.get("mailboxAddress") or "").lower().strip()
+
+
+async def fetch_zoho_account_profile(access_token: str) -> dict:
+    response = await zoho_api_get("/api/accounts", access_token)
+    payload = response.json()
+    accounts = payload.get("data") or []
+    if not accounts:
+        raise HTTPException(status_code=502, detail="Zoho Mail API did not return any accessible account")
+    primary = next((item for item in accounts if item.get("type") == "ZOHO_ACCOUNT" and item.get("enabled")), None) or accounts[0]
+    email_address = parse_zoho_primary_email(primary)
+    account_id = str(primary.get("accountId") or "")
+    if not email_address or not account_id:
+        raise HTTPException(status_code=502, detail="Zoho Mail API account profile is missing email or accountId")
+    return {"email": email_address, "account_id": account_id}
+
+
 @app.get("/api/email-integrations/google/callback")
 async def google_email_integration_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
     if error:
@@ -2497,6 +2638,53 @@ async def google_email_integration_callback(code: Optional[str] = None, state: O
             integration["refresh_token"] = matched.get("refresh_token", "")
     await db_upsert_email_integration(integration)
     return RedirectResponse(f"{payload.get('next', FRONTEND_URL.rstrip('/') + '/settings.html')}?gmail_connected=1")
+
+
+@app.get("/api/email-integrations/zoho/callback")
+async def zoho_email_integration_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL.rstrip('/')}/settings.html?zoho_connected=0&reason={error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing Zoho OAuth callback parameters")
+    payload = verify_zoho_state(state)
+    token_data = await exchange_zoho_code(code)
+    access_token = token_data.get("access_token", "")
+    refresh_token = token_data.get("refresh_token", "")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="Zoho OAuth token response did not include an access token")
+    profile = await fetch_zoho_account_profile(access_token)
+    integration = {
+        "id": str(uuid.uuid4()),
+        "provider": "zoho",
+        "auth_type": "oauth",
+        "email": profile["email"],
+        "app_password": "",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_expires_at": (
+            datetime.now(timezone.utc).timestamp() + int(token_data.get("expires_in") or 3600)
+        ),
+        "account_id": profile["account_id"],
+        "imap_host": "imap.zoho.com",
+        "mailbox": "INBOX",
+        "poll_limit": 10,
+        "active": True,
+        "lawyer_id": payload["user_id"],
+        "firm_id": payload["firm_id"],
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "last_polled_at": None,
+        "last_processed_message_id": "",
+    }
+    existing = await db_get_email_integrations(lawyer_id=payload["user_id"], firm_id=payload["firm_id"])
+    matched = next((item for item in existing if item.get("provider") == "zoho" and item.get("email") == profile["email"]), None)
+    if matched:
+        integration["id"] = matched["id"]
+        integration["created_at"] = matched.get("created_at", utc_now())
+        if not refresh_token:
+            integration["refresh_token"] = matched.get("refresh_token", "")
+    await db_upsert_email_integration(integration)
+    return RedirectResponse(f"{payload.get('next', FRONTEND_URL.rstrip('/') + '/settings.html')}?zoho_connected=1")
 
 
 def extract_gmail_attachments(message: Message) -> list[EmailAttachment]:
@@ -2566,6 +2754,42 @@ async def ensure_google_integration_access_token(integration: dict) -> dict:
         updated["refresh_token"] = token_data["refresh_token"]
     await db_upsert_email_integration(updated)
     return updated
+
+
+async def ensure_zoho_integration_access_token(integration: dict) -> dict:
+    expires_at = float(integration.get("token_expires_at") or 0)
+    if integration.get("access_token") and expires_at > datetime.now(timezone.utc).timestamp() + 60:
+        return integration
+    if not integration.get("refresh_token"):
+        raise HTTPException(status_code=400, detail=f"Zoho OAuth refresh token missing for {integration.get('email')}")
+    token_data = await refresh_zoho_access_token(integration["refresh_token"])
+    updated = {
+        **integration,
+        "access_token": token_data.get("access_token", ""),
+        "token_expires_at": datetime.now(timezone.utc).timestamp() + int(token_data.get("expires_in") or 3600),
+        "updated_at": utc_now(),
+    }
+    if token_data.get("refresh_token"):
+        updated["refresh_token"] = token_data["refresh_token"]
+    await db_upsert_email_integration(updated)
+    return updated
+
+
+async def zoho_inbox_folder_id(access_token: str, account_id: str) -> str:
+    response = await zoho_api_get(f"/api/accounts/{account_id}/folders", access_token)
+    folders = response.json().get("data") or []
+    inbox = next(
+        (
+            item for item in folders
+            if (item.get("folderType") or "").lower() == "inbox"
+            or (item.get("folderName") or "").lower() == "inbox"
+            or (item.get("path") or "").lower() == "/inbox"
+        ),
+        None,
+    )
+    if not inbox or not inbox.get("folderId"):
+        raise HTTPException(status_code=502, detail="Zoho Mail API did not return an Inbox folder")
+    return str(inbox["folderId"])
 
 
 async def gmail_message_to_attachments(access_token: str, message_id: str) -> tuple[str, str, list[EmailAttachment]]:
@@ -2638,6 +2862,75 @@ async def process_email_integration(integration: dict) -> dict:
         })
         return {"integration_id": ready["id"], "email": ready["email"], "processed": processed, "count": len(processed)}
 
+    if integration.get("provider") == "zoho" and integration.get("auth_type") == "oauth":
+        ready = await ensure_zoho_integration_access_token(integration)
+        account_id = ready.get("account_id") or (await fetch_zoho_account_profile(ready["access_token"]))["account_id"]
+        folder_id = await zoho_inbox_folder_id(ready["access_token"], account_id)
+        listing_response = await zoho_api_get(
+            f"/api/accounts/{account_id}/messages/view",
+            ready["access_token"],
+            params={
+                "folderId": folder_id,
+                "status": "unread",
+                "attachedMails": "true",
+                "limit": int(ready.get("poll_limit") or 10),
+                "sortorder": "false",
+            },
+        )
+        messages = listing_response.json().get("data") or []
+        for item in messages:
+            message_id = str(item.get("messageId") or "")
+            if not message_id:
+                continue
+            raw_response = await zoho_api_get(
+                f"/api/accounts/{account_id}/messages/{message_id}/originalmessage",
+                ready["access_token"],
+            )
+            mime_payload = (((raw_response.json() or {}).get("data") or {}).get("content") or "")
+            message = email.message_from_string(mime_payload)
+            attachments = extract_gmail_attachments(message)
+            thread_id = str(item.get("threadId") or "")
+            if not attachments:
+                await zoho_api_put_json(
+                    f"/api/accounts/{account_id}/updatemessage",
+                    ready["access_token"],
+                    body={
+                        "mode": "markAsRead",
+                        "messageId": [message_id],
+                        "threadId": [thread_id] if thread_id else [],
+                    },
+                )
+                continue
+            sender = parseaddr(message.get("From", ""))[1]
+            subject = message.get("Subject", "")
+            result = await process_email_payload(
+                EmailWebhook(**{"from": sender, "subject": subject, "attachments": attachments}),
+                owner_user_id=ready.get("lawyer_id"),
+            )
+            await zoho_api_put_json(
+                f"/api/accounts/{account_id}/updatemessage",
+                ready["access_token"],
+                body={
+                    "mode": "markAsRead",
+                    "messageId": [message_id],
+                    "threadId": [thread_id] if thread_id else [],
+                },
+            )
+            processed.append({
+                "integration_id": ready["id"],
+                "message_id": message_id,
+                "from": sender,
+                "subject": subject,
+                **result,
+            })
+        await db_upsert_email_integration({
+            **ready,
+            "account_id": account_id,
+            "last_polled_at": utc_now(),
+            "updated_at": utc_now(),
+        })
+        return {"integration_id": ready["id"], "email": ready["email"], "processed": processed, "count": len(processed)}
+
     with imaplib.IMAP4_SSL(integration.get("imap_host") or "imap.gmail.com") as mailbox:
         mailbox.login(integration["email"], integration["app_password"])
         mailbox.select(integration.get("mailbox") or "INBOX")
@@ -2700,7 +2993,7 @@ async def poll_gmail(user: dict = Depends(get_current_user)):
     if not integrations:
         raise HTTPException(
             status_code=400,
-            detail="No usable Gmail integration found for this workspace. Reconnect Google work email or save manual Gmail settings."
+            detail="No usable work email integration found for this workspace. Reconnect Google or Zoho work email, or save manual IMAP settings."
         )
     runs = []
     for integration in integrations:
@@ -2709,8 +3002,8 @@ async def poll_gmail(user: dict = Depends(get_current_user)):
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Gmail poll failed for {integration.get('email')}: {e}")
-            raise HTTPException(status_code=502, detail=f"Gmail poll failed for {integration.get('email')}")
+            print(f"Work email poll failed for {integration.get('email')}: {e}")
+            raise HTTPException(status_code=502, detail=f"Work email poll failed for {integration.get('email')}")
     return {"runs": runs, "count": sum(item["count"] for item in runs)}
 
 
@@ -2795,4 +3088,5 @@ async def public_config():
         "supabase_url": SUPABASE_URL,
         "supabase_anon_key": SUPABASE_ANON_KEY,
         "google_email_oauth_enabled": bool(GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET),
+        "zoho_email_oauth_enabled": bool(ZOHO_OAUTH_CLIENT_ID and ZOHO_OAUTH_CLIENT_SECRET),
     }

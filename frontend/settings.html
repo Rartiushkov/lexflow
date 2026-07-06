@@ -67,7 +67,7 @@
         <div class="card-header">
           <div>
             <div class="card-title">Connect work email</div>
-            <div class="panel-subtitle">Per-firm Gmail inbox for autonomous document intake.</div>
+            <div class="panel-subtitle">Per-firm Gmail or Zoho inbox for autonomous document intake.</div>
           </div>
         </div>
         <div class="card-body">
@@ -75,7 +75,7 @@
             <div>
               <div class="integration-status-label">Work email status</div>
               <div class="integration-status-value" id="work-email-status-value">Not connected</div>
-              <div class="panel-subtitle" id="work-email-status-note">Connect a Gmail inbox to route documents automatically.</div>
+              <div class="panel-subtitle" id="work-email-status-note">Connect a Gmail or Zoho inbox to route documents automatically.</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <span class="badge badge-gray" id="work-email-status-badge">offline</span>
@@ -85,12 +85,13 @@
 
           <div id="gmail-oauth-panel" style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;">
             <div style="min-width:240px;">
-              <div style="font-weight:600;">Recommended: Gmail OAuth</div>
-              <div class="panel-subtitle">Connect the inbox without storing a permanent Gmail app password.</div>
+              <div style="font-weight:600;">Recommended: OAuth inbox connection</div>
+              <div class="panel-subtitle">Connect Gmail or Zoho without storing a permanent mailbox password.</div>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <button class="btn btn-primary" id="btn-connect-google-gmail" type="button">Connect with Google</button>
-              <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run Gmail poll</button>
+              <button class="btn btn-outline" id="btn-connect-zoho-email" type="button">Connect Zoho</button>
+              <button class="btn btn-outline" id="btn-poll-gmail" type="button">Run inbox poll</button>
             </div>
           </div>
 
@@ -199,7 +200,7 @@
         badge.className = 'badge badge-gray';
         badge.textContent = 'offline';
         value.textContent = 'Not connected';
-        note.textContent = 'Connect a Gmail inbox to route documents automatically.';
+        note.textContent = 'Connect a Gmail or Zoho inbox to route documents automatically.';
         if (disconnectBtn) disconnectBtn.style.display = 'none';
         return;
       }
@@ -207,7 +208,7 @@
       badge.textContent = current.active === false ? 'inactive' : 'connected';
       value.textContent = current.email || 'Connected inbox';
       note.textContent = current.auth_type === 'oauth'
-        ? 'Google OAuth is active for this workspace.'
+        ? `${current.provider === 'zoho' ? 'Zoho' : 'Google'} OAuth is active for this workspace.`
         : 'Manual IMAP is saved for this workspace.';
       if (disconnectBtn) {
         disconnectBtn.style.display = 'inline-flex';
@@ -225,6 +226,7 @@
       const manualPanel = document.getElementById('manual-imap-panel');
       const oauthPanel = document.getElementById('gmail-oauth-panel');
       const connectBtn = document.getElementById('btn-connect-google-gmail');
+      const connectZohoBtn = document.getElementById('btn-connect-zoho-email');
       const pollBtn = document.getElementById('btn-poll-gmail');
 
       if (toggleRow) {
@@ -241,7 +243,10 @@
       }
       if (connectBtn) {
         connectBtn.textContent = 'Connect with Google';
-        connectBtn.style.display = isOauth ? 'none' : 'inline-flex';
+        connectBtn.style.display = 'inline-flex';
+      }
+      if (connectZohoBtn) {
+        connectZohoBtn.style.display = 'inline-flex';
       }
       if (pollBtn) {
         pollBtn.disabled = !hasConnection;
@@ -264,7 +269,7 @@
         ? integrations.map(item => `
           <div class="table-row" style="grid-template-columns:1.4fr 120px 120px 120px;">
             <span><strong>${item.email}</strong></span>
-            <span>${item.auth_type === 'oauth' ? 'Google OAuth' : 'App password'}</span>
+            <span>${item.auth_type === 'oauth' ? `${(item.provider || 'google').toUpperCase()} OAuth` : 'App password'}</span>
             <span>${item.mailbox || 'INBOX'}</span>
             <span><span class="badge ${item.active ? 'badge-green' : 'badge-gray'}">${item.active ? 'active' : 'inactive'}</span></span>
           </div>
@@ -316,6 +321,7 @@
       document.getElementById('vat-id').value = profile.firm?.vat_id || profile.profile?.vat_id || '';
       document.getElementById('full-name').value = profile.profile?.full_name || '';
       document.getElementById('btn-connect-google-gmail').disabled = !appConfig.google_email_oauth_enabled;
+      document.getElementById('btn-connect-zoho-email').disabled = !appConfig.zoho_email_oauth_enabled;
       writeWorkEmailListCache(integrations);
       renderWorkEmailStatus(integrations);
       const preferred = pickPreferredIntegration(integrations);
@@ -323,6 +329,7 @@
         writeWorkEmailCache({
           id: preferred.id,
           email: preferred.email,
+          provider: preferred.provider,
           auth_type: preferred.auth_type,
           mailbox: preferred.mailbox,
           imap_host: preferred.imap_host || 'imap.gmail.com',
@@ -358,8 +365,14 @@
       });
       document.getElementById('btn-connect-google-gmail').addEventListener('click', async () => {
         const prev = readWorkEmailCache() || {};
-        writeWorkEmailCache({ ...prev, auth_type: 'oauth', active: true });
+        writeWorkEmailCache({ ...prev, provider: 'gmail', auth_type: 'oauth', active: true });
         const result = await post('/api/email-integrations/google/start', {});
+        window.location.href = result.auth_url;
+      });
+      document.getElementById('btn-connect-zoho-email').addEventListener('click', async () => {
+        const prev = readWorkEmailCache() || {};
+        writeWorkEmailCache({ ...prev, provider: 'zoho', auth_type: 'oauth', active: true });
+        const result = await post('/api/email-integrations/zoho/start', {});
         window.location.href = result.auth_url;
       });
       document.getElementById('btn-save-gmail').addEventListener('click', async () => {
@@ -407,6 +420,13 @@
       if (params.get('gmail_connected') === '1') {
         showToast('Google work email connected', 'success');
         params.delete('gmail_connected');
+        const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, document.title, next);
+        await loadSettings();
+      }
+      if (params.get('zoho_connected') === '1') {
+        showToast('Zoho work email connected', 'success');
+        params.delete('zoho_connected');
         const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
         window.history.replaceState({}, document.title, next);
         await loadSettings();
