@@ -2108,6 +2108,44 @@ async def public_debug_email_integrations_all(limit: int = 20):
     }
 
 
+def is_probable_email_junk_document(doc: dict) -> bool:
+    if (doc.get("source") or "") != "email":
+        return False
+    if (doc.get("status") or "") == "duplicate":
+        return True
+    if doc.get("case_id"):
+        return False
+    if (doc.get("status") or "") != "unrecognized":
+        return False
+    name = (doc.get("name") or "").lower().strip()
+    if re.fullmatch(r"\d{10,}_\d+\.(png|jpg|jpeg|webp)", name):
+        return True
+    if name.startswith(("email-attachment-", "image00", "logo", "banner")):
+        return True
+    return False
+
+
+@app.post("/api/public/intake/cleanup-junk")
+async def public_cleanup_intake_junk():
+    docs = await db_get_documents()
+    targets = [doc for doc in docs if is_probable_email_junk_document(doc)]
+    deleted = []
+    for doc in targets:
+        removed = await remove_document_everywhere(doc["id"])
+        if removed:
+            deleted.append({
+                "id": removed["id"],
+                "name": removed.get("name", ""),
+                "status": removed.get("status", ""),
+                "case_id": removed.get("case_id"),
+            })
+    return {
+        "generated_at": utc_now(),
+        "count": len(deleted),
+        "deleted": deleted,
+    }
+
+
 @app.post("/api/email-integrations")
 async def upsert_email_integration(req: EmailIntegrationRequest, user: dict = Depends(get_current_user)):
     actor = await ensure_actor_context(user)
@@ -2581,11 +2619,10 @@ async def update_document(document_id: str, req: UpdateDocumentRequest, user: di
     return updated or {**doc, **patch}
 
 
-@app.delete("/api/documents/{document_id}")
-async def delete_document(document_id: str, user: dict = Depends(get_current_user)):
+async def remove_document_everywhere(document_id: str) -> Optional[dict]:
     doc = await db_delete_document(document_id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        return None
     delete_r2_object(doc.get("key", ""))
     case_id = doc.get("case_id")
     if case_id:
@@ -2597,6 +2634,14 @@ async def delete_document(document_id: str, user: dict = Depends(get_current_use
             ]
             await db_update_case(case_id, {"docs": docs, "updated_at": utc_now()})
             await refresh_case_control(case_id, trigger="document_delete")
+    return doc
+
+
+@app.delete("/api/documents/{document_id}")
+async def delete_document(document_id: str, user: dict = Depends(get_current_user)):
+    doc = await remove_document_everywhere(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
     return {"deleted": True, "id": document_id}
 
 
