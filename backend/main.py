@@ -3065,6 +3065,7 @@ IMPORTANT_EMAIL_ATTACHMENT_HINTS = (
     "passport",
     "reisepass",
     "idcard",
+    "id card",
     "identity",
     "visa",
     "permit",
@@ -3092,6 +3093,13 @@ IMPORTANT_EMAIL_ATTACHMENT_HINTS = (
     "bank-statement",
     "payslip",
     "salary",
+    "photo",
+    "scan",
+    "document",
+    "doc",
+    "upload",
+    "pdf",
+    "image",
 )
 
 IGNORED_EMAIL_ATTACHMENT_HINTS = (
@@ -3126,23 +3134,28 @@ def is_relevant_email_attachment(filename: str, content_type: str = "", subject:
     lower_name = (filename or "").lower().strip()
     lower_type = (content_type or "").lower().strip()
     lower_subject = (subject or "").lower().strip()
+    subject_has_hint = any(hint in lower_subject for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS)
 
     if not lower_name:
+        if subject_has_hint and (lower_type.startswith("image/") or lower_type == "application/pdf"):
+            return True, "subject_hint_no_name"
         return False, "missing_filename"
 
     if any(hint in lower_name for hint in IGNORED_EMAIL_ATTACHMENT_HINTS):
+        if subject_has_hint and (lower_type.startswith("image/") or lower_type == "application/pdf"):
+            return True, "subject_hint_overrides_inline"
         return False, "ignored_inline_asset"
 
     ext = os.path.splitext(lower_name)[1]
     if ext and ext not in SUPPORTED_INTAKE_EXTENSIONS:
-        if any(hint in lower_name or hint in lower_subject for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS):
+        if subject_has_hint or any(hint in lower_name for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS):
             return True, "important_keyword"
         return False, f"unsupported_extension:{ext}"
 
     if lower_type.startswith("image/") or lower_type == "application/pdf":
-        if any(hint in lower_name or hint in lower_subject for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS):
+        if subject_has_hint or any(hint in lower_name for hint in IMPORTANT_EMAIL_ATTACHMENT_HINTS):
             return True, "important_keyword"
-        if lower_name.startswith(("scan", "document", "attachment", "file")):
+        if lower_name.startswith(("scan", "document", "attachment", "file", "image", "img", "photo")):
             return True, "generic_scan"
         return True, "supported_document"
 
