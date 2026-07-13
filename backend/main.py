@@ -2776,6 +2776,7 @@ async def _stream_r2_key(key: str, name: str, content_type: str = "application/o
 
 @app.get("/api/documents/{document_id}/diagnostics")
 async def document_diagnostics(document_id: str, user: dict = Depends(get_current_user)):
+    # Render deploy trigger: diagnostics endpoint for unrecognized documents
     doc = await db_get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
