@@ -270,6 +270,7 @@
                   <button id="close-diag" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer;">×</button>
                 </div>
                 <div style="margin-bottom:12px;color:var(--muted);">Provider: ${diag.ocr_provider} | OCR confidence: ${diag.ocr_confidence} | Parsed confidence: ${diag.confidence}</div>
+                ${diag.ocr_error ? `<div style="margin-bottom:16px;color:#ef4444;"><strong>OCR error:</strong> ${diag.ocr_error.replace(/</g,'&lt;')}</div>` : ''}
                 <div style="margin-bottom:16px;"><strong>Raw text:</strong></div>
                 <pre style="background:#0b0b0d;padding:12px;border-radius:6px;overflow:auto;white-space:pre-wrap;max-height:300px;">${raw.replace(/</g,'&lt;')}</pre>
                 <div style="margin-bottom:16px;"><strong>Parsed fields:</strong></div>

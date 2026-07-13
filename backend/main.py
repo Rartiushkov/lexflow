@@ -1103,7 +1103,7 @@ def build_portal_invite_email(case_item: dict, portal_url: str, custom_message: 
 
 
 # ─── OCR helpers ────────────────────────────────────────
-async def run_ocr(content: bytes, filename: str) -> dict:
+async def run_ocr(content: bytes, filename: str, content_type: str = "") -> dict:
     local_result = {"raw_text": "", "provider": "disabled", "confidence": 0, "pages": []}
     if USE_LOCAL_OCR:
         local_result = run_local_ocr(content, filename, lang=OCR_LANG)
@@ -1117,9 +1117,11 @@ async def run_ocr(content: bytes, filename: str) -> dict:
             "pages": [],
             "attempts": local_result.get("attempts", []),
         }
-    try:
-        encoded = base64.b64encode(content).decode("utf-8")
-        async with httpx.AsyncClient(timeout=60) as client:
+    encoded = base64.b64encode(content).decode("utf-8")
+    last_error = ""
+    async with httpx.AsyncClient(timeout=90) as client:
+        # Try document_base64 first (works for PDFs and images)
+        try:
             r = await client.post(
                 "https://api.mistral.ai/v1/ocr",
                 headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
@@ -1141,9 +1143,42 @@ async def run_ocr(content: bytes, filename: str) -> dict:
             result["pages"] = pages
             result["local_attempt"] = local_result
             return result
-    except Exception as e:
-        print(f"Mistral OCR failed: {e}")
-        return local_result if local_result.get("raw_text") else {"raw_text": "", "provider": "none", "pages": [], "error": str(e)}
+        except Exception as e:
+            last_error = str(e)
+            print(f"Mistral OCR document_base64 failed: {e}")
+
+        # Fallback for images: use image_url with data URL
+        if (filename or "").lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+            try:
+                content_type = (content_type or "image/jpeg").split(";")[0].strip()
+                if content_type not in ("image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"):
+                    content_type = "image/jpeg"
+                data_url = f"data:{content_type};base64,{encoded}"
+                r = await client.post(
+                    "https://api.mistral.ai/v1/ocr",
+                    headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+                    json={
+                        "model": "mistral-ocr-latest",
+                        "document": {
+                            "type": "image_url",
+                            "image_url": data_url,
+                        },
+                    },
+                )
+                r.raise_for_status()
+                result = r.json()
+                raw_text, confidence, pages = mistral_ocr_to_raw_text(result)
+                result["provider"] = "mistral"
+                result["raw_text"] = raw_text
+                result["confidence"] = confidence
+                result["pages"] = pages
+                result["local_attempt"] = local_result
+                return result
+            except Exception as e:
+                last_error = f"{last_error}; image_url fallback: {e}"
+                print(f"Mistral OCR image_url fallback failed: {e}")
+
+    return local_result if local_result.get("raw_text") else {"raw_text": "", "provider": "none", "pages": [], "error": last_error}
 
 
 async def store_extraction_evaluation(case_id: str, document_id: str, fields: dict) -> dict:
@@ -1800,12 +1835,13 @@ async def route_incoming_document(
             "auto_created_case": False,
             "decision": intake_decision,
         }
-    ocr = await run_ocr(content, filename)
+    ocr = await run_ocr(content, filename, content_type)
     raw_text = ocr.get("raw_text", "")
     fields = parse_document_text(raw_text, filename, subject)
     fields["ocr_provider"] = ocr.get("provider", "none")
     fields["ocr_confidence"] = ocr.get("confidence", 0)
     fields["ocr_raw_text"] = raw_text
+    fields["ocr_error"] = ocr.get("error", "")
     document_type = canonical_document_type(fields.get("document_type", "unknown"), filename)
     fields["document_type"] = document_type
 
@@ -2586,7 +2622,7 @@ async def upload_document(case_id: str, file: UploadFile = File(...), user: Opti
             "case": updated_case or case,
         }
     upload = await upload_bytes(case_id, file.filename or "document.pdf", file.content_type or "application/octet-stream", content, source="lawyer" if user else "client")
-    ocr = await run_ocr(content, file.filename or "document.pdf")
+    ocr = await run_ocr(content, file.filename or "document.pdf", file.content_type or "application/octet-stream")
     extracted = parse_document_text(ocr.get("raw_text", ""), file.filename or "document.pdf")
     extracted["ocr_provider"] = ocr.get("provider", "none")
     extracted["ocr_confidence"] = ocr.get("confidence", 0)
@@ -2788,6 +2824,7 @@ async def document_diagnostics(document_id: str, user: dict = Depends(get_curren
         "status": doc.get("status"),
         "ocr_provider": extracted.get("ocr_provider", "none"),
         "ocr_confidence": extracted.get("ocr_confidence", 0),
+        "ocr_error": extracted.get("ocr_error", ""),
         "confidence": extracted.get("confidence", 0),
         "classification": {
             "document_type": extracted.get("document_type", "unknown"),
@@ -4121,7 +4158,7 @@ async def parse_documents(case_id: str, user: dict = Depends(get_current_user)):
         try:
             obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
             content = obj["Body"].read()
-            ocr = await run_ocr(content, doc.get("name", "document.pdf"))
+            ocr = await run_ocr(content, doc.get("name", "document.pdf"), doc.get("content_type", "application/octet-stream"))
             text = ocr.get("raw_text", "") or ""
             fields = parse_document_text(text, doc.get("name", "document.pdf"))
             fields["ocr_provider"] = ocr.get("provider", "none")
@@ -4166,7 +4203,7 @@ class OcrDebugRequest(BaseModel):
 @app.post("/api/ocr/debug")
 async def debug_ocr(req: OcrDebugRequest, user: dict = Depends(get_current_user)):
     content = base64.b64decode(req.content_base64)
-    ocr = await run_ocr(content, req.filename)
+    ocr = await run_ocr(content, req.filename, req.content_type or "application/octet-stream")
     fields = parse_document_text(ocr.get("raw_text", ""), req.filename, req.subject or "")
     return {
         "raw_text": ocr.get("raw_text", ""),
