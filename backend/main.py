@@ -1622,9 +1622,9 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
         docs_by_case.setdefault(case_id, []).append(document)
 
     incoming_name = normalize_identity_text(fields.get("full_name", ""))
-    incoming_passport = normalize_identity_code(fields.get("passport_number", ""))
-    incoming_dob = fields.get("date_of_birth", "")
-    incoming_employer = normalize_identity_text(fields.get("employer", ""))
+    incoming_passport = normalize_identity_code(fields.get("passport_no", fields.get("passport_number", "")))
+    incoming_dob = fields.get("dob") or fields.get("date_of_birth", "")
+    incoming_employer = normalize_identity_text(fields.get("employer_name", fields.get("employer", "")))
 
     def collect_case_identities(case: dict) -> dict:
         extracted_sources = [case.get("extracted", {}) or {}]
@@ -1642,19 +1642,19 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
             if (value or "").strip()
         }
         passports = {
-            normalize_identity_code(src.get("passport_number", ""))
+            normalize_identity_code(src.get("passport_no", src.get("passport_number", "")))
             for src in extracted_sources
-            if normalize_identity_code(src.get("passport_number", ""))
+            if normalize_identity_code(src.get("passport_no", src.get("passport_number", "")))
         }
         dobs = {
-            src.get("date_of_birth", "")
+            (src.get("dob") or src.get("date_of_birth", ""))
             for src in extracted_sources
-            if src.get("date_of_birth", "")
+            if (src.get("dob") or src.get("date_of_birth", ""))
         }
         employers = {
-            normalize_identity_text(src.get("employer", ""))
+            normalize_identity_text(src.get("employer_name", src.get("employer", "")))
             for src in extracted_sources
-            if normalize_identity_text(src.get("employer", ""))
+            if normalize_identity_text(src.get("employer_name", src.get("employer", "")))
         }
         return {
             "names": names,
@@ -1714,9 +1714,9 @@ def should_auto_create_case(fields: dict, sender_email: str) -> bool:
     confidence = float(fields.get("confidence") or 0)
     has_email = bool((sender_email or fields.get("email") or "").strip())
     has_name = bool(normalize_identity_text(fields.get("full_name", "")))
-    has_passport = bool(normalize_identity_code(fields.get("passport_number", "")))
-    has_dob = bool(fields.get("date_of_birth", ""))
-    has_employer = bool(normalize_identity_text(fields.get("employer", "")))
+    has_passport = bool(normalize_identity_code(fields.get("passport_no", fields.get("passport_number", ""))))
+    has_dob = bool(fields.get("dob") or fields.get("date_of_birth", ""))
+    has_employer = bool(normalize_identity_text(fields.get("employer_name", fields.get("employer", ""))))
     strong_identity = has_passport or (has_name and has_dob) or (has_name and has_email) or (has_name and has_employer)
     return confidence >= 0.45 and strong_identity
 
