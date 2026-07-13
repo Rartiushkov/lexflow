@@ -4130,6 +4130,26 @@ class OcrEvaluationRequest(BaseModel):
     document_id: Optional[str] = ""
 
 
+class OcrDebugRequest(BaseModel):
+    filename: str
+    content_base64: str
+    content_type: Optional[str] = "application/pdf"
+    subject: Optional[str] = ""
+
+
+@app.post("/api/ocr/debug")
+async def debug_ocr(req: OcrDebugRequest, user: dict = Depends(get_current_user)):
+    content = base64.b64decode(req.content_base64)
+    ocr = await run_ocr(content, req.filename)
+    fields = parse_document_text(ocr.get("raw_text", ""), req.filename, req.subject or "")
+    return {
+        "raw_text": ocr.get("raw_text", ""),
+        "ocr_provider": ocr.get("provider", "none"),
+        "ocr_confidence": ocr.get("confidence", 0),
+        "parsed_fields": fields,
+    }
+
+
 @app.post("/api/ocr/evaluate")
 async def evaluate_ocr(req: OcrEvaluationRequest, user: dict = Depends(get_current_user)):
     fields = parse_document_text(req.text, req.filename or "")
