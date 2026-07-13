@@ -238,6 +238,7 @@
             <span>${formatDate(doc.uploaded_at)}</span>
             <span class="table-actions">
               ${doc.data_url || doc.url ? `<a class="btn btn-outline btn-sm" href="${doc.data_url || doc.url}" download="${doc.name}">Open</a>` : ''}
+              ${unrecognized ? `<button class="btn btn-outline btn-sm" type="button" data-debug-doc="${doc.id}">Debug</button>` : ''}
               <button class="btn btn-outline btn-sm" type="button" data-delete-doc="${doc.id}">Delete</button>
             </span>
           </div>
@@ -251,6 +252,35 @@
           await deleteDocumentRemote(docId);
           renderIntakeLists();
           showToast('Document deleted', 'success');
+        });
+      });
+      document.querySelectorAll('[data-debug-doc]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const docId = button.dataset.debugDoc;
+          try {
+            const diag = await get(`/api/documents/${docId}/diagnostics`);
+            const raw = diag.raw_text || '(empty)';
+            const fields = JSON.stringify(diag.parsed_fields || {}, null, 2);
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);padding:24px;overflow:auto;font-family:monospace;font-size:12px;color:#e0e0e0;';
+            overlay.innerHTML = `
+              <div style="max-width:900px;margin:0 auto;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                  <strong>OCR diagnostics: ${diag.name}</strong>
+                  <button id="close-diag" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer;">×</button>
+                </div>
+                <div style="margin-bottom:12px;color:var(--muted);">Provider: ${diag.ocr_provider} | OCR confidence: ${diag.ocr_confidence} | Parsed confidence: ${diag.confidence}</div>
+                <div style="margin-bottom:16px;"><strong>Raw text:</strong></div>
+                <pre style="background:#0b0b0d;padding:12px;border-radius:6px;overflow:auto;white-space:pre-wrap;max-height:300px;">${raw.replace(/</g,'&lt;')}</pre>
+                <div style="margin-bottom:16px;"><strong>Parsed fields:</strong></div>
+                <pre style="background:#0b0b0d;padding:12px;border-radius:6px;overflow:auto;white-space:pre-wrap;max-height:300px;">${fields.replace(/</g,'&lt;')}</pre>
+              </div>
+            `;
+            overlay.querySelector('#close-diag').addEventListener('click', () => overlay.remove());
+            document.body.appendChild(overlay);
+          } catch {
+            showToast('Could not load diagnostics', 'error');
+          }
         });
       });
     }

@@ -292,6 +292,34 @@ def test_case_parse_merges_fields_from_multiple_documents(monkeypatch):
     assert payload["parsed_documents"][0]["score"] >= payload["parsed_documents"][1]["score"]
 
 
+def test_hungarian_residence_permit_ocr_parsing():
+    raw_text = """HUN TARTÓZKODÁSI ENGEDÉLY 001417165
+001417165
+VEZETÉKNEVEK Utónevek
+ARTSIUSHKOU
+Raman
+NEM ÁLLAMPOLGÁRSÁG
+F/M BLR
+AZ ENGEDÉLY TIPUSA
+TARTÓZKODÁSI ENGEDÉLY
+MEGJEGYZÉSEK
+FEHÉR KÁRTYA
+SZÜLETÉSI IDŐ
+05 11 1990
+A KÁRTYA ÉRVÉNYESSÉGE
+29 09 2025
+375250
+RESIDENCE PERMIT"""
+    fields = main.parse_document_text(raw_text, "IMG_1203.png")
+    assert fields["document_type"] == "residence_permit"
+    assert fields["full_name"] == "ARTSIUSHKOU Raman"
+    assert fields["date_of_birth"] == "1990-11-05"
+    assert fields["passport_expiry"] == "2025-09-29"
+    assert fields["nationality"] == "BLR"
+    assert fields["permit_number"] in ("001417165", "375250")
+    assert fields["confidence"] >= 0.45
+
+
 def test_case_patch_succeeds_even_if_control_refresh_fails(monkeypatch):
     reset_state()
     case = create_case()

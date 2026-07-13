@@ -85,8 +85,8 @@ def normalize_date(value: str) -> str:
     return value
 
 
-def classify_document(text: str, filename: str = "") -> dict:
-    lookup = f"{filename}\n{text}".lower()
+def classify_document(text: str, filename: str = "", subject: str = "") -> dict:
+    lookup = f"{filename}\n{subject}\n{text}".lower()
     scores = {}
     for doc_type, rule in DOCUMENT_RULES.items():
         scores[doc_type] = sum(1 for keyword in rule["keywords"] if keyword in lookup)
@@ -97,15 +97,20 @@ def classify_document(text: str, filename: str = "") -> dict:
     return {"document_type": doc_type, "classification_confidence": round(confidence, 2)}
 
 
-def parse_document_text(text: str, filename: str = "") -> dict:
+def extract_two_line_name(text: str) -> str:
+    match = re.search(r"\b([A-Z][A-Z'\-]+)\s*\n\s*([A-Z][A-Za-z'\-]+)\b", text, re.IGNORECASE | re.MULTILINE)
+    if match:
+        return f"{match.group(1)} {match.group(2)}".strip()
+    return ""
+
+
+def parse_document_text(text: str, filename: str = "", subject: str = "") -> dict:
     cleaned = normalize_text(text)
+    two_line_name = extract_two_line_name(cleaned)
     fields = {
         "full_name": first_match([
             r"(?:full name|name|surname and given names|vor- und nachname|name|vezetéknevek)[: \t]+([A-ZА-Я][A-Za-zА-Яа-я'\-]+(?:[ \t]+[A-ZА-Я][A-Za-zА-Яа-я'\-]+){1,3})",
             r"([A-Z][A-Z'\-]+,\s+[A-Z][A-Z'\-]+)",
-            r"(?:vezetéknevek|surname)[: \t]*\n?\s*([A-Z][A-Za-z'\-]+)\s*\n?\s*([A-Z][A-Za-z'\-]+)",
-            r"(?:utónevek|given name)[: \t]*\n?\s*([A-Z][A-Za-z'\-]+)\s*\n?\s*([A-Z][A-Za-z'\-]+)",
-            r"\b([A-Z][A-Z'\-]+)\s*\n\s*([A-Z][A-Za-z'\-]+)\b",
         ], cleaned),
         "passport_no": first_match([
             r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,14})",
@@ -134,7 +139,7 @@ def parse_document_text(text: str, filename: str = "") -> dict:
         ], cleaned)),
         "nationality": first_match([
             r"(?:nationality|staatsangehorigkeit|staatsangehörigkeit|citizenship|állampolgárság|allampolgarsag)[:\s]+([A-Z][A-Za-z ]{2,40})",
-            r"(?:nationality|állampolgárság|allampolgarsag)[:\s]+\n?\s*\b([A-Z]{3})\b",
+            r"(?:nationality|állampolgárság|allampolgarsag)[:\s]*\n?[^\n]*\n?[^\n]*\b([A-Z]{3})\b",
         ], cleaned),
         "email": first_match([
             r"\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b",
@@ -186,6 +191,8 @@ def parse_document_text(text: str, filename: str = "") -> dict:
         ], cleaned),
     }
     fields = {key: value for key, value in fields.items() if value}
+    if not fields.get("full_name") and two_line_name:
+        fields["full_name"] = two_line_name
     classification = classify_document(cleaned, filename, subject)
     doc_type = classification["document_type"]
     required = DOCUMENT_RULES.get(doc_type, {}).get("required", ())

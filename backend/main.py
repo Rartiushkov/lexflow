@@ -1801,9 +1801,11 @@ async def route_incoming_document(
             "decision": intake_decision,
         }
     ocr = await run_ocr(content, filename)
-    fields = parse_document_text(ocr.get("raw_text", ""), filename, subject)
+    raw_text = ocr.get("raw_text", "")
+    fields = parse_document_text(raw_text, filename, subject)
     fields["ocr_provider"] = ocr.get("provider", "none")
     fields["ocr_confidence"] = ocr.get("confidence", 0)
+    fields["ocr_raw_text"] = raw_text
     document_type = canonical_document_type(fields.get("document_type", "unknown"), filename)
     fields["document_type"] = document_type
 
@@ -2770,6 +2772,29 @@ async def _stream_r2_key(key: str, name: str, content_type: str = "application/o
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"R2 fetch failed: {e}")
+
+
+@app.get("/api/documents/{document_id}/diagnostics")
+async def document_diagnostics(document_id: str, user: dict = Depends(get_current_user)):
+    doc = await db_get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    extracted = doc.get("extracted", {}) or {}
+    return {
+        "document_id": doc.get("id"),
+        "name": doc.get("name"),
+        "document_type": doc.get("document_type"),
+        "status": doc.get("status"),
+        "ocr_provider": extracted.get("ocr_provider", "none"),
+        "ocr_confidence": extracted.get("ocr_confidence", 0),
+        "confidence": extracted.get("confidence", 0),
+        "classification": {
+            "document_type": extracted.get("document_type", "unknown"),
+            "classification_confidence": extracted.get("classification_confidence", 0),
+        },
+        "raw_text": extracted.get("ocr_raw_text", ""),
+        "parsed_fields": extracted,
+    }
 
 
 @app.get("/api/documents/{document_id}/download")
