@@ -1238,6 +1238,12 @@ def canonical_document_type(raw_type: str, filename: str = "") -> str:
         "power attorney": "power_of_attorney",
         "contract": "employment_contract",
         "job offer": "employment_contract",
+        "id card": "residence_permit",
+        "id-card": "residence_permit",
+        "national id": "residence_permit",
+        "personalausweis": "residence_permit",
+        "residence card": "residence_permit",
+        "aufenthaltstitel": "residence_permit",
     }
     for keyword, doc_type in keyword_map.items():
         if keyword in lookup:

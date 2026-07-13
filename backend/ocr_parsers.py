@@ -20,7 +20,7 @@ DOCUMENT_RULES = {
         "required": ("invoice_number", "invoice_total"),
     },
     "residence_permit": {
-        "keywords": ("residence permit", "aufenthaltstitel", "residence card", "permit", "blue card", "aufenthaltserlaubnis"),
+        "keywords": ("residence permit", "aufenthaltstitel", "residence card", "id card", "id-card", "national id", "personalausweis", "permit", "blue card", "aufenthaltserlaubnis"),
         "required": ("full_name", "date_of_birth"),
     },
     "employment": {
