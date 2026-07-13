@@ -2817,6 +2817,23 @@ async def document_diagnostics(document_id: str, user: dict = Depends(get_curren
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     extracted = doc.get("extracted", {}) or {}
+    # If OCR failed or never ran, retry from stored R2 content
+    if not extracted.get("ocr_raw_text") and (doc.get("key") or doc.get("r2_key")) and USE_R2:
+        key = doc.get("key") or doc.get("r2_key")
+        try:
+            obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
+            content = obj["Body"].read()
+            ocr = await run_ocr(content, doc.get("name", "document.pdf"), doc.get("content_type", "application/octet-stream"))
+            new_extracted = parse_document_text(ocr.get("raw_text", ""), doc.get("name", "document.pdf"), doc.get("subject", ""))
+            new_extracted["ocr_provider"] = ocr.get("provider", "none")
+            new_extracted["ocr_confidence"] = ocr.get("confidence", 0)
+            new_extracted["ocr_raw_text"] = ocr.get("raw_text", "")
+            new_extracted["ocr_error"] = ocr.get("error", "")
+            extracted = {**extracted, **new_extracted}
+            doc["extracted"] = extracted
+            await db_update_document(document_id, {"extracted": extracted})
+        except Exception as e:
+            extracted["ocr_error"] = f"diagnostics retry failed: {e}"
     return {
         "document_id": doc.get("id"),
         "name": doc.get("name"),
