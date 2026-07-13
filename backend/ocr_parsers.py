@@ -99,30 +99,68 @@ def parse_document_text(text: str, filename: str = "") -> dict:
             r"(?:full name|name|surname and given names|vor- und nachname|name)[: \t]+([A-ZА-Я][A-Za-zА-Яа-я'\-]+(?:[ \t]+[A-ZА-Я][A-Za-zА-Яа-я'\-]+){1,3})",
             r"([A-Z][A-Z'\-]+,\s+[A-Z][A-Z'\-]+)",
         ], cleaned),
+        "passport_no": first_match([
+            r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,14})",
+            r"\b([A-Z][0-9]{6,9})\b",
+            r"\b([A-Z0-9]{6,14})\b(?=\s*passport|\s*reisepass|\s*document|\s*nationality)",
+        ], cleaned),
         "passport_number": first_match([
-            r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,12})",
-            r"\b([A-Z][0-9]{7,9})\b",
+            r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,14})",
+            r"\b([A-Z][0-9]{6,9})\b",
         ], cleaned),
         "date_of_birth": normalize_date(first_match([
-            r"(?:date of birth|dob|geburtsdatum|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{2}[./-]\d{2}[./-]\d{4})",
+            r"(?:date of birth|dob|geburtsdatum|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
+        ], cleaned)),
+        "dob": normalize_date(first_match([
+            r"(?:date of birth|dob|geburtsdatum|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
+        ], cleaned)),
+        "passport_expiry": normalize_date(first_match([
+            r"(?:expiry|expires|valid until|gultig bis|gültig bis|date of expiry)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
         ], cleaned)),
         "expiry_date": normalize_date(first_match([
-            r"(?:expiry|expires|valid until|gultig bis|gültig bis)[:\s]+(\d{4}-\d{2}-\d{2}|\d{2}[./-]\d{2}[./-]\d{4})",
+            r"(?:expiry|expires|valid until|gultig bis|gültig bis|date of expiry)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
         ], cleaned)),
         "nationality": first_match([
-            r"(?:nationality|staatsangehorigkeit|staatsangehörigkeit)[:\s]+([A-Z][A-Za-z ]{2,40})",
+            r"(?:nationality|staatsangehorigkeit|staatsangehörigkeit|citizenship)[:\s]+([A-Z][A-Za-z ]{2,40})",
         ], cleaned),
         "email": first_match([
             r"\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b",
         ], cleaned),
         "phone": first_match([
-            r"(?:phone|mobile|telefon)[:\s]+(\+?[0-9][0-9 ()\-]{6,24})",
+            r"(?:phone|mobile|telefon|cell)[:\s]+(\+?[0-9][0-9 ()\-]{6,24})",
+        ], cleaned),
+        "address_home": first_match([
+            r"(?:home address|home|address|anschrift|adresse)[:\s]+(.{8,120})",
+        ], cleaned),
+        "address_eu": first_match([
+            r"(?:eu address|address in eu|address in germany|residence address|current address)[:\s]+(.{8,120})",
         ], cleaned),
         "address": first_match([
             r"(?:address|anschrift|adresse)[:\s]+(.{8,120})",
         ], cleaned),
         "employer": first_match([
             r"(?:employer|company|arbeitgeber)[:\s]+([A-Z0-9][A-Za-z0-9 &.,'\-]{2,80})",
+        ], cleaned),
+        "employer_name": first_match([
+            r"(?:employer|company|arbeitgeber)[:\s]+([A-Z0-9][A-Za-z0-9 &.,'\-]{2,80})",
+        ], cleaned),
+        "employer_vat": first_match([
+            r"(?:vat(?: number)?|tax id|steuer|ust-id|ust idnr)[:\s#]+([A-Z0-9]{6,20})",
+        ], cleaned),
+        "job_title": first_match([
+            r"(?:position|job title|role|berufsbezeichnung|tätigkeit)[:\s]+([A-Z][A-Za-z0-9 &.,'\-]{2,60})",
+        ], cleaned),
+        "salary": first_match([
+            r"(?:salary|gross salary|annual salary|jahreseinkommen|gehalt)[:\s]+(?:EUR|€)?\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{2})?)",
+        ], cleaned),
+        "salary_eur": first_match([
+            r"(?:salary|gross salary|annual salary|jahreseinkommen|gehalt)[:\s]+(?:EUR|€)?\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{2})?)",
+        ], cleaned),
+        "marital_status": first_match([
+            r"(?:marital status|family status|familienstand)[:\s]+(single|married|divorced|widowed|separated|ledig|verheiratet|geschieden|verwitwet)",
+        ], cleaned),
+        "dependants": first_match([
+            r"(?:dependants|dependents|children|family members)[:\s]+(\d+)",
         ], cleaned),
         "invoice_number": first_match([
             r"(?:invoice(?: no\.?| number)?|rechnung(?:snummer)?)[:\s#]+([A-Z0-9\-\/]{3,30})",
