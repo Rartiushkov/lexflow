@@ -1801,7 +1801,7 @@ async def route_incoming_document(
             "decision": intake_decision,
         }
     ocr = await run_ocr(content, filename)
-    fields = parse_document_text(ocr.get("raw_text", ""), filename)
+    fields = parse_document_text(ocr.get("raw_text", ""), filename, subject)
     fields["ocr_provider"] = ocr.get("provider", "none")
     fields["ocr_confidence"] = ocr.get("confidence", 0)
     document_type = canonical_document_type(fields.get("document_type", "unknown"), filename)

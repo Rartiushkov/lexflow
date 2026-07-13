@@ -20,7 +20,12 @@ DOCUMENT_RULES = {
         "required": ("invoice_number", "invoice_total"),
     },
     "residence_permit": {
-        "keywords": ("residence permit", "aufenthaltstitel", "residence card", "id card", "id-card", "national id", "personalausweis", "permit", "blue card", "aufenthaltserlaubnis"),
+        "keywords": (
+            "residence permit", "tartózkodási", "engedély", "tartozkodasi", "fehér kártya", "feher kártya",
+            "állampolgárság", "allampolgarsag", "születési", "szuletesi", "ervenyessege", "érvényessége",
+            "aufenthaltstitel", "residence card", "id card", "id-card", "national id", "personalausweis",
+            "permit", "blue card", "aufenthaltserlaubnis",
+        ),
         "required": ("full_name", "date_of_birth"),
     },
     "employment": {
@@ -72,7 +77,7 @@ def first_match(patterns: list[str], text: str, flags=re.IGNORECASE | re.MULTILI
 
 def normalize_date(value: str) -> str:
     value = (value or "").strip()
-    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y"):
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d %m %Y"):
         try:
             return datetime.strptime(value, fmt).date().isoformat()
         except ValueError:
@@ -96,32 +101,40 @@ def parse_document_text(text: str, filename: str = "") -> dict:
     cleaned = normalize_text(text)
     fields = {
         "full_name": first_match([
-            r"(?:full name|name|surname and given names|vor- und nachname|name)[: \t]+([A-ZА-Я][A-Za-zА-Яа-я'\-]+(?:[ \t]+[A-ZА-Я][A-Za-zА-Яа-я'\-]+){1,3})",
+            r"(?:full name|name|surname and given names|vor- und nachname|name|vezetéknevek)[: \t]+([A-ZА-Я][A-Za-zА-Яа-я'\-]+(?:[ \t]+[A-ZА-Я][A-Za-zА-Яа-я'\-]+){1,3})",
             r"([A-Z][A-Z'\-]+,\s+[A-Z][A-Z'\-]+)",
+            r"(?:vezetéknevek|surname)[: \t]*\n?\s*([A-Z][A-Za-z'\-]+)\s*\n?\s*([A-Z][A-Za-z'\-]+)",
+            r"(?:utónevek|given name)[: \t]*\n?\s*([A-Z][A-Za-z'\-]+)\s*\n?\s*([A-Z][A-Za-z'\-]+)",
+            r"\b([A-Z][A-Z'\-]+)\s*\n\s*([A-Z][A-Za-z'\-]+)\b",
         ], cleaned),
         "passport_no": first_match([
             r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,14})",
             r"\b([A-Z][0-9]{6,9})\b",
             r"\b([A-Z0-9]{6,14})\b(?=\s*passport|\s*reisepass|\s*document|\s*nationality)",
         ], cleaned),
+        "permit_number": first_match([
+            r"\b(\d{9})\b",
+            r"(?:permit no|card no|kártya szám|kartyaszam)[:\s#]+(\d{6,12})",
+        ], cleaned),
         "passport_number": first_match([
             r"(?:passport(?: no\.?| number)?|reisepass(?:nr\.?)?|document no\.?)[:\s#]+((?=[A-Z0-9]*\d)[A-Z0-9]{6,14})",
             r"\b([A-Z][0-9]{6,9})\b",
         ], cleaned),
         "date_of_birth": normalize_date(first_match([
-            r"(?:date of birth|dob|geburtsdatum|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
+            r"(?:date of birth|dob|geburtsdatum|geboren|születési idő|szuletesi ido)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[.\s/-]\d{1,2}[.\s/-]\d{4})",
         ], cleaned)),
         "dob": normalize_date(first_match([
-            r"(?:date of birth|dob|geburtsdatum|geboren)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
+            r"(?:date of birth|dob|geburtsdatum|geboren|születési idő|szuletesi ido)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[.\s/-]\d{1,2}[.\s/-]\d{4})",
         ], cleaned)),
         "passport_expiry": normalize_date(first_match([
-            r"(?:expiry|expires|valid until|gultig bis|gültig bis|date of expiry)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
+            r"(?:expiry|expires|valid until|gultig bis|gültig bis|date of expiry|érvényessége|ervenyessege)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[.\s/-]\d{1,2}[.\s/-]\d{4})",
         ], cleaned)),
         "expiry_date": normalize_date(first_match([
-            r"(?:expiry|expires|valid until|gultig bis|gültig bis|date of expiry)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{4})",
+            r"(?:expiry|expires|valid until|gultig bis|gültig bis|date of expiry|érvényessége|ervenyessege)[:\s]+(\d{4}-\d{2}-\d{2}|\d{1,2}[.\s/-]\d{1,2}[.\s/-]\d{4})",
         ], cleaned)),
         "nationality": first_match([
-            r"(?:nationality|staatsangehorigkeit|staatsangehörigkeit|citizenship)[:\s]+([A-Z][A-Za-z ]{2,40})",
+            r"(?:nationality|staatsangehorigkeit|staatsangehörigkeit|citizenship|állampolgárság|allampolgarsag)[:\s]+([A-Z][A-Za-z ]{2,40})",
+            r"(?:nationality|állampolgárság|allampolgarsag)[:\s]+\n?\s*\b([A-Z]{3})\b",
         ], cleaned),
         "email": first_match([
             r"\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b",
@@ -173,11 +186,15 @@ def parse_document_text(text: str, filename: str = "") -> dict:
         ], cleaned),
     }
     fields = {key: value for key, value in fields.items() if value}
-    classification = classify_document(cleaned, filename)
+    classification = classify_document(cleaned, filename, subject)
     doc_type = classification["document_type"]
     required = DOCUMENT_RULES.get(doc_type, {}).get("required", ())
     missing = [field for field in required if not fields.get(field)]
     score_base = 0.3 if doc_type != "unknown" else 0.1
+    # If document was classified only by filename/subject (likely phone photo with empty OCR),
+    # give a better base so it does not look like random noise
+    if doc_type != "unknown" and (not cleaned or len(cleaned) < 80):
+        score_base = max(score_base, 0.45)
     score_fields = min(0.6, len(fields) * 0.08)
     penalty = len(missing) * 0.12
     confidence = max(0.05, min(0.98, score_base + score_fields - penalty))
