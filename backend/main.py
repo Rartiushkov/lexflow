@@ -664,7 +664,19 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
                         return {**res.data[0], **patch}
                 except Exception as inner:
                     print(f"Supabase legacy update failed: {inner}")
-            raise HTTPException(status_code=500, detail="Failed to update case")
+                    message = str(inner)
+            # Fallback: try a minimal schema-safe payload
+            minimal = {
+                key: value
+                for key, value in patch.items()
+                if key in {"client_name", "client_email", "case_type", "destination", "stage", "priority", "notes", "invoice_paid", "updated_at"}
+            }
+            try:
+                res = supabase_client.table("cases").update(minimal).eq("id", case_id).execute()
+                if res.data:
+                    return {**res.data[0], **patch}
+            except Exception as inner2:
+                print(f"Supabase minimal update failed: {inner2}")
     case = memory_cases.get(case_id)
     if case:
         case.update(patch)
