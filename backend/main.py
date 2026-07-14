@@ -1842,13 +1842,21 @@ async def create_case_from_document(sender_email: str, subject: str, fields: dic
 
 
 async def case_has_document_type(case: dict, document_type: str) -> bool:
+    return bool(await get_existing_document_for_type(case, document_type))
+
+
+async def get_existing_document_for_type(case: dict, document_type: str) -> Optional[dict]:
     if not case or not document_type or document_type == "unknown":
-        return False
-    in_memory = [d for d in (case.get("docs") or []) if d.get("document_type") == document_type and d.get("status") not in {"duplicate", None}]
-    if in_memory:
-        return True
+        return None
     docs = await db_get_documents(case_id=case["id"])
-    return any(doc.get("document_type") == document_type and doc.get("status") != "duplicate" for doc in docs)
+    active = [d for d in docs if d.get("document_type") == document_type and d.get("status") not in {"duplicate", "archived", None}]
+    if not active:
+        in_memory = [d for d in (case.get("docs") or []) if d.get("document_type") == document_type and d.get("status") not in {"duplicate", "archived", None}]
+        if not in_memory:
+            return None
+        best_id = max(in_memory, key=lambda d: float((d.get("extracted") or {}).get("confidence") or 0)).get("document_id")
+        return await db_get_document(best_id) if best_id else None
+    return max(active, key=lambda d: float((d.get("extracted") or {}).get("confidence") or 0))
 
 
 async def route_incoming_document(
@@ -1913,15 +1921,24 @@ async def route_incoming_document(
         auto_created = True
 
     case_id = matched_case["id"] if matched_case else "unrecognized"
-    type_exists = await case_has_document_type(matched_case, document_type) if matched_case else False
+    existing_doc = await get_existing_document_for_type(matched_case, document_type) if matched_case else None
+    new_confidence = float(fields.get("confidence") or 0)
+    superseded_doc_id = None
     status = "assigned" if matched_case else "unrecognized"
     automation_note = "routed"
     manual_review_required = False
-    if type_exists:
-        status = "needs_review"
-        automation_note = f"document_type_already_exists:{document_type}"
-        manual_review_required = True
-    elif matched_case and document_type == "unknown" and float(fields.get("confidence") or 0) < 0.55:
+    if existing_doc:
+        existing_confidence = float((existing_doc.get("extracted") or {}).get("confidence") or 0)
+        if new_confidence > existing_confidence:
+            # New doc is better — demote existing to duplicate, promote new to assigned
+            superseded_doc_id = existing_doc["id"]
+            status = "assigned"
+            automation_note = f"supersedes:{existing_doc['id']}"
+        else:
+            # Existing is better or equal — new one is duplicate
+            status = "duplicate"
+            automation_note = f"duplicate_of:{existing_doc['id']}"
+    elif matched_case and document_type == "unknown" and new_confidence < 0.55:
         status = "needs_review"
         automation_note = "low_confidence_scan"
         manual_review_required = True
@@ -1968,6 +1985,12 @@ async def route_incoming_document(
         "updated_at": utc_now(),
     }
     saved = await db_create_document(document)
+    if superseded_doc_id:
+        await db_update_document(superseded_doc_id, {
+            "status": "duplicate",
+            "automation_note": f"superseded_by:{saved['id']}",
+            "updated_at": utc_now(),
+        })
     updated_case = matched_case
     if matched_case and status != "duplicate":
         docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"], "document_type": document_type, "status": status}]
