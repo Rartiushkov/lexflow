@@ -1483,23 +1483,20 @@ a.queue-row:hover .queue-client strong {
 .control-center-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .control-hero {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .control-stat {
-  padding: 14px 15px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(200, 164, 74, 0.06), transparent 40%),
-    linear-gradient(180deg, rgba(28, 30, 37, 0.98) 0%, rgba(20, 21, 27, 0.99) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 16px 32px rgba(8, 10, 16, 0.24);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--surface-2, #1f1f24);
   position: relative;
   overflow: hidden;
 }
@@ -1534,48 +1531,52 @@ a.queue-row:hover .queue-client strong {
 
 .control-stat-label {
   display: block;
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  margin-bottom: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(188, 194, 208, 0.62);
+  color: var(--muted, #7a7a8c);
 }
 
 .control-stat-value {
   display: block;
-  font-size: 16px;
-  line-height: 1.45;
-  color: #f5f2ea;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text, #e8e8f0);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .control-pill-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .control-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .control-section-title {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(188, 194, 208, 0.54);
+  color: var(--muted, #7a7a8c);
+  padding-top: 4px;
 }
 
 .control-checklist,
 .control-feed {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .control-check,
