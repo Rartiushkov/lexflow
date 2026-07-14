@@ -629,15 +629,18 @@
           <div class="control-section">
             <div class="control-section-title">Risk flags</div>
             <div class="control-feed">
-              ${risks.length ? risks.map(item => `
+              ${risks.length ? risks.map(item => {
+                const rawCode = (item.code || item.type || 'risk');
+                const cleanCode = rawCode.replace(/[_:]/g, ' ').replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '').trim();
+                return `
                 <div class="control-feed-item control-feed-${escapeHtml(item.severity || 'info')}">
                   <span class="badge ${severityBadge(item.severity)}">${escapeHtml(item.severity || 'info')}</span>
                   <div class="control-feed-copy">
-                    <strong>${escapeHtml((item.code || 'risk').replace(/[_:]/g, ' '))}</strong>
+                    <strong>${escapeHtml(cleanCode || 'Risk flag')}</strong>
                     <span>${escapeHtml(item.message)}</span>
                   </div>
-                </div>
-              `).join('') : '<div class="kanban-empty">No protocol risks detected.</div>'}
+                </div>`;
+              }).join('') : '<div class="kanban-empty">No protocol risks detected.</div>'}
             </div>
           </div>
 
