@@ -610,10 +610,15 @@ async function intakeDocuments(files, cases = getCaseDirectory()) {
       const remote = await upload('/api/documents/intake', file);
       created.push({
         ...remote,
+        id: remote.id || remote.document_id,
+        name: remote.name || file.name,
+        case_id: remote.case_id || (remote.case && remote.case.id) || '',
+        case_name: remote.case_name || (remote.case && remote.case.client_name) || '',
         type: remote.content_type || file.type || 'file',
         data_url: remote.url || '',
       });
-    } catch {
+    } catch (err) {
+      showToast(`${file.name}: ${err.message || 'Upload failed'}`, 'error');
       const dataUrl = await fileToDataUrl(file);
       const match = matchDocumentToCase(file.name, cases);
       created.push({
@@ -626,6 +631,7 @@ async function intakeDocuments(files, cases = getCaseDirectory()) {
         status: match ? 'assigned' : 'unrecognized',
         case_id: match?.id || '',
         case_name: match?.client_name || '',
+        _local_only: true,
       });
     }
   }
