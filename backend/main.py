@@ -163,6 +163,15 @@ def normalize_lookup(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
 
 
+def merge_extracted_fields(existing: dict, new: dict) -> dict:
+    merged = dict(existing or {})
+    for key, value in (new or {}).items():
+        if value is None or value == "" or value == [] or value == {}:
+            continue
+        merged[key] = value
+    return merged
+
+
 def parse_duplicate_origin_id(value: str) -> str:
     note = (value or "").strip()
     if note.startswith("duplicate_of:"):
@@ -1937,12 +1946,13 @@ async def route_incoming_document(
     updated_case = matched_case
     if matched_case and status != "duplicate":
         docs = matched_case.get("docs", []) + [{**uploaded, "document_id": saved["id"], "uploaded_at": saved["uploaded_at"], "document_type": document_type, "status": status}]
+        merged_extracted = merge_extracted_fields(matched_case.get("extracted", {}), fields)
         updated_case = await db_update_case(matched_case["id"], {
             "docs": docs,
-            "extracted": {**matched_case.get("extracted", {}), **fields},
+            "extracted": merged_extracted,
             "last_intake_decision": intake_decision,
             "updated_at": utc_now(),
-        }) or {**matched_case, "docs": docs, "extracted": {**matched_case.get("extracted", {}), **fields}, "last_intake_decision": intake_decision}
+        }) or {**matched_case, "docs": docs, "extracted": merged_extracted, "last_intake_decision": intake_decision}
         updated_case = await refresh_case_control(matched_case["id"], trigger=f"document_routed:{source}") or updated_case
         await log_case_event(updated_case, "document_intake_routed", {
             "document_id": saved["id"],
