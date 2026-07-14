@@ -1655,7 +1655,14 @@ a.queue-row:hover .queue-client strong {
 
 .control-feed-item-action {
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.control-feed-item .badge {
+  flex-shrink: 0;
+  width: 62px;
+  justify-content: center;
+  text-align: center;
 }
 
 .control-action-btn {
@@ -1678,7 +1685,7 @@ a.queue-row:hover .queue-client strong {
 
 .case-detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 420px;
   gap: 24px;
   align-items: start;
 }
@@ -3862,7 +3869,6 @@ body.auth.auth-loading .auth-loading-screen {
 
   .automation-item .badge,
   .control-check .badge,
-  .control-feed-item .badge,
   .table-actions,
   .portal-v2-upload-actions {
     width: 100%;
