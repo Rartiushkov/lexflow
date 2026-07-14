@@ -1165,41 +1165,16 @@ async def run_ocr(content: bytes, filename: str, content_type: str = "") -> dict
         }
     encoded = base64.b64encode(content).decode("utf-8")
     last_error = ""
+    fname_lower = (filename or "").lower()
+    is_image = fname_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"))
+    is_pdf = fname_lower.endswith(".pdf")
     async with httpx.AsyncClient(timeout=90) as client:
-        # Try document_base64 first (works for PDFs and images)
-        try:
-            r = await client.post(
-                "https://api.mistral.ai/v1/ocr",
-                headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": "mistral-ocr-latest",
-                    "document": {
-                        "type": "document_base64",
-                        "document_base64": encoded,
-                        "document_name": filename,
-                    },
-                },
-            )
-            r.raise_for_status()
-            result = r.json()
-            raw_text, confidence, pages = mistral_ocr_to_raw_text(result)
-            result["provider"] = "mistral"
-            result["raw_text"] = raw_text
-            result["confidence"] = confidence
-            result["pages"] = pages
-            result["local_attempt"] = local_result
-            return result
-        except Exception as e:
-            last_error = str(e)
-            print(f"Mistral OCR document_base64 failed: {e}")
-
-        # Fallback for images: use image_url with data URL
-        if (filename or "").lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+        # Images → image_url with data URL
+        if is_image:
             try:
-                content_type = (content_type or "image/jpeg").split(";")[0].strip()
-                if content_type not in ("image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"):
-                    content_type = "image/jpeg"
-                data_url = f"data:{content_type};base64,{encoded}"
+                mime = (content_type or "image/jpeg").split(";")[0].strip()
+                if mime not in ("image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"):
+                    mime = "image/jpeg"
                 r = await client.post(
                     "https://api.mistral.ai/v1/ocr",
                     headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
@@ -1207,7 +1182,7 @@ async def run_ocr(content: bytes, filename: str, content_type: str = "") -> dict
                         "model": "mistral-ocr-latest",
                         "document": {
                             "type": "image_url",
-                            "image_url": data_url,
+                            "image_url": f"data:{mime};base64,{encoded}",
                         },
                     },
                 )
@@ -1221,8 +1196,35 @@ async def run_ocr(content: bytes, filename: str, content_type: str = "") -> dict
                 result["local_attempt"] = local_result
                 return result
             except Exception as e:
-                last_error = f"{last_error}; image_url fallback: {e}"
-                print(f"Mistral OCR image_url fallback failed: {e}")
+                last_error = str(e)
+                print(f"Mistral OCR image_url failed: {e}")
+        else:
+            # PDFs and other docs → document_url with data URL
+            try:
+                mime = "application/pdf" if is_pdf else (content_type or "application/octet-stream").split(";")[0].strip()
+                r = await client.post(
+                    "https://api.mistral.ai/v1/ocr",
+                    headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+                    json={
+                        "model": "mistral-ocr-latest",
+                        "document": {
+                            "type": "document_url",
+                            "document_url": f"data:{mime};base64,{encoded}",
+                        },
+                    },
+                )
+                r.raise_for_status()
+                result = r.json()
+                raw_text, confidence, pages = mistral_ocr_to_raw_text(result)
+                result["provider"] = "mistral"
+                result["raw_text"] = raw_text
+                result["confidence"] = confidence
+                result["pages"] = pages
+                result["local_attempt"] = local_result
+                return result
+            except Exception as e:
+                last_error = str(e)
+                print(f"Mistral OCR document_url failed: {e}")
 
     return local_result if local_result.get("raw_text") else {"raw_text": "", "provider": "none", "pages": [], "error": last_error}
 
