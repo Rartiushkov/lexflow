@@ -629,7 +629,9 @@ async function intakeDocuments(files, cases = getCaseDirectory()) {
       });
     }
   }
-  saveIncomingDocuments([...created, ...existing]);
+  const createdIds = new Set(created.map(d => d.id).filter(Boolean));
+  const deduped = existing.filter(d => !createdIds.has(d.id));
+  saveIncomingDocuments([...created, ...deduped]);
   return created;
 }
 

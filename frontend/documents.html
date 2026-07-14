@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=24" />
+  <link rel="stylesheet" href="./styles.css?v=25" />
 </head>
 <body class="dashboard view-hydrating" data-api-base="https://lexflow-backend-y6m3.onrender.com">
   <aside class="sidebar">
@@ -109,7 +109,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=21"></script>
+  <script src="./app.js?v=22"></script>
   <script>
     function renderIntakeSkeleton() {
       document.getElementById('stat-total-docs').textContent = '—';
@@ -208,6 +208,13 @@
     }
 
     function renderIntakeLists(docs = getIncomingDocuments()) {
+      const seen = new Set();
+      docs = docs.filter(item => {
+        const key = item.id || item.name;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return item.status !== 'duplicate';
+      });
       const assignedHost = document.getElementById('assigned-list');
       const unrecognizedHost = document.getElementById('unrecognized-list');
       const assigned = docs.filter(item => item.status === 'assigned');
@@ -237,7 +244,7 @@
             </span>
             <span>${formatDate(doc.uploaded_at)}</span>
             <span class="table-actions">
-              ${doc.id ? `<a class="btn btn-outline btn-sm" href="${API_BASE}/api/documents/${doc.id}/download" target="_blank" download="${doc.name}">Open</a>` : ''}
+              ${doc.id ? `<button class="btn btn-outline btn-sm" type="button" data-open-doc="${doc.id}" data-open-name="${doc.name}">Open</button>` : ''}
               ${unrecognized ? `<button class="btn btn-outline btn-sm" type="button" data-debug-doc="${doc.id}">Debug</button>` : ''}
               <button class="btn btn-outline btn-sm" type="button" data-delete-doc="${doc.id}">Delete</button>
             </span>
@@ -246,6 +253,35 @@
       };
       assignedHost.innerHTML = renderRows(assigned);
       unrecognizedHost.innerHTML = renderRows(unrecognized, true);
+      document.querySelectorAll('[data-open-doc]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const docId = button.dataset.openDoc;
+          const docName = button.dataset.openName || 'document';
+          try {
+            const res = await fetch(`${API_BASE}/api/documents/${docId}/download`, {
+              headers: { Authorization: `Bearer ${getToken()}` },
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const isPdf = /\.pdf$/i.test(docName) || blob.type === 'application/pdf';
+            const isImg = /\.(png|jpe?g|gif|webp)$/i.test(docName) || blob.type.startsWith('image/');
+            if (isPdf) {
+              window.open(url, '_blank');
+            } else if (isImg) {
+              const ov = document.createElement('div');
+              ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+              ov.innerHTML = `<img src="${url}" style="max-width:90vw;max-height:90vh;border-radius:6px;" /><div style="position:absolute;top:18px;right:24px;color:#fff;font-size:13px;opacity:0.7;">${docName} &#10005;</div>`;
+              ov.addEventListener('click', () => ov.remove());
+              document.body.appendChild(ov);
+            } else {
+              const a = document.createElement('a'); a.href = url; a.download = docName; a.click();
+            }
+          } catch (err) {
+            showToast('Could not open document', 'error');
+          }
+        });
+      });
       document.querySelectorAll('[data-delete-doc]').forEach(button => {
         button.addEventListener('click', async () => {
           const docId = button.dataset.deleteDoc;
