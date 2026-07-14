@@ -237,7 +237,7 @@
             </span>
             <span>${formatDate(doc.uploaded_at)}</span>
             <span class="table-actions">
-              ${doc.data_url || doc.url ? `<a class="btn btn-outline btn-sm" href="${doc.data_url || doc.url}" download="${doc.name}">Open</a>` : ''}
+              ${doc.id ? `<a class="btn btn-outline btn-sm" href="${API_BASE}/api/documents/${doc.id}/download" target="_blank" download="${doc.name}">Open</a>` : ''}
               ${unrecognized ? `<button class="btn btn-outline btn-sm" type="button" data-debug-doc="${doc.id}">Debug</button>` : ''}
               <button class="btn btn-outline btn-sm" type="button" data-delete-doc="${doc.id}">Delete</button>
             </span>
