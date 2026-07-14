@@ -812,7 +812,7 @@
         list.innerHTML = mergedDocs.map((d, i) => {
           // data_url = local (Application form PDF, etc.) — use directly
           // url = R2 private URL — must go through proxy
-          const localUrl = d.data_url || '';
+          const localUrl = d.data_url && d.data_url.startsWith('data:') ? d.data_url : '';
           const docId = d.document_id || d.id || '';
           const docKey = d.key || '';
           const canPreview = !!(localUrl || docId || docKey);
@@ -839,23 +839,32 @@
           btn.addEventListener('click', async () => {
             let { url, name, docId, docKey } = _docMap[+btn.dataset.previewIdx] || {};
             let mimeType = '';
-            if (!url && (docKey || docId)) {
-              // Stream via backend proxy to avoid R2 private auth errors
+            if (docId || docKey) {
+              // Always stream via backend proxy — R2 URLs are private
+              btn.textContent = 'Loading…';
+              btn.disabled = true;
               try {
                 const token = getToken();
-                const endpoint = docKey
-                  ? `${API_BASE}/api/cases/${caseId}/stream/${encodeURIComponent(docKey)}`
-                  : `${API_BASE}/api/documents/${docId}/download`;
-                const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
-                if (res.ok) {
+                let res = null;
+                if (docId) {
+                  res = await fetch(`${API_BASE}/api/documents/${docId}/download`, { headers: { Authorization: `Bearer ${token}` } });
+                }
+                if ((!res || !res.ok) && docKey) {
+                  res = await fetch(`${API_BASE}/api/cases/${caseId}/stream/${docKey}`, { headers: { Authorization: `Bearer ${token}` } });
+                }
+                if (res && res.ok) {
                   const blob = await res.blob();
                   mimeType = blob.type || '';
                   url = URL.createObjectURL(blob);
-                } else if (docKey && docId) {
-                  const res2 = await fetch(`${API_BASE}/api/documents/${docId}/download`, { headers: { Authorization: `Bearer ${token}` } });
-                  if (res2.ok) { const b = await res2.blob(); mimeType = b.type; url = URL.createObjectURL(b); }
+                } else {
+                  showToast('Could not load file from server', 'error');
                 }
-              } catch {}
+              } catch (e) {
+                showToast('File load error: ' + e.message, 'error');
+              } finally {
+                btn.textContent = 'Preview';
+                btn.disabled = false;
+              }
             }
             if (!url) { showToast('No preview available for this document', 'info'); return; }
             const isPdf = /\.pdf$/i.test(name) || url.startsWith('data:application/pdf') || mimeType === 'application/pdf';
