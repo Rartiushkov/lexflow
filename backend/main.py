@@ -652,7 +652,11 @@ async def db_update_case(case_id: str, patch: dict) -> Optional[dict]:
     if USE_SUPABASE:
         try:
             res = supabase_client.table("cases").update(patch).eq("id", case_id).execute()
-            return res.data[0] if res.data else None
+            if res.data:
+                merged = {**(memory_cases.get(case_id) or {}), **res.data[0]}
+                memory_cases[case_id] = merged
+                return merged
+            return None
         except Exception as e:
             print(f"Supabase update failed: {e}")
             message = str(e)
@@ -1835,6 +1839,9 @@ async def create_case_from_document(sender_email: str, subject: str, fields: dic
 async def case_has_document_type(case: dict, document_type: str) -> bool:
     if not case or not document_type or document_type == "unknown":
         return False
+    in_memory = [d for d in (case.get("docs") or []) if d.get("document_type") == document_type and d.get("status") not in {"duplicate", None}]
+    if in_memory:
+        return True
     docs = await db_get_documents(case_id=case["id"])
     return any(doc.get("document_type") == document_type and doc.get("status") != "duplicate" for doc in docs)
 
@@ -1892,7 +1899,8 @@ async def route_incoming_document(
     document_type = canonical_document_type(fields.get("document_type", "unknown"), filename)
     fields["document_type"] = document_type
 
-    cases = await db_get_cases()
+    cases_raw = await db_get_cases()
+    cases = [{**c, **(memory_cases.get(c["id"]) or {})} for c in cases_raw]
     matched_case, match_reason, match_score = await find_case_for_document(sender_email, filename, fields, cases)
     auto_created = False
     if not matched_case and should_auto_create_case(fields, sender_email):
