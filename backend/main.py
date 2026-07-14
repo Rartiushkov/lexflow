@@ -1466,18 +1466,31 @@ def build_case_control_state(case: dict, documents: list[dict], invoices: list[d
             "blocker": requirement["blocker"],
             "document_ids": [doc.get("id") for doc in matched_docs],
         })
+    _expired_names, _expiring_items, _low_quality_names = [], [], []
     for doc in documents:
         extracted = doc.get("extracted", {}) or {}
         confidence = float(extracted.get("confidence") or extracted.get("ocr_confidence") or 0)
         if confidence and confidence < 0.55 and document_is_active(doc):
-            risk_flags.append({"code": f"quality:{doc['id']}", "severity": "medium", "message": f"{doc.get('name')} is low-quality and needs manual review."})
+            _low_quality_names.append(doc.get("name") or "document")
         expiry = parse_date(extracted.get("expiry_date", ""))
         if expiry:
             days_left = (expiry - datetime.now(timezone.utc).date()).days
             if days_left <= 0:
-                risk_flags.append({"code": f"expired:{doc['id']}", "severity": "high", "message": f"{doc.get('name')} appears expired."})
+                _expired_names.append(doc.get("name") or "document")
             elif days_left <= 180:
-                risk_flags.append({"code": f"expiring:{doc['id']}", "severity": "medium", "message": f"{doc.get('name')} expires in {days_left} days."})
+                _expiring_items.append((doc.get("name") or "document", days_left))
+    if _expired_names:
+        unique_expired = list(dict.fromkeys(_expired_names))
+        label = unique_expired[0] if len(unique_expired) == 1 else f"{len(unique_expired)} documents"
+        risk_flags.append({"code": "expired", "severity": "high", "message": f"{label} appear{'s' if len(unique_expired)==1 else ''} expired."})
+    if _expiring_items:
+        min_days = min(d for _, d in _expiring_items)
+        label = _expiring_items[0][0] if len(_expiring_items) == 1 else f"{len(_expiring_items)} documents"
+        risk_flags.append({"code": "expiring_soon", "severity": "medium", "message": f"{label} expire{'s' if len(_expiring_items)==1 else ''} within {min_days} days."})
+    if _low_quality_names:
+        unique_lq = list(dict.fromkeys(_low_quality_names))
+        label = unique_lq[0] if len(unique_lq) == 1 else f"{len(unique_lq)} documents"
+        risk_flags.append({"code": "low_quality", "severity": "medium", "message": f"{label} {'is' if len(unique_lq)==1 else 'are'} low-quality and need manual review."})
     unrecognized_count = len([doc for doc in documents if doc.get("status") == "unrecognized"])
     duplicate_count = len([doc for doc in documents if doc.get("status") == "duplicate"])
     if duplicate_count:
