@@ -1768,13 +1768,18 @@ async def find_case_for_document(sender_email: str, filename: str, fields: dict,
 
 def should_auto_create_case(fields: dict, sender_email: str) -> bool:
     confidence = float(fields.get("confidence") or 0)
+    classification_confidence = float(fields.get("classification_confidence") or 0)
     has_email = bool((sender_email or fields.get("email") or "").strip())
     has_name = bool(normalize_identity_text(fields.get("full_name", "")))
     has_passport = bool(normalize_identity_code(fields.get("passport_no", fields.get("passport_number", ""))))
     has_dob = bool(fields.get("dob") or fields.get("date_of_birth", ""))
     has_employer = bool(normalize_identity_text(fields.get("employer_name", fields.get("employer", ""))))
     strong_identity = has_passport or (has_name and has_dob) or (has_name and has_email) or (has_name and has_employer)
-    return confidence >= 0.45 and strong_identity
+    document_type = fields.get("document_type", "unknown")
+    classified_document = document_type and document_type != "unknown"
+    # Email intake fallback: create a case from a classified document even if OCR extraction is weak
+    email_intake_create = has_email and classified_document and classification_confidence >= 0.5
+    return (confidence >= 0.45 and strong_identity) or email_intake_create
 
 
 async def create_case_from_document(sender_email: str, subject: str, fields: dict, user_id: str) -> dict:
