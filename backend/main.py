@@ -3337,6 +3337,9 @@ def should_ignore_email_message(sender_email: str = "", subject: str = "") -> tu
 
 
 async def process_email_payload(payload: EmailWebhook, *, owner_user_id: Optional[str] = None) -> dict:
+    if not owner_user_id or owner_user_id == DEFAULT_LAWYER_ID:
+        print(f"[intake] WARNING: process_email_payload called without real owner_user_id — skipping to prevent ghost case creation")
+        return {"case": None, "document": None, "auto_created_case": False, "duplicate": False, "decision": {}}
     from_email = payload.from_.lower().strip()
     ignore_message, ignore_reason = should_ignore_email_message(from_email, payload.subject)
     if ignore_message:
