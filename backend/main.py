@@ -630,10 +630,11 @@ async def db_get_cases() -> list:
     if USE_SUPABASE:
         try:
             res = supabase_client.table("cases").select("*").order("created_at", desc=True).execute()
-            return res.data
+            for row in (res.data or []):
+                memory_cases.setdefault(row["id"], row)
+            return res.data or []
         except Exception as e:
             print(f"Supabase select failed: {e}")
-            raise HTTPException(status_code=500, detail="Failed to load cases")
     return sorted(memory_cases.values(), key=lambda c: c.get("created_at", ""), reverse=True)
 
 
@@ -641,10 +642,12 @@ async def db_get_case(case_id: str) -> Optional[dict]:
     if USE_SUPABASE:
         try:
             res = supabase_client.table("cases").select("*").eq("id", case_id).limit(1).execute()
-            return res.data[0] if res.data else None
+            if res.data:
+                memory_cases[case_id] = res.data[0]
+                return res.data[0]
+            return memory_cases.get(case_id)
         except Exception as e:
             print(f"Supabase get failed: {e}")
-            raise HTTPException(status_code=500, detail="Failed to load case")
     return memory_cases.get(case_id)
 
 
